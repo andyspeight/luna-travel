@@ -15,18 +15,17 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = 'luna-travel.theme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // Light is always the default. Dark is opt-in via the toggle and persisted.
   const [theme, setTheme] = useState<Theme>('light');
 
-  // Initial read from storage / system pref
+  // Restore the user's saved choice on mount (if any)
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
       if (saved === 'light' || saved === 'dark') {
         setTheme(saved);
-        return;
       }
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? 'dark' : 'light');
+      // If nothing saved, stay on light — don't fall through to OS preference.
     } catch {
       /* ignore */
     }

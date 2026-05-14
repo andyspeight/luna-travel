@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B2B5B"/>
+      <stop offset="60%" stop-color="#0077B6"/>
+      <stop offset="100%" stop-color="#00B4D8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="70%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="rgba(72,202,228,0.55)"/>
+      <stop offset="100%" stop-color="rgba(72,202,228,0)"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <g fill="#ffffff">
+    <!-- crescent moon -->
+    <path d="M 360 256 a 104 104 0 1 1 -104 -104 a 84 84 0 0 0 104 104 z"/>
+    <!-- L mark -->
+    <path d="M 150 156 h 36 v 168 h 96 v 36 h -132 z" fill-opacity="0.0"/>
+  </g>
+  <!-- subtle Travelgenix L lockup -->
+  <text x="256" y="430" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="800"
+        fill="#ffffff" text-anchor="middle" letter-spacing="-2">LT</text>
+</svg>

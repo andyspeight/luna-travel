@@ -80,6 +80,18 @@ export function formatTime(iso: string): string {
   return `${hh}:${mm}`;
 }
 
+/**
+ * Terminal label that handles both number ("3") and name ("South", "North") variants.
+ * Numbers get the "T" prefix (T3); names stay as written (South).
+ * Empty / missing values return empty string, so the UI can drop the line entirely.
+ */
+export function formatTerminal(raw?: string | null): string {
+  if (typeof raw !== 'string') return '';
+  const v = raw.trim();
+  if (!v) return '';
+  return /^\d+$/.test(v) ? `T${v}` : v;
+}
+
 export function formatDuration(mins: number): string {
   if (typeof mins !== 'number' || !Number.isFinite(mins) || mins <= 0) return '';
   const h = Math.floor(mins / 60);

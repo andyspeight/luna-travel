@@ -4,6 +4,7 @@ import { BookingProvider } from '@/lib/booking-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import { CoverProvider } from '@/lib/cover-context';
 import { TabBar } from '@/components/tab-bar';
+import { VersionCheck } from '@/components/version-check';
 import './globals.css';
 
 const inter = Inter({
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <BookingProvider>
             <CoverProvider>
+              <VersionCheck />
               <div
                 className="min-h-screen pb-[88px]"
                 style={{ paddingTop: 'var(--safe-top)' }}

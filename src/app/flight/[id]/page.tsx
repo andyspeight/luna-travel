@@ -15,7 +15,7 @@ import {
   IconNavigate,
 } from '@/components/icons';
 import { findFlight } from '@/lib/booking-helpers';
-import { formatDate, formatTime, formatDuration, formatCabin } from '@/lib/format';
+import { formatDate, formatTime, formatDuration, formatCabin, formatTerminal } from '@/lib/format';
 
 export default function FlightDetailPage() {
   const params = useParams<{ id: string }>();
@@ -98,7 +98,7 @@ export default function FlightDetailPage() {
               </div>
               <div className="text-[11px] opacity-70 mt-0.5">
                 {formatDate(flight.depTime, { weekday: 'short', day: 'numeric', month: 'short' })}
-                {flight.depTerminal && <span> · T{flight.depTerminal}</span>}
+                {flight.depTerminal && <span> · {formatTerminal(flight.depTerminal)}</span>}
               </div>
             </div>
 
@@ -126,7 +126,7 @@ export default function FlightDetailPage() {
               </div>
               <div className="text-[11px] opacity-70 mt-0.5">
                 {formatDate(flight.arrTime, { weekday: 'short', day: 'numeric', month: 'short' })}
-                {flight.arrTerminal && <span> · T{flight.arrTerminal}</span>}
+                {flight.arrTerminal && <span> · {formatTerminal(flight.arrTerminal)}</span>}
               </div>
             </div>
           </div>
@@ -188,7 +188,7 @@ export default function FlightDetailPage() {
             {flight.depTerminal && (
               <li className="py-2.5 flex justify-between">
                 <span className="text-ink-2">Departure terminal</span>
-                <span className="text-ink font-medium">{flight.depTerminal}</span>
+                <span className="text-ink font-medium">{formatTerminal(flight.depTerminal)}</span>
               </li>
             )}
             <li className="py-2.5 flex justify-between">

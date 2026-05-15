@@ -25,8 +25,8 @@ The code is also the foundation of the production v1 — no throwaway code.
 | 1 — Foundation | 14–20 May | Scaffold, PWA, design tokens, mock data, app shell, picker — **DONE** |
 | 2 — Trip core | 21–27 May | Home v2 with quick tiles & "Up next", itinerary timeline, flight detail, hotel detail, extras detail — **DONE** |
 | 3 — Documents & travellers | 28 May – 3 Jun | Documents with preview/share/download, travellers list & detail, Me page with click-to-call agent, entrance animations — **DONE** |
-| 4 — Luna & guides | 4–10 Jun | Luna concierge with trip context, destination guides |
-| 5 — Polish | 11–17 Jun | Onboarding, push simulation, post-trip review, rebook, animations |
+| 4 — Luna & guides + cover mode | 4–10 Jun | Cover splash (Vamoos-style), Luna concierge with trip context and pill prompts, destination guides, PWA version check — **DONE** |
+| 5 — Polish | 11–17 Jun | Onboarding (booking-ref lookup), push simulation, post-trip review, rebook nudge, real photography |
 | 6 — Show prep | 18–24 Jun | QR codes, demo script, real-device testing, bug bash |
 
 ## Mock bookings
@@ -77,32 +77,36 @@ Custom domain to be configured when ready.
 ```
 src/
 ├── app/                # Next.js App Router pages
-│   ├── layout.tsx      # Root layout, fonts, providers, tab bar
-│   ├── page.tsx        # Home / trip wallet
-│   ├── itinerary/      # Itinerary timeline
-│   ├── flight/[id]/    # Flight detail
-│   ├── hotel/[id]/     # Hotel detail
-│   ├── extra/[id]/     # Lounge / parking / fast-track detail
+│   ├── layout.tsx          # Root layout, fonts, providers, tab bar
+│   ├── page.tsx            # Home / trip wallet
+│   ├── itinerary/          # Itinerary timeline
+│   ├── flight/[id]/        # Flight detail
+│   ├── hotel/[id]/         # Hotel detail
+│   ├── extra/[id]/         # Lounge / parking / fast-track detail
 │   ├── travellers/         # Travellers list
-│   ├── travellers/[id]/    # Traveller detail (identity, seats)
-│   ├── documents/      # Documents list + preview sheet
-│   ├── luna/           # Luna concierge chat (sprint 4)
-│   ├── me/             # Profile, agency contact, settings
-│   └── offline/        # PWA offline fallback
+│   ├── travellers/[id]/    # Traveller detail
+│   ├── documents/          # Documents list + preview sheet
+│   ├── destination/        # Destination guide (overview, essentials, visa, tips)
+│   ├── luna/               # Luna concierge chat
+│   ├── me/                 # Profile, agency contact, settings (cover toggle)
+│   └── offline/            # PWA offline fallback
 ├── components/
 │   ├── icons.tsx           # Inline SVG icon library
-│   ├── tab-bar.tsx         # Bottom tab navigation
+│   ├── tab-bar.tsx         # Bottom tab navigation (hides on splash)
 │   ├── nav-bar.tsx         # iOS-style top nav for sub-pages
 │   ├── section-heading.tsx # Section title + 'See all'
 │   ├── action-button.tsx   # Primary/secondary CTA
 │   ├── page-enter.tsx      # Subtle entrance animation wrapper
+│   ├── cover-splash.tsx    # Vamoos-style premium welcome splash
+│   ├── version-check.tsx   # PWA cache-bust prompt on new deploy
 │   └── booking-picker.tsx  # Long-press demo picker
 ├── lib/
 │   ├── format.ts            # Data integrity formatters
 │   ├── booking-helpers.ts   # Timeline build, lookups, grouping
-│   ├── hero.ts              # Destination hero gradients
+│   ├── hero.ts              # Destination hero gradients + cinematic covers
 │   ├── booking-context.tsx  # Active booking state
-│   └── theme-context.tsx    # Light/dark mode
+│   ├── theme-context.tsx    # Light/dark mode
+│   └── cover-context.tsx    # Cover mode (opt-in splash) state
 ├── types/
 │   └── booking.ts      # Travelify-shaped booking types
 └── data/
@@ -111,8 +115,9 @@ src/
 
 public/
 ├── manifest.json       # PWA manifest
+├── version.json        # Build version (used by version-check)
 ├── icons/              # PWA icons
-└── images/             # Hero imagery (real photos in sprint 4)
+└── images/             # Hero imagery (real photos in sprint 5)
 ```
 
 ## Skills consulted
@@ -120,10 +125,10 @@ public/
 This build follows the rules in:
 - `tg-widget-suite` — architecture, naming, registry
 - `travelgenix-design` — design tokens, type scale, 4px grid, light/dark
-- `travelgenix-security` — Rule 8 (supplier data integrity), no secrets client-side
+- `travelgenix-security` — Rule 8 (supplier data integrity), no secrets client-side, redacted AI context
 - `frontend-design` — creative direction
 - Luna Travel build skill — kickoff blueprint
 
 ## Last updated
 
-14 May 2026 — sprint 3 shipped. Documents with preview/share, travellers list and detail, Me page with click-to-call agent contact, page entrance animations.
+15 May 2026 — sprint 4 shipped. Luna concierge with trip-context-aware answers, destination guides with tabs, cover splash (Vamoos-style), PWA version-check prompt, flight terminal label bug fixed.

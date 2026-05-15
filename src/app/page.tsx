@@ -183,6 +183,42 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* Destination guide */}
+      <section className="mt-6">
+        <SectionHeading title="Get to know it" />
+        <Link
+          href="/destination"
+          className="block rounded-2xl overflow-hidden bg-surface border border-line-light hover:shadow-sm transition-shadow"
+        >
+          <div className="flex items-stretch">
+            <div
+              className="w-24 flex-shrink-0 relative"
+              style={{ background: hero.gradient }}
+            >
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{ background: hero.glow }}
+              />
+            </div>
+            <div className="flex-1 p-4 min-w-0">
+              <div className="text-[11px] uppercase tracking-wider text-ink-3 font-semibold">
+                Destination guide
+              </div>
+              <div className="text-[15px] font-semibold text-ink mt-0.5 leading-tight">
+                {booking.destinationLabel}
+              </div>
+              <div className="text-xs text-ink-2 mt-1 line-clamp-2">
+                Visa, weather, currency, insider tips — everything we&rsquo;d tell a friend.
+              </div>
+            </div>
+            <div className="flex items-center pr-4 text-ink-3">
+              <IconChevR size={18} />
+            </div>
+          </div>
+        </Link>
+      </section>
+
       {/* Airport extras */}
       {booking.airportExtras.length > 0 && (
         <section className="mt-6">

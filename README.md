@@ -23,8 +23,8 @@ The code is also the foundation of the production v1 — no throwaway code.
 | Sprint | Dates | Scope |
 |---|---|---|
 | 1 — Foundation | 14–20 May | Scaffold, PWA, design tokens, mock data, app shell, picker — **DONE** |
-| 2 — Trip core | 21–27 May | Home, itinerary, flight detail, hotel detail — full data render |
-| 3 — Documents & travellers | 28 May – 3 Jun | Doc list, offline cache, traveller detail, special requests |
+| 2 — Trip core | 21–27 May | Home v2 with quick tiles & "Up next", itinerary timeline, flight detail, hotel detail, extras detail — **DONE** |
+| 3 — Documents & travellers | 28 May – 3 Jun | Documents with preview/share/download, travellers list & detail, Me page with click-to-call agent, entrance animations — **DONE** |
 | 4 — Luna & guides | 4–10 Jun | Luna concierge with trip context, destination guides |
 | 5 — Polish | 11–17 Jun | Onboarding, push simulation, post-trip review, rebook, animations |
 | 6 — Show prep | 18–24 Jun | QR codes, demo script, real-device testing, bug bash |
@@ -80,16 +80,27 @@ src/
 │   ├── layout.tsx      # Root layout, fonts, providers, tab bar
 │   ├── page.tsx        # Home / trip wallet
 │   ├── itinerary/      # Itinerary timeline
-│   ├── documents/      # Documents list
-│   ├── luna/           # Luna concierge chat
-│   ├── me/             # Profile, agency, settings
+│   ├── flight/[id]/    # Flight detail
+│   ├── hotel/[id]/     # Hotel detail
+│   ├── extra/[id]/     # Lounge / parking / fast-track detail
+│   ├── travellers/         # Travellers list
+│   ├── travellers/[id]/    # Traveller detail (identity, seats)
+│   ├── documents/      # Documents list + preview sheet
+│   ├── luna/           # Luna concierge chat (sprint 4)
+│   ├── me/             # Profile, agency contact, settings
 │   └── offline/        # PWA offline fallback
 ├── components/
-│   ├── icons.tsx       # Inline SVG icon library
-│   ├── tab-bar.tsx     # Bottom tab navigation
+│   ├── icons.tsx           # Inline SVG icon library
+│   ├── tab-bar.tsx         # Bottom tab navigation
+│   ├── nav-bar.tsx         # iOS-style top nav for sub-pages
+│   ├── section-heading.tsx # Section title + 'See all'
+│   ├── action-button.tsx   # Primary/secondary CTA
+│   ├── page-enter.tsx      # Subtle entrance animation wrapper
 │   └── booking-picker.tsx  # Long-press demo picker
 ├── lib/
-│   ├── format.ts       # Data integrity formatters
+│   ├── format.ts            # Data integrity formatters
+│   ├── booking-helpers.ts   # Timeline build, lookups, grouping
+│   ├── hero.ts              # Destination hero gradients
 │   ├── booking-context.tsx  # Active booking state
 │   └── theme-context.tsx    # Light/dark mode
 ├── types/
@@ -101,7 +112,7 @@ src/
 public/
 ├── manifest.json       # PWA manifest
 ├── icons/              # PWA icons
-└── images/             # Hero imagery (added in sprint 2)
+└── images/             # Hero imagery (real photos in sprint 4)
 ```
 
 ## Skills consulted
@@ -115,4 +126,4 @@ This build follows the rules in:
 
 ## Last updated
 
-14 May 2026 — sprint 1 shipped.
+14 May 2026 — sprint 3 shipped. Documents with preview/share, travellers list and detail, Me page with click-to-call agent contact, page entrance animations.

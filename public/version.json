@@ -1,5 +1,5 @@
 {
-  "version": "0.6.1",
+  "version": "0.7.0",
   "released": "2026-05-15",
-  "notes": "Sprint 6a (revised) — PDFs redesigned to match the booking widget's design language (Inter + Fraunces, navy hero gradient, ref bar, payment box)"
+  "notes": "Sprint 6b — show-prep: /install QR code page for booth display, demo script, photography brief"
 }

@@ -27,7 +27,8 @@ The code is also the foundation of the production v1 — no throwaway code.
 | 3 — Documents & travellers | 28 May – 3 Jun | Documents with preview/share/download, travellers list & detail, Me page with click-to-call agent, entrance animations — **DONE** |
 | 4 — Luna & guides + cover mode | 4–10 Jun | Cover splash (Vamoos-style), Luna concierge with trip context and pill prompts, destination guides, PWA version check — **DONE** |
 | 5 — Polish | 11–17 Jun | Onboarding ref-lookup, post-trip review with stars + rebook nudge, notifications preview with samples, micro-interactions, Luna composer bug fix — **DONE** |
-| 6 — Show prep | 18–24 Jun | QR codes, demo script, real photography, real-device testing, bug bash |
+| 6a — Widget-style PDFs | 18–20 Jun | HTML+Playwright PDF generator matching the booking widget's design language (Inter + Fraunces, navy header, ref bar, payment box) — **DONE** |
+| 6b — Show prep | 21–24 Jun | `/install` QR code page for booth, demo script, photography brief, polish bug-bash, keyboard handling — **DONE** |
 
 ## Mock bookings
 

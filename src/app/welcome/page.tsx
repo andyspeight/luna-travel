@@ -87,6 +87,8 @@ export default function WelcomePage() {
             placeholder="e.g. DEMO81297"
             autoCapitalize="characters"
             autoComplete="off"
+            name="booking-reference"
+            enterKeyHint="next"
           />
           <Field
             label="Lead traveller last name"
@@ -95,6 +97,8 @@ export default function WelcomePage() {
             placeholder="e.g. Swan"
             autoCapitalize="words"
             autoComplete="family-name"
+            name="last-name"
+            enterKeyHint="go"
           />
 
           {error && (
@@ -150,6 +154,8 @@ function Field({
   placeholder,
   autoCapitalize,
   autoComplete,
+  name,
+  enterKeyHint,
 }: {
   label: string;
   value: string;
@@ -157,6 +163,8 @@ function Field({
   placeholder?: string;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   autoComplete?: string;
+  name?: string;
+  enterKeyHint?: 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send';
 }) {
   return (
     <label className="block">
@@ -172,6 +180,8 @@ function Field({
         autoComplete={autoComplete}
         autoCorrect="off"
         spellCheck={false}
+        name={name}
+        enterKeyHint={enterKeyHint}
         className="w-full h-12 px-4 rounded-xl bg-surface border border-line text-ink placeholder-ink-3 focus:outline-none focus:border-teal text-sm font-medium"
       />
     </label>

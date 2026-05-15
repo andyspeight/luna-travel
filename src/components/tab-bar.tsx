@@ -21,6 +21,10 @@ export function TabBar() {
   const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
   if (splashShowing) return null;
 
+  // Booth-display and onboarding screens are standalone (no trip context yet)
+  // — hide the tab bar so they read as self-contained surfaces.
+  if (pathname === '/install' || pathname === '/welcome') return null;
+
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-40 glass border-t border-line"

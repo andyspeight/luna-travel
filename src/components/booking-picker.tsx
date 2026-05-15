@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
 import { useTheme } from '@/lib/theme-context';
+import { useCover } from '@/lib/cover-context';
 import { IconCheck, IconSun, IconMoon } from './icons';
 
 /**
@@ -13,6 +14,7 @@ import { IconCheck, IconSun, IconMoon } from './icons';
 export function BookingPicker({ children }: { children: React.ReactNode }) {
   const { booking, setBookingByRef, allBookings } = useBooking();
   const { theme, toggle } = useTheme();
+  const { coverEnabled, reset: resetCover } = useCover();
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
@@ -86,6 +88,8 @@ export function BookingPicker({ children }: { children: React.ReactNode }) {
                     type="button"
                     onClick={() => {
                       setBookingByRef(b.reference);
+                      // If cover mode is on, re-arm the splash for the new trip
+                      if (coverEnabled) resetCover();
                       setOpen(false);
                     }}
                     className={[

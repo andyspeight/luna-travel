@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useCover } from '@/lib/cover-context';
 import { IconHome, IconCalendar, IconDoc, IconChat, IconUser } from './icons';
 
 const TABS = [
@@ -14,6 +15,11 @@ const TABS = [
 
 export function TabBar() {
   const pathname = usePathname();
+  const { coverEnabled, coverDismissed } = useCover();
+
+  // Splash is showing → hide the tab bar so the cover is truly full-bleed.
+  const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
+  if (splashShowing) return null;
 
   return (
     <nav

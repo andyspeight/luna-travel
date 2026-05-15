@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Instrument_Serif } from 'next/font/google';
 import { BookingProvider } from '@/lib/booking-context';
 import { ThemeProvider } from '@/lib/theme-context';
+import { CoverProvider } from '@/lib/cover-context';
 import { TabBar } from '@/components/tab-bar';
 import './globals.css';
 
@@ -53,13 +54,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans antialiased">
         <ThemeProvider>
           <BookingProvider>
-            <div
-              className="min-h-screen pb-[88px]"
-              style={{ paddingTop: 'var(--safe-top)' }}
-            >
-              {children}
-            </div>
-            <TabBar />
+            <CoverProvider>
+              <div
+                className="min-h-screen pb-[88px]"
+                style={{ paddingTop: 'var(--safe-top)' }}
+              >
+                {children}
+              </div>
+              <TabBar />
+            </CoverProvider>
           </BookingProvider>
         </ThemeProvider>
       </body>

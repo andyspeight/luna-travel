@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { useTheme } from '@/lib/theme-context';
+import { useCover } from '@/lib/cover-context';
 import { PageEnter } from '@/components/page-enter';
 import {
   IconSun,
@@ -17,12 +18,14 @@ import {
   IconExternal,
   IconWarning,
   IconShield2,
+  IconPin,
 } from '@/components/icons';
 import { initials } from '@/lib/format';
 
 export default function MePage() {
   const { booking } = useBooking();
   const { theme, toggle } = useTheme();
+  const { coverEnabled, toggle: toggleCover } = useCover();
   const lead = booking.travellers.find((t) => t.isLead) ?? booking.travellers[0];
 
   return (
@@ -123,6 +126,13 @@ export default function MePage() {
           Settings
         </h2>
         <List>
+          <ListToggle
+            on={coverEnabled}
+            onChange={toggleCover}
+            icon={<IconPin size={18} />}
+            title="Cover mode"
+            sub="Open the app on a destination splash"
+          />
           <ListAction
             onClick={() => toggle()}
             icon={theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
@@ -229,6 +239,52 @@ function ListAction({
         {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
       </div>
       {!destructive && <IconChevR size={18} className="text-ink-3 flex-shrink-0" />}
+    </button>
+  );
+}
+
+function ListToggle({
+  on,
+  onChange,
+  icon,
+  title,
+  sub,
+}: {
+  on: boolean;
+  onChange: () => void;
+  icon: React.ReactNode;
+  title: string;
+  sub?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      role="switch"
+      aria-checked={on}
+      className="w-full flex items-center gap-3 p-4 hover:bg-surface-2 transition-colors text-left"
+    >
+      <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-teal/10 text-teal-dark dark:text-teal-light">
+        {icon}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-ink">{title}</div>
+        {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
+      </div>
+      <span
+        aria-hidden
+        className={[
+          'relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors',
+          on ? 'bg-teal' : 'bg-surface-3',
+        ].join(' ')}
+      >
+        <span
+          className={[
+            'absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-sm transition-transform',
+            on ? 'translate-x-[22px]' : 'translate-x-0.5',
+          ].join(' ')}
+        />
+      </span>
     </button>
   );
 }

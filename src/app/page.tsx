@@ -27,9 +27,12 @@ import {
 import { buildTimeline, nextEvent, type TimelineEvent } from '@/lib/booking-helpers';
 import { destinationHero } from '@/lib/hero';
 import { PageEnter } from '@/components/page-enter';
+import { CoverSplash } from '@/components/cover-splash';
+import { useCover } from '@/lib/cover-context';
 
 export default function HomePage() {
   const { booking } = useBooking();
+  const { coverEnabled, coverDismissed } = useCover();
   const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
 
   useEffect(() => {
@@ -43,6 +46,13 @@ export default function HomePage() {
   const upcoming = buildTimeline(booking).filter((e) => !e.past).slice(0, 3);
   const hero = destinationHero(booking.primaryCountryCode);
   const hasFlights = booking.flights.length > 0;
+
+  // Cover mode: full-bleed splash takes over the home route until the user
+  // taps a dock action (which calls dismiss()). The dashboard then becomes
+  // accessible via the tab bar for the rest of the session.
+  if (coverEnabled && !coverDismissed) {
+    return <CoverSplash />;
+  }
 
   return (
     <PageEnter>

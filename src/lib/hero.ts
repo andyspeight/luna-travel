@@ -80,50 +80,49 @@ export interface CinematicCover {
 }
 
 const COVERS: Record<string, CinematicCover> = {
-  // Maldives — underwater turquoise into deep blue, sun rays from upper-right,
-  // soft sand glow bottom-right. Reads as a lagoon shot.
+  // Maldives — aerial of an island chain, turquoise lagoon, deep ocean
+  // surround. Photo carries the moment; gradients tint top + bottom for
+  // status-bar and countdown legibility.
   MV: {
     background: [
-      // Sun glow (warm upper right)
-      'radial-gradient(ellipse 80% 50% at 75% 5%, rgba(254,243,199,0.5), transparent 55%)',
-      // Surface light shafts
-      'radial-gradient(ellipse 40% 90% at 60% 0%, rgba(186,230,253,0.45), transparent 60%)',
-      // Coral / sand glow bottom right
-      'radial-gradient(ellipse 60% 40% at 90% 95%, rgba(251,191,36,0.18), transparent 60%)',
-      // Deep water vignette bottom left
-      'radial-gradient(ellipse 70% 70% at 10% 100%, rgba(2,32,71,0.55), transparent 60%)',
-      // Base water gradient
-      'linear-gradient(178deg, #67E8F9 0%, #22D3EE 15%, #06B6D4 30%, #0891B2 50%, #0E7490 70%, #155E75 85%, #082F49 100%)',
+      // Soft warm top to keep status-bar icons legible against sky
+      'linear-gradient(180deg, rgba(15,23,42,0.20) 0%, transparent 22%)',
+      // Bottom anchor for countdown text
+      'linear-gradient(180deg, transparent 55%, rgba(2,32,71,0.45) 100%)',
+      // The photo
+      "url('/images/destinations/cover-mv-portrait.webp') center/cover no-repeat",
     ].join(', '),
+    credit: 'Photo: Ishan @seefromthesky / Unsplash',
   },
-  // Mallorca — Mediterranean afternoon, turquoise sea meeting golden sand,
-  // pine-shadow green hint top-left.
+  // Mallorca — sailboat anchored in a clear cala, pine fringe top-right,
+  // rocky outcrop bottom-right. Mediterranean afternoon.
   ES: {
     background: [
-      'radial-gradient(ellipse 80% 40% at 85% 8%, rgba(254,243,199,0.55), transparent 55%)',
-      'radial-gradient(ellipse 50% 60% at 5% 5%, rgba(21,128,61,0.25), transparent 60%)',
-      'radial-gradient(ellipse 100% 30% at 50% 100%, rgba(254,215,170,0.6), transparent 75%)',
-      'linear-gradient(180deg, #38BDF8 0%, #0EA5E9 25%, #0284C7 50%, #075985 75%, #0C4A6E 100%)',
+      'linear-gradient(180deg, rgba(15,23,42,0.22) 0%, transparent 22%)',
+      'linear-gradient(180deg, transparent 55%, rgba(7,89,133,0.45) 100%)',
+      "url('/images/destinations/cover-es-portrait.webp') center/cover no-repeat",
     ].join(', '),
+    credit: 'Photo: Adobe Stock',
   },
-  // Dubai — desert sunset, deep amber into midnight indigo, single point light.
+  // Dubai — Palm Jumeirah aerial at golden hour, marina skyline on the
+  // horizon, pink-orange sky. Premium tone.
   AE: {
     background: [
-      'radial-gradient(ellipse 70% 45% at 70% 18%, rgba(254,243,199,0.65), transparent 55%)',
-      'radial-gradient(ellipse 90% 30% at 50% 5%, rgba(252,165,165,0.4), transparent 60%)',
-      'radial-gradient(ellipse 60% 60% at 100% 100%, rgba(124,45,18,0.55), transparent 65%)',
-      'radial-gradient(ellipse 90% 50% at 50% 100%, rgba(15,23,42,0.7), transparent 75%)',
-      'linear-gradient(180deg, #FDBA74 0%, #F97316 20%, #C2410C 40%, #7C2D12 60%, #431407 80%, #1E1B4B 100%)',
+      'linear-gradient(180deg, rgba(15,23,42,0.18) 0%, transparent 25%)',
+      'linear-gradient(180deg, transparent 50%, rgba(15,23,42,0.55) 100%)',
+      "url('/images/destinations/cover-ae-portrait.webp') center/cover no-repeat",
     ].join(', '),
+    credit: 'Photo: Adobe Stock',
   },
-  // Athens — late afternoon Aegean, soft cream marble glow above, deep sea below.
+  // Athens — the Parthenon viewed from below with bougainvillea framing
+  // top-left, deep blue sky behind.
   GR: {
     background: [
-      'radial-gradient(ellipse 90% 50% at 50% 8%, rgba(254,252,232,0.5), transparent 55%)',
-      'radial-gradient(ellipse 60% 30% at 80% 12%, rgba(254,215,170,0.35), transparent 60%)',
-      'radial-gradient(ellipse 70% 50% at 15% 100%, rgba(8,47,73,0.5), transparent 65%)',
-      'linear-gradient(180deg, #FEF3C7 0%, #93C5FD 18%, #3B82F6 38%, #1D4ED8 60%, #1E3A8A 80%, #0F172A 100%)',
+      'linear-gradient(180deg, rgba(15,23,42,0.18) 0%, transparent 22%)',
+      'linear-gradient(180deg, transparent 55%, rgba(15,23,42,0.50) 100%)',
+      "url('/images/destinations/cover-gr-portrait.webp') center/cover no-repeat",
     ].join(', '),
+    credit: 'Photo: Adobe Stock',
   },
 };
 

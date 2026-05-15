@@ -451,11 +451,42 @@ def page_css() -> str:
 
 
 # ── Hero gradients (per destination) ─────────────────────────────────────────
+def _load_hero_image(slug: str) -> str:
+    """Read a destination hero JPG from scripts/ and return a base64 data URI."""
+    import base64
+    path = os.path.join(os.path.dirname(__file__), f"_pdf-hero-{slug}.jpg")
+    if not os.path.exists(path):
+        return ""
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return f"data:image/jpeg;base64,{b64}"
+
+
+# Real photos as inline base64 data URIs — fully self-contained PDFs that
+# render their hero correctly even when served as offline files. Layered
+# gradients keep status-bar legibility on top and tint the bottom where the
+# stars + agency line sit.
 HERO_GRADIENTS = {
-    "MV": "linear-gradient(135deg, #67E8F9 0%, #22D3EE 25%, #0891B2 60%, #082F49 100%)",
-    "ES": "linear-gradient(135deg, #38BDF8 0%, #0284C7 50%, #0C4A6E 100%)",
-    "AE": "linear-gradient(135deg, #FDBA74 0%, #C2410C 50%, #1E1B4B 100%)",
-    "GR": "linear-gradient(135deg, #FEF3C7 0%, #3B82F6 40%, #0F172A 100%)",
+    "MV": (
+        "linear-gradient(180deg, rgba(15,23,42,0.20) 0%, transparent 25%), "
+        "linear-gradient(0deg, rgba(2,32,71,0.55) 0%, transparent 55%), "
+        f"url('{_load_hero_image('cover-mv')}') center/cover no-repeat"
+    ),
+    "ES": (
+        "linear-gradient(180deg, rgba(15,23,42,0.22) 0%, transparent 25%), "
+        "linear-gradient(0deg, rgba(7,89,133,0.55) 0%, transparent 55%), "
+        f"url('{_load_hero_image('cover-es')}') center/cover no-repeat"
+    ),
+    "AE": (
+        "linear-gradient(180deg, rgba(15,23,42,0.18) 0%, transparent 25%), "
+        "linear-gradient(0deg, rgba(15,23,42,0.60) 0%, transparent 55%), "
+        f"url('{_load_hero_image('cover-ae')}') center/cover no-repeat"
+    ),
+    "GR": (
+        "linear-gradient(180deg, rgba(15,23,42,0.18) 0%, transparent 25%), "
+        "linear-gradient(0deg, rgba(15,23,42,0.55) 0%, transparent 55%), "
+        f"url('{_load_hero_image('cover-gr')}') center/cover no-repeat"
+    ),
 }
 
 

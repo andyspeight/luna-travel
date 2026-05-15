@@ -163,7 +163,7 @@ export default function MePage() {
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
-          Luna Travel · v0.5 prototype · {booking.agency.name}
+          Luna Travel · v0.6 prototype · {booking.agency.name}
         </p>
       </main>
     </PageEnter>

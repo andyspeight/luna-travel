@@ -143,6 +143,66 @@ export default function DocumentsPage() {
  */
 function DocSheet({ doc, onClose }: { doc: Document; onClose: () => void }) {
   const meta = KIND_META[doc.kind];
+  const [shareToast, setShareToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setShareToast(msg);
+    window.setTimeout(() => setShareToast(null), 2500);
+  };
+
+  const openDoc = () => {
+    if (!doc.url || doc.url === '#') {
+      showToast('Document not available in this build');
+      return;
+    }
+    window.open(doc.url, '_blank', 'noopener,noreferrer');
+  };
+
+  const downloadDoc = () => {
+    if (!doc.url || doc.url === '#') {
+      showToast('Document not available in this build');
+      return;
+    }
+    // Trigger a real download using a temporary anchor element.
+    // The `download` attribute forces a save dialog rather than in-tab preview.
+    const a = document.createElement('a');
+    a.href = doc.url;
+    a.download = doc.name.replace(/[^\w\s.-]/g, '').trim().replace(/\s+/g, '-') + '.pdf';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const shareDoc = async () => {
+    if (!doc.url || doc.url === '#') {
+      showToast('Document not available in this build');
+      return;
+    }
+    const absoluteUrl = new URL(doc.url, window.location.origin).toString();
+    // Web Share API where available (iOS Safari, Android Chrome)
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: doc.name,
+          text: `${doc.name} — sent from Luna Travel`,
+          url: absoluteUrl,
+        });
+        return;
+      } catch (err) {
+        // AbortError = user cancelled. Anything else, fall through to clipboard.
+        if ((err as Error)?.name === 'AbortError') return;
+      }
+    }
+    // Fallback: copy the URL to the clipboard
+    try {
+      await navigator.clipboard.writeText(absoluteUrl);
+      showToast('Link copied to clipboard');
+    } catch {
+      showToast('Sharing not supported on this device');
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-black/50 animate-fade-in"
@@ -179,32 +239,47 @@ function DocSheet({ doc, onClose }: { doc: Document; onClose: () => void }) {
           </div>
         </div>
 
-        {/* Mock preview area */}
-        <div
-          className="mb-4 rounded-xl border border-line bg-surface-2 aspect-[3/4] flex items-center justify-center text-ink-3"
-          aria-label="Document preview"
+        {/* Tappable preview area */}
+        <button
+          type="button"
+          onClick={openDoc}
+          className="mb-4 w-full rounded-xl border border-line bg-surface-2 aspect-[3/4] flex items-center justify-center text-ink-3 hover:border-teal/40 hover:bg-teal/5 transition-colors tap"
+          aria-label={`Open ${doc.name}`}
         >
           <div className="text-center px-6">
-            <IconEye size={28} className="mx-auto mb-2 opacity-60" />
-            <div className="text-xs font-medium">Preview</div>
+            <span
+              className="inline-flex w-14 h-16 rounded-lg text-white items-center justify-center mb-3 shadow-md"
+              style={{ background: meta.gradient }}
+            >
+              {meta.icon}
+            </span>
+            <div className="text-xs font-medium text-ink">Tap to open</div>
             <div className="text-[10px] mt-1 opacity-75">
-              The real PDF will render here when this is wired to live documents.
+              Opens the PDF in your browser
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Actions */}
         <div className="space-y-2">
-          <ActionButton icon={<IconEye size={18} />}>Open</ActionButton>
+          <ActionButton onClick={openDoc} icon={<IconEye size={18} />}>
+            Open
+          </ActionButton>
           <div className="grid grid-cols-2 gap-2">
-            <ActionButton variant="secondary" icon={<IconShare size={16} />}>
+            <ActionButton onClick={shareDoc} variant="secondary" icon={<IconShare size={16} />}>
               Share
             </ActionButton>
-            <ActionButton variant="secondary" icon={<IconDownload size={16} />}>
+            <ActionButton onClick={downloadDoc} variant="secondary" icon={<IconDownload size={16} />}>
               Download
             </ActionButton>
           </div>
         </div>
+
+        {shareToast && (
+          <div className="mt-2 text-center text-[11px] text-success font-medium">
+            {shareToast}
+          </div>
+        )}
 
         <button
           type="button"

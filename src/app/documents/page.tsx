@@ -92,7 +92,7 @@ export default function DocumentsPage() {
                 key={d.id}
                 type="button"
                 onClick={() => setActive(d)}
-                className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow text-left"
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow tap text-left"
               >
                 <span
                   className="w-12 h-15 rounded-lg text-white flex items-center justify-center flex-shrink-0 shadow-md"

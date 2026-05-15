@@ -188,7 +188,7 @@ export default function HomePage() {
         <SectionHeading title="Get to know it" />
         <Link
           href="/destination"
-          className="block rounded-2xl overflow-hidden bg-surface border border-line-light hover:shadow-sm transition-shadow"
+          className="block rounded-2xl overflow-hidden bg-surface border border-line-light hover:shadow-sm transition-shadow tap"
         >
           <div className="flex items-stretch">
             <div
@@ -228,7 +228,7 @@ export default function HomePage() {
               <li key={x.id}>
                 <Link
                   href={`/extra/${x.id}`}
-                  className="flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow"
+                  className="flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow tap"
                 >
                   <span
                     className="w-10 h-10 rounded-xl text-white flex items-center justify-center flex-shrink-0"
@@ -306,7 +306,7 @@ function UpNextCard({ event }: { event: TimelineEvent }) {
   return (
     <Link
       href={event.href}
-      className="block bg-surface border border-line-light rounded-2xl p-4 hover:shadow-sm transition-shadow"
+      className="block bg-surface border border-line-light rounded-2xl p-4 hover:shadow-sm transition-shadow tap"
     >
       <div className="flex items-start gap-3">
         <span
@@ -336,7 +336,7 @@ function CompactEventRow({ event }: { event: TimelineEvent }) {
   return (
     <Link
       href={event.href}
-      className="flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow"
+      className="flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow tap"
     >
       <span
         className="w-9 h-9 rounded-xl text-white flex items-center justify-center flex-shrink-0"

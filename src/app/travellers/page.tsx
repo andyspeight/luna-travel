@@ -41,7 +41,7 @@ export default function TravellersPage() {
               <li key={t.id}>
                 <Link
                   href={`/travellers/${t.id}`}
-                  className="flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow"
+                  className="flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow tap"
                 >
                   <span className="w-12 h-12 rounded-full bg-gradient-to-br from-navy to-teal-dark text-white font-bold text-base flex items-center justify-center flex-shrink-0">
                     {initials(t.firstName, t.lastName)}

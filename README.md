@@ -26,8 +26,8 @@ The code is also the foundation of the production v1 — no throwaway code.
 | 2 — Trip core | 21–27 May | Home v2 with quick tiles & "Up next", itinerary timeline, flight detail, hotel detail, extras detail — **DONE** |
 | 3 — Documents & travellers | 28 May – 3 Jun | Documents with preview/share/download, travellers list & detail, Me page with click-to-call agent, entrance animations — **DONE** |
 | 4 — Luna & guides + cover mode | 4–10 Jun | Cover splash (Vamoos-style), Luna concierge with trip context and pill prompts, destination guides, PWA version check — **DONE** |
-| 5 — Polish | 11–17 Jun | Onboarding (booking-ref lookup), push simulation, post-trip review, rebook nudge, real photography |
-| 6 — Show prep | 18–24 Jun | QR codes, demo script, real-device testing, bug bash |
+| 5 — Polish | 11–17 Jun | Onboarding ref-lookup, post-trip review with stars + rebook nudge, notifications preview with samples, micro-interactions, Luna composer bug fix — **DONE** |
+| 6 — Show prep | 18–24 Jun | QR codes, demo script, real photography, real-device testing, bug bash |
 
 ## Mock bookings
 
@@ -79,6 +79,7 @@ src/
 ├── app/                # Next.js App Router pages
 │   ├── layout.tsx          # Root layout, fonts, providers, tab bar
 │   ├── page.tsx            # Home / trip wallet
+│   ├── welcome/            # Onboarding ref-lookup
 │   ├── itinerary/          # Itinerary timeline
 │   ├── flight/[id]/        # Flight detail
 │   ├── hotel/[id]/         # Hotel detail
@@ -88,7 +89,9 @@ src/
 │   ├── documents/          # Documents list + preview sheet
 │   ├── destination/        # Destination guide (overview, essentials, visa, tips)
 │   ├── luna/               # Luna concierge chat
-│   ├── me/                 # Profile, agency contact, settings (cover toggle)
+│   ├── notifications/      # Push notification preferences + samples
+│   ├── review/             # Post-trip review with stars + rebook nudge
+│   ├── me/                 # Profile, agency contact, settings
 │   └── offline/            # PWA offline fallback
 ├── components/
 │   ├── icons.tsx           # Inline SVG icon library
@@ -101,7 +104,7 @@ src/
 │   ├── version-check.tsx   # PWA cache-bust prompt on new deploy
 │   └── booking-picker.tsx  # Long-press demo picker
 ├── lib/
-│   ├── format.ts            # Data integrity formatters
+│   ├── format.ts            # Data integrity formatters incl. formatTerminal
 │   ├── booking-helpers.ts   # Timeline build, lookups, grouping
 │   ├── hero.ts              # Destination hero gradients + cinematic covers
 │   ├── booking-context.tsx  # Active booking state
@@ -115,9 +118,9 @@ src/
 
 public/
 ├── manifest.json       # PWA manifest
-├── version.json        # Build version (used by version-check)
+├── version.json        # Build version (0.5.0) — used by version-check
 ├── icons/              # PWA icons
-└── images/             # Hero imagery (real photos in sprint 5)
+└── images/             # Hero imagery (real photos in sprint 6)
 ```
 
 ## Skills consulted
@@ -131,4 +134,4 @@ This build follows the rules in:
 
 ## Last updated
 
-15 May 2026 — sprint 4 shipped. Luna concierge with trip-context-aware answers, destination guides with tabs, cover splash (Vamoos-style), PWA version-check prompt, flight terminal label bug fixed.
+15 May 2026 — sprint 5 shipped. Onboarding flow at `/welcome`, post-trip review at `/review`, notifications preview at `/notifications`, tap-feedback micro-interactions on list rows, Luna composer layout bug fixed, flight terminal label bug fixed. Six features in one push.

@@ -120,3 +120,15 @@ header {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* Subtle press response on tappable rows / cards. Apply to clickable surfaces
+ * that aren't ActionButtons (which already have active:scale baked in). */
+.tap {
+  transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.tap:active {
+  transform: scale(0.985);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tap, .tap:active { transform: none !important; }
+}

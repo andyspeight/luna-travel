@@ -99,7 +99,7 @@ function TimelineCard({ event }: { event: TimelineEvent }) {
     <Link
       href={event.href}
       className={[
-        'block bg-surface border border-line-light rounded-2xl p-4 hover:shadow-sm transition-all',
+        'block bg-surface border border-line-light rounded-2xl p-4 hover:shadow-sm transition-all tap',
         event.past ? 'opacity-70' : '',
       ].join(' ')}
     >

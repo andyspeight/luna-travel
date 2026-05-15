@@ -139,7 +139,8 @@ export default function MePage() {
             title="Appearance"
             sub={theme === 'dark' ? 'Dark mode' : 'Light mode'}
           />
-          <ListAction
+          <ListLink
+            href="/notifications"
             icon={<IconBell size={18} />}
             title="Notifications"
             sub="Trip updates, check-in reminders, weather"
@@ -153,7 +154,8 @@ export default function MePage() {
 
         {/* Sign out */}
         <List>
-          <ListAction
+          <ListLink
+            href="/welcome"
             icon={<IconLogOut size={18} />}
             title="Sign out"
             destructive
@@ -161,7 +163,7 @@ export default function MePage() {
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
-          Luna Travel · v0.3 prototype · {booking.agency.name}
+          Luna Travel · v0.5 prototype · {booking.agency.name}
         </p>
       </main>
     </PageEnter>
@@ -182,25 +184,36 @@ function ListLink({
   icon,
   title,
   sub,
+  destructive,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   sub?: string;
+  destructive?: boolean;
 }) {
   return (
     <Link
       href={href}
       className="flex items-center gap-3 p-4 hover:bg-surface-2 transition-colors text-left"
     >
-      <span className="w-9 h-9 rounded-xl bg-teal/10 text-teal-dark dark:text-teal-light flex items-center justify-center flex-shrink-0">
+      <span
+        className={[
+          'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
+          destructive
+            ? 'bg-danger/10 text-danger'
+            : 'bg-teal/10 text-teal-dark dark:text-teal-light',
+        ].join(' ')}
+      >
         {icon}
       </span>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-ink">{title}</div>
+        <div className={['text-sm font-medium', destructive ? 'text-danger' : 'text-ink'].join(' ')}>
+          {title}
+        </div>
         {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
       </div>
-      <IconChevR size={18} className="text-ink-3 flex-shrink-0" />
+      {!destructive && <IconChevR size={18} className="text-ink-3 flex-shrink-0" />}
     </Link>
   );
 }

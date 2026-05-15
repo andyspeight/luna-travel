@@ -64,7 +64,7 @@ export default function LunaPage() {
 
   return (
     <PageEnter>
-      <div className="flex flex-col h-[calc(100vh-88px)]">
+      <div className="flex flex-col min-h-[calc(100dvh-88px-var(--safe-top))]">
         {/* Header */}
         <header className="px-5 pt-3 pb-3 border-b border-line-light">
           <div className="flex items-center gap-3">
@@ -101,10 +101,7 @@ export default function LunaPage() {
         </div>
 
         {/* Composer (display only in prototype) */}
-        <div
-          className="px-4 py-3 border-t border-line-light bg-surface flex items-center gap-2"
-          style={{ paddingBottom: 'calc(0.75rem + var(--safe-bottom))' }}
-        >
+        <div className="px-4 py-3 border-t border-line-light bg-surface flex items-center gap-2">
           <div className="flex-1 h-10 px-4 rounded-full bg-surface-3 text-sm text-ink-3 flex items-center">
             Ask Luna anything about your trip…
           </div>

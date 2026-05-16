@@ -3,7 +3,15 @@
 @tailwind utilities;
 
 /* ────────────────────────────────────────────────────────────
-   Design tokens — light default, dark via [data-theme="dark"]
+   @travelgenix/ui — shared design tokens
+   Used by the admin and any other Travelgenix admin surface.
+   Available alongside the PWA tokens below.
+   ──────────────────────────────────────────────────────────── */
+@import url('../../packages/ui/tokens.css');
+
+/* ────────────────────────────────────────────────────────────
+   Luna Travel PWA — existing design tokens
+   Light default, dark via [data-theme="dark"]
    ──────────────────────────────────────────────────────────── */
 :root {
   --surface: #ffffff;
@@ -14,14 +22,12 @@
   --text: #0f172a;
   --text-2: #475569;
   --text-3: #94a3b8;
-
   /* Safe-area insets for PWA on devices with notches */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 }
-
 [data-theme='dark'] {
   --surface: #0f172a;
   --surface-2: #1e293b;
@@ -44,13 +50,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
-
 body {
   /* Lock body so the app feels like an app, not a page */
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
-
 * {
   -webkit-tap-highlight-color: transparent;
 }

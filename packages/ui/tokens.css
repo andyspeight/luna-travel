@@ -1,0 +1,167 @@
+/* ================================================================
+   @travelgenix/ui — Design Tokens
+   ----------------------------------------------------------------
+   This file is the SINGLE SOURCE OF TRUTH for all visual values
+   across every Travelgenix admin, portal, dashboard, and widget.
+   
+   Derived directly from the travelgenix-design skill.
+   
+   IMPORTANT: Never hardcode colours, spacing, radii, shadows, or
+   font sizes in any project. Always reference these tokens.
+   ================================================================ */
+
+:root {
+  /* ============ COLOUR — CORE BRAND ============ */
+  --tg-primary:        #1B2B5B;  /* Deep navy — authority, trust */
+  --tg-primary-light:  #2A3F7A;  /* Hover states */
+  --tg-primary-dark:   #111D3E;  /* Active states */
+
+  --tg-accent:         #00B4D8;  /* Teal — energy, travel */
+  --tg-accent-light:   #48CAE4;  /* Backgrounds, soft accents */
+  --tg-accent-dark:    #0096B7;  /* Accent text on light */
+
+  /* ============ COLOUR — SEMANTIC ============ */
+  --tg-success:        #10B981;
+  --tg-success-soft:   #ECFDF5;
+  --tg-warning:        #F59E0B;
+  --tg-warning-soft:   #FFFBEB;
+  --tg-error:          #EF4444;
+  --tg-error-soft:     #FEF2F2;
+  --tg-info:           #3B82F6;
+  --tg-info-soft:      #EFF6FF;
+
+  /* ============ COLOUR — SURFACES ============ */
+  --tg-bg-primary:     #FFFFFF;
+  --tg-bg-secondary:   #F8FAFC;  /* Subtle off-white sections */
+  --tg-bg-tertiary:    #F1F5F9;  /* Cards on tinted backgrounds, wells */
+  --tg-bg-elevated:    #FFFFFF;  /* Modals, dropdowns */
+
+  /* ============ COLOUR — BORDERS ============ */
+  --tg-border:         #E2E8F0;
+  --tg-border-light:   #F1F5F9;
+  --tg-border-strong:  #CBD5E1;
+
+  /* ============ COLOUR — TEXT ============ */
+  --tg-text-primary:   #0F172A;  /* Headings, primary text */
+  --tg-text-secondary: #475569;  /* Body, descriptions */
+  --tg-text-tertiary:  #94A3B8;  /* Captions, hints */
+  --tg-text-inverse:   #FFFFFF;  /* On dark backgrounds */
+  --tg-text-accent:    #0096B7;  /* Links, accent text on light */
+
+  /* ============ TYPOGRAPHY ============ */
+  --tg-font-display:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --tg-font-body:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --tg-font-mono:      'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  --tg-font-system:    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Type scale — strictly enforced */
+  --tg-text-xs:        11px;
+  --tg-text-sm:        13px;
+  --tg-text-base:      15px;  /* Body — minimum, avoids iOS zoom */
+  --tg-text-md:        16px;
+  --tg-text-lg:        18px;
+  --tg-text-xl:        22px;
+  --tg-text-2xl:       28px;
+  --tg-text-3xl:       36px;
+
+  /* Line heights */
+  --tg-leading-tight:  1.2;
+  --tg-leading-snug:   1.3;
+  --tg-leading-normal: 1.4;
+  --tg-leading-body:   1.5;
+  --tg-leading-relaxed:1.6;
+
+  /* ============ SPACING — 4px GRID ============ */
+  --tg-space-1:        4px;
+  --tg-space-2:        8px;
+  --tg-space-3:        12px;
+  --tg-space-4:        16px;
+  --tg-space-5:        20px;
+  --tg-space-6:        24px;
+  --tg-space-8:        32px;
+  --tg-space-10:       40px;
+  --tg-space-12:       48px;
+  --tg-space-16:       64px;
+  --tg-space-20:       80px;
+
+  /* ============ RADIUS ============ */
+  --tg-radius-sm:      6px;     /* Badges, small chips */
+  --tg-radius-md:      8px;     /* Buttons, inputs, small cards */
+  --tg-radius-lg:      12px;    /* Cards, modals, dropdowns */
+  --tg-radius-xl:      16px;    /* Large cards, panels */
+  --tg-radius-2xl:     20px;    /* Feature cards */
+  --tg-radius-full:    9999px;
+
+  /* ============ SHADOWS ============ */
+  --tg-shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.05);
+  --tg-shadow-sm:      0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --tg-shadow-md:      0 4px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --tg-shadow-lg:      0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+  --tg-shadow-xl:      0 20px 25px rgba(0, 0, 0, 0.08), 0 10px 10px rgba(0, 0, 0, 0.04);
+  --tg-shadow-float:   0 25px 50px rgba(0, 0, 0, 0.12);  /* Floating widgets */
+  --tg-shadow-focus:   0 0 0 3px rgba(0, 180, 216, 0.15);
+
+  /* ============ Z-INDEX SCALE ============ */
+  --tg-z-content:      0;
+  --tg-z-sticky:       10;
+  --tg-z-dropdown:     20;
+  --tg-z-overlay:      30;
+  --tg-z-modal:        40;
+  --tg-z-toast:        50;
+  --tg-z-tooltip:      60;
+  --tg-z-widget:       2147483647;  /* For embedded widgets only */
+
+  /* ============ TRANSITIONS ============ */
+  --tg-ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
+  --tg-ease-in:        cubic-bezier(0.7, 0, 0.84, 0);
+  --tg-ease-in-out:    cubic-bezier(0.65, 0, 0.35, 1);
+  --tg-duration-fast:  150ms;
+  --tg-duration-base:  200ms;
+  --tg-duration-slow:  300ms;
+
+  /* ============ LAYOUT ============ */
+  --tg-container-max:  1440px;
+  --tg-content-max:    800px;   /* Reading width */
+  --tg-form-max:       480px;   /* Form width */
+}
+
+/* ============ DARK MODE ============ */
+[data-theme="dark"] {
+  --tg-bg-primary:     #0F172A;
+  --tg-bg-secondary:   #1E293B;
+  --tg-bg-tertiary:    #334155;
+  --tg-bg-elevated:    #1E293B;
+
+  --tg-border:         #334155;
+  --tg-border-light:   #1E293B;
+  --tg-border-strong:  #475569;
+
+  --tg-text-primary:   #F8FAFC;
+  --tg-text-secondary: #CBD5E1;
+  --tg-text-tertiary:  #64748B;
+  --tg-text-inverse:   #0F172A;
+  --tg-text-accent:    #48CAE4;
+
+  --tg-success-soft:   rgba(16, 185, 129, 0.12);
+  --tg-warning-soft:   rgba(245, 158, 11, 0.12);
+  --tg-error-soft:     rgba(239, 68, 68, 0.12);
+  --tg-info-soft:      rgba(59, 130, 246, 0.12);
+
+  /* Shadows are weaker on dark backgrounds */
+  --tg-shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.3);
+  --tg-shadow-sm:      0 1px 3px rgba(0, 0, 0, 0.4);
+  --tg-shadow-md:      0 4px 6px rgba(0, 0, 0, 0.4);
+  --tg-shadow-lg:      0 10px 15px rgba(0, 0, 0, 0.5);
+  --tg-shadow-xl:      0 20px 25px rgba(0, 0, 0, 0.5);
+  --tg-shadow-float:   0 25px 50px rgba(0, 0, 0, 0.6);
+}
+
+/* ============ REDUCED MOTION ============ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

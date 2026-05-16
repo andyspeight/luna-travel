@@ -1,7 +1,12 @@
 import type { Config } from 'tailwindcss';
+import tgPreset from './packages/ui/tailwind-preset.js';
 
 const config: Config = {
-  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
+  presets: [tgPreset],
+  content: [
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    './packages/ui/**/*.{js,ts,jsx,tsx}',
+  ],
   darkMode: ['class', '[data-theme="dark"]'],
   theme: {
     extend: {
@@ -10,7 +15,7 @@ const config: Config = {
         serif: ['var(--font-instrument)', 'Georgia', 'serif'],
       },
       colors: {
-        // Travelgenix brand
+        // Travelgenix brand — kept for compatibility with existing PWA code
         navy: {
           DEFAULT: '#1B2B5B',
           light: '#2A3F7A',
@@ -27,7 +32,7 @@ const config: Config = {
         warning: '#F59E0B',
         danger: '#EF4444',
         info: '#3B82F6',
-        // Surfaces (via CSS vars so dark mode toggles)
+        // Surfaces (existing PWA uses these CSS vars)
         surface: {
           DEFAULT: 'var(--surface)',
           2: 'var(--surface-2)',
@@ -43,22 +48,7 @@ const config: Config = {
           light: 'var(--border-light)',
         },
       },
-      borderRadius: {
-        sm: '6px',
-        md: '8px',
-        lg: '12px',
-        xl: '16px',
-        '2xl': '20px',
-        '3xl': '24px',
-      },
-      boxShadow: {
-        xs: '0 1px 2px rgba(15,23,42,0.05)',
-        sm: '0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04)',
-        md: '0 4px 6px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04)',
-        lg: '0 10px 15px rgba(15,23,42,0.08), 0 4px 6px rgba(15,23,42,0.04)',
-        xl: '0 20px 25px rgba(15,23,42,0.08), 0 10px 10px rgba(15,23,42,0.04)',
-        float: '0 25px 50px rgba(15,23,42,0.12)',
-      },
+      // Keep your animations
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
@@ -83,4 +73,5 @@ const config: Config = {
   },
   plugins: [],
 };
+
 export default config;

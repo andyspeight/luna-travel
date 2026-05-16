@@ -17,60 +17,132 @@ const NAV = [
   { id: 'settings', label: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
+const COLOURS = {
+  bg: '#F8FAFC',
+  bgElevated: '#FFFFFF',
+  bgTertiary: '#F1F5F9',
+  border: '#E2E8F0',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  textTertiary: '#94A3B8',
+  primary: '#1B2B5B',
+  accent: '#00B4D8',
+  success: '#10B981',
+  warning: '#F59E0B',
+  info: '#3B82F6',
+};
+
+const DARK = {
+  bg: '#0F172A',
+  bgElevated: '#1E293B',
+  bgTertiary: '#334155',
+  border: '#334155',
+  text: '#F8FAFC',
+  textSecondary: '#CBD5E1',
+  textTertiary: '#64748B',
+  primary: '#1B2B5B',
+  accent: '#00B4D8',
+  success: '#10B981',
+  warning: '#F59E0B',
+  info: '#3B82F6',
+};
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const stored = localStorage.getItem('tg-admin-theme') as 'light' | 'dark' | null;
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initial = stored ?? (systemDark ? 'dark' : 'light');
     setTheme(initial);
-    document.documentElement.setAttribute('data-theme', initial);
   }, []);
+
+  const c = theme === 'dark' ? DARK : COLOURS;
 
   const toggle = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
     localStorage.setItem('tg-admin-theme', next);
-    document.documentElement.setAttribute('data-theme', next);
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-tg-bg-secondary">
-      <header className="h-14 flex items-center px-4 gap-3 sticky top-0 z-10 bg-tg-bg border-b border-tg-border">
-        <Link href="/admin/dashboard" className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-tg-primary flex items-center justify-center">
-            <Plane className="h-4 w-4 text-white" strokeWidth={2} />
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: '100vh',
+      backgroundColor: c.bg,
+      color: c.text,
+      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    }}>
+      {/* TOP BAR */}
+      <header style={{
+        height: 56,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 16px',
+        gap: 12,
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        backgroundColor: c.bgElevated,
+        borderBottom: `1px solid ${c.border}`,
+      }}>
+        <Link href="/admin/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <div style={{
+            height: 32, width: 32, borderRadius: 8,
+            backgroundColor: c.primary,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Plane style={{ height: 16, width: 16, color: '#fff' }} strokeWidth={2} />
           </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-tg-text">Luna Travel</div>
-            <div className="text-xs text-tg-text-tertiary">Control panel</div>
+          <div style={{ lineHeight: 1.2 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>Luna Travel</div>
+            <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 2 }}>Control panel</div>
           </div>
         </Link>
-        <div className="ml-auto flex items-center gap-2">
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={toggle}
-            className="h-9 w-9 rounded-lg flex items-center justify-center text-tg-text-secondary hover:bg-tg-bg-secondary"
             aria-label="Toggle theme"
+            style={{
+              height: 36, width: 36, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backgroundColor: 'transparent', border: 'none',
+              color: c.textSecondary, cursor: 'pointer',
+            }}
           >
-            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {mounted && (theme === 'dark' ? <Sun style={{ height: 16, width: 16 }} /> : <Moon style={{ height: 16, width: 16 }} />)}
           </button>
-          <div className="flex items-center gap-2 px-2 py-1">
-            <div className="h-7 w-7 rounded-lg bg-tg-primary text-white flex items-center justify-center text-xs font-semibold">
-              AS
-            </div>
-            <div className="leading-tight hidden md:block">
-              <div className="text-sm font-medium text-tg-text">Andy Speight</div>
-              <div className="text-xs text-tg-text-tertiary">Travelgenix admin</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px' }}>
+            <div style={{
+              height: 28, width: 28, borderRadius: 8,
+              backgroundColor: c.primary, color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 600,
+            }}>AS</div>
+            <div style={{ lineHeight: 1.2 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: c.text }}>Andy Speight</div>
+              <div style={{ fontSize: 11, color: c.textTertiary, marginTop: 2 }}>Travelgenix admin</div>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="flex flex-1">
-        <aside className="w-60 shrink-0 flex flex-col bg-tg-bg border-r border-tg-border">
-          <nav className="flex-1 px-3 py-4 space-y-1">
+      <div style={{ display: 'flex', flex: 1 }}>
+        {/* SIDEBAR */}
+        <aside style={{
+          width: 240,
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: c.bgElevated,
+          borderRight: `1px solid ${c.border}`,
+        }}>
+          <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {NAV.map((item) => {
               const active = pathname?.startsWith(item.href);
               const Icon = item.icon;
@@ -78,13 +150,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link
                   key={item.id}
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 h-10 rounded-lg text-sm transition-colors ${
-                    active
-                      ? 'bg-tg-bg-tertiary text-tg-text font-medium'
-                      : 'text-tg-text-secondary hover:bg-tg-bg-secondary hover:text-tg-text'
-                  }`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '0 12px',
+                    height: 40,
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                    fontSize: 13,
+                    fontWeight: active ? 500 : 400,
+                    color: active ? c.text : c.textSecondary,
+                    backgroundColor: active ? c.bgTertiary : 'transparent',
+                    transition: 'background-color 150ms, color 150ms',
+                  }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.backgroundColor = c.bg; }}
+                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
-                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                  <Icon style={{ height: 16, width: 16, flexShrink: 0 }} strokeWidth={1.75} />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -92,7 +175,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </aside>
 
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        {/* MAIN */}
+        <main style={{ flex: 1, overflowY: 'auto' }}>
+          {children}
+        </main>
       </div>
     </div>
   );

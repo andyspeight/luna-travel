@@ -138,8 +138,10 @@ type InviteInfo = {
   status: 'pending' | 'redeemed' | 'expired';
   prefill: {
     bookingRef: string | null;
-    email: string | null;
-    departureDate: string | null;
+    // ⚠️ Security: email and departureDate are deliberately NOT pre-filled.
+    // See /api/invites/[id]/route.ts for the rationale. The customer must
+    // type these from memory or their booking confirmation — that's the
+    // knowledge check that protects the booking if the invite URL leaks.
   };
 };
 
@@ -167,11 +169,10 @@ function RedeemView({ inviteId }: { inviteId: string }) {
         if (cancelled) return;
         setInfo({
           status: data.status,
-          prefill: data.prefill || { bookingRef: null, email: null, departureDate: null },
+          prefill: data.prefill || { bookingRef: null },
         });
         if (data.prefill?.bookingRef) setBookingRef(data.prefill.bookingRef);
-        if (data.prefill?.email) setEmail(data.prefill.email);
-        if (data.prefill?.departureDate) setDepartureDate(data.prefill.departureDate);
+        // email and departureDate intentionally not pre-filled — see type comment above
       } catch {
         if (!cancelled) setLoadFailed(true);
       }
@@ -251,7 +252,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
               Welcome <em className="text-teal-light">aboard</em>.
             </h1>
             <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
-              Three quick details to load your trip — and you&rsquo;re in.
+              Confirm your booking details to load your trip.
             </p>
 
             {/* Form card */}
@@ -268,7 +269,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
                   className="w-full bg-white/5 border border-white/15 rounded-xl px-3.5 h-11 text-white placeholder:text-white/35 text-[15px] tracking-wide tabular focus:outline-none focus:border-teal/70 focus:bg-white/10 transition-colors"
                 />
               </Field>
-              <Field label="Email on the booking">
+              <Field label="Email on the booking" hint="The address your booking confirmation was sent to.">
                 <input
                   type="email"
                   value={email}

@@ -27,6 +27,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
+import { logAuditEvent } from '@/lib/audit';
 
 // Dynamic — this route hits the database, no caching
 export const dynamic = 'force-dynamic';
@@ -114,6 +115,24 @@ export async function POST(req: NextRequest) {
 
   // Type the returned row (we know its shape from the select string)
   const row = data as unknown as { id: string; expires_at: string };
+
+  // Log the creation. The middleware sets x-admin-email on every authenticated
+  // request, so it's available to use as the actor. Falls back to 'system'
+  // if (somehow) the header is missing.
+  const actor = req.headers.get('x-admin-email') || 'system';
+  void logAuditEvent({
+    eventType: 'invite.created',
+    actor,
+    targetId: row.id,
+    targetLabel: `${agencyId}${bookingRef ? ' / ' + bookingRef : ''}`,
+    metadata: {
+      agencyId,
+      bookingRef,
+      hasEmail: !!email,
+      hasDepartureDate: !!departureDate,
+      expiresAt: row.expires_at,
+    },
+  });
 
   // Construct the QR URL
   // We use the request's origin so it works on luna-travel-seven.vercel.app,

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Shield, LogIn, LogOut, AlertCircle, UserPlus, CheckCircle2,
-  Search, RefreshCw, ChevronRight, X,
+  Search, RefreshCw, ChevronRight, X, FileUp, FileX,
 } from 'lucide-react';
 
 const C = {
@@ -28,7 +28,10 @@ const C = {
 
 type AuditEvent = {
   id: string;
-  eventType: 'admin.signin' | 'admin.signin_failed' | 'admin.signout' | 'invite.created' | 'invite.redeemed';
+  eventType:
+    | 'admin.signin' | 'admin.signin_failed' | 'admin.signout'
+    | 'invite.created' | 'invite.redeemed'
+    | 'document.uploaded' | 'document.deleted';
   actor: string;
   targetId: string | null;
   targetLabel: string | null;
@@ -52,6 +55,8 @@ const EVENT_META: Record<AuditEvent['eventType'], {
   'admin.signout': { label: 'Sign out', Icon: LogOut, bg: C.bgTertiary, fg: C.textSecondary },
   'invite.created': { label: 'Invite created', Icon: UserPlus, bg: C.infoSoft, fg: C.info },
   'invite.redeemed': { label: 'Invite redeemed', Icon: CheckCircle2, bg: C.successSoft, fg: C.success },
+  'document.uploaded': { label: 'Document uploaded', Icon: FileUp, bg: C.infoSoft, fg: C.info },
+  'document.deleted': { label: 'Document removed', Icon: FileX, bg: C.errorSoft, fg: C.error },
 };
 
 // ────────────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { lookupBooking } from '@/lib/travelify';
 import { signSession } from '@/lib/jwt';
+import { logAuditEvent } from '@/lib/audit';
 
 // ───────── Validation (matches retrieve-order.js patterns) ─────────
 
@@ -223,6 +224,22 @@ export async function POST(
     travellerId: traveller.id as string,
     bookingRef,
     agencyId: invite.agency_id as string,
+  });
+
+  // Audit log — successful traveller redemption. Actor is 'traveller'
+  // since they're not authenticated as an admin. PII (email) goes in the
+  // label per our agreed pattern; metadata captures the agency for filtering.
+  void logAuditEvent({
+    eventType: 'invite.redeemed',
+    actor: 'traveller',
+    targetId: inviteId,
+    targetLabel: `${invite.agency_id} / ${bookingRef}`,
+    metadata: {
+      agencyId: invite.agency_id,
+      bookingRef,
+      travellerEmail: email,
+      travellerId: traveller.id,
+    },
   });
 
   return jsonWithCookie({ session: token }, token);

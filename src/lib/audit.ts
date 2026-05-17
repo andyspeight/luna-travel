@@ -25,7 +25,9 @@ export type AuditEventType =
   | 'admin.signin_failed'
   | 'admin.signout'
   | 'invite.created'
-  | 'invite.redeemed';
+  | 'invite.redeemed'
+  | 'document.uploaded'
+  | 'document.deleted';
 
 export type AuditLogInput = {
   eventType: AuditEventType;

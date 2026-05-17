@@ -22,6 +22,7 @@ import {
   signAdminSession,
   ADMIN_COOKIE_NAME,
 } from '@/lib/admin-session';
+import { logAuditEvent, getRequestIp, shortUserAgent } from '@/lib/audit';
 
 function unauthorised() {
   return NextResponse.json(
@@ -41,14 +42,37 @@ export async function POST(req: NextRequest) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
 
+  const ip = getRequestIp(req);
+  const ua = shortUserAgent(req);
+
   if (!isAllowedEmail(email)) {
+    // Log failed attempt with the attempted email (could be empty) so we can
+    // spot enumeration attempts. The actor is 'anonymous' since they're not
+    // signed in yet.
+    void logAuditEvent({
+      eventType: 'admin.signin_failed',
+      actor: 'anonymous',
+      metadata: { attemptedEmail: email || '(empty)', reason: 'invalid_email', ip, userAgent: ua },
+    });
     return unauthorised();
   }
   if (!verifyAdminPassword(password)) {
+    void logAuditEvent({
+      eventType: 'admin.signin_failed',
+      actor: email,
+      metadata: { reason: 'invalid_password', ip, userAgent: ua },
+    });
     return unauthorised();
   }
 
   const token = await signAdminSession(email);
+
+  void logAuditEvent({
+    eventType: 'admin.signin',
+    actor: email,
+    metadata: { ip, userAgent: ua },
+  });
+
   const res = NextResponse.json({ ok: true, email });
   res.cookies.set(ADMIN_COOKIE_NAME, token, {
     httpOnly: true,

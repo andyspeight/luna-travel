@@ -44,7 +44,7 @@ export async function GET(
 
   const { data: invite, error } = await supabase
     .from('invites')
-    .select('id, agency_id, status, expires_at, booking_ref, email, departure_date')
+    .select('id, agency_id, status, expires_at, booking_ref')
     .eq('id', inviteId)
     .single();
 
@@ -66,9 +66,23 @@ export async function GET(
     status: derivedStatus,
     expiresAt: invite.expires_at,
     prefill: {
+      // ⚠️ Security: we only pre-fill the booking reference, never the
+      // email or departure date.
+      //
+      // The invite URL travels through low-trust channels (email, SMS,
+      // forwards, screenshots). If an attacker obtained the URL, pre-filling
+      // all three credentials would let them tap "Load my trip" and access
+      // the customer's booking without proving they know anything.
+      //
+      // Booking ref is on every confirmation email the agency sends so
+      // it's mildly public anyway, but email + departure date together
+      // are the knowledge check — the customer must supply them from
+      // memory or their booking confirmation.
+      //
+      // Email and departure date are still stored on the invite row
+      // (the redemption endpoint validates against Travelify, which has
+      // its own copy) — they just aren't returned here.
       bookingRef: invite.booking_ref || null,
-      email: invite.email || null,
-      departureDate: invite.departure_date || null,
     },
   });
 }

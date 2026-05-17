@@ -7,6 +7,8 @@ import {
   ChevronLeft, ChevronRight, PauseCircle, MoreHorizontal,
   CheckCircle2, AlertTriangle, KeyRound, Eye, EyeOff, Copy,
   Globe, Image as ImageIcon, Bell, Plane, Clock, Users, Shield,
+  FileText, Upload, Trash2, Download, FileUp, X as XIcon,
+  FileImage, File as FileIcon, Ticket, MapPin, Hotel,
 } from 'lucide-react';
 
 const C = {
@@ -491,6 +493,481 @@ function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
   );
 }
 
+// ============ DOCUMENTS TAB ============
+
+type AgencyTraveller = {
+  id: string;
+  name: string | null;
+  bookingRef: string | null;
+  departureDate: string | null;
+  redeemedAt: string;
+};
+
+type AgencyDocument = {
+  id: string;
+  agencyId: string;
+  travellerId: string;
+  bookingRef: string | null;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: 'voucher' | 'ticket' | 'itinerary' | 'insurance' | 'other';
+  uploadedBy: string | null;
+  uploadedAt: string;
+};
+
+const CATEGORY_META: Record<AgencyDocument['category'], { label: string; Icon: React.ElementType; bg: string; fg: string }> = {
+  voucher:   { label: 'Voucher',   Icon: Hotel,    bg: C.infoSoft,    fg: C.info },
+  ticket:    { label: 'Ticket',    Icon: Ticket,   bg: C.successSoft, fg: C.success },
+  itinerary: { label: 'Itinerary', Icon: MapPin,   bg: C.warningSoft, fg: C.warning },
+  insurance: { label: 'Insurance', Icon: Shield,   bg: '#F5F3FF',     fg: '#7C3AED' },
+  other:     { label: 'Other',     Icon: FileIcon, bg: C.bgTertiary,  fg: C.textSecondary },
+};
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatUploadedAt(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Same filename → category logic as the server, kept in sync manually.
+// (Could be extracted to a shared module if it grows.)
+function suggestCategoryFromFilename(filename: string): AgencyDocument['category'] {
+  const stem = (filename.toLowerCase().split(/[\\/]/).pop() || '').replace(/\.[a-z0-9]{1,5}$/, '');
+  const n = stem.replace(/[_\-.\s]+/g, ' ');
+  if (/(insurance|cover|atol|abta|policy)/.test(n)) return 'insurance';
+  if (/(ticket|eticket|e-ticket|boarding)/.test(n)) return 'ticket';
+  if (/(voucher|hotel|accommodation|villa|lodging|resort|transfer|lounge)/.test(n)) return 'voucher';
+  if (/(itinerary|schedule|agenda|programme|program|pack|confirmation)/.test(n)) return 'itinerary';
+  return 'other';
+}
+
+function DocumentsTab({ agency }: { agency: typeof AGENCIES[0] }) {
+  const [travellers, setTravellers] = useState<AgencyTraveller[]>([]);
+  const [travellersLoading, setTravellersLoading] = useState(true);
+  const [travellersError, setTravellersError] = useState<string | null>(null);
+
+  const [documents, setDocuments] = useState<AgencyDocument[]>([]);
+  const [docsLoading, setDocsLoading] = useState(true);
+  const [docsError, setDocsError] = useState<string | null>(null);
+
+  const [selectedTravellerId, setSelectedTravellerId] = useState<string>('');
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
+  const [stagedCategory, setStagedCategory] = useState<AgencyDocument['category']>('other');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Initial load: travellers + documents
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/agencies/${agency.id}/travellers`, { credentials: 'include' });
+        if (!mounted) return;
+        if (!res.ok) {
+          setTravellersError("Couldn't load travellers");
+          setTravellersLoading(false);
+          return;
+        }
+        const data = await res.json();
+        setTravellers(data.travellers || []);
+        setTravellersLoading(false);
+      } catch {
+        if (mounted) {
+          setTravellersError('Network error');
+          setTravellersLoading(false);
+        }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [agency.id]);
+
+  const loadDocuments = React.useCallback(async () => {
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/documents`, { credentials: 'include' });
+      if (!res.ok) {
+        setDocsError("Couldn't load documents");
+        setDocsLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setDocuments(data.documents || []);
+      setDocsError(null);
+    } catch {
+      setDocsError('Network error');
+    } finally {
+      setDocsLoading(false);
+    }
+  }, [agency.id]);
+
+  React.useEffect(() => { loadDocuments(); }, [loadDocuments]);
+
+  const handleFileStaged = (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('File is over 10 MB');
+      return;
+    }
+    setUploadError(null);
+    setStagedFile(file);
+    setStagedCategory(suggestCategoryFromFilename(file.name));
+  };
+
+  const onFilePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) handleFileStaged(f);
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) handleFileStaged(f);
+  };
+
+  const clearStaged = () => {
+    setStagedFile(null);
+    setStagedCategory('other');
+    setUploadError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const uploadStaged = async () => {
+    if (!stagedFile) return;
+    if (!selectedTravellerId) {
+      setUploadError('Pick a traveller');
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', stagedFile);
+      fd.append('travellerId', selectedTravellerId);
+      fd.append('category', stagedCategory);
+      const res = await fetch(`/api/admin/agencies/${agency.id}/documents`, {
+        method: 'POST',
+        body: fd,
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setUploadError(data.message || data.error || 'Upload failed');
+        setUploading(false);
+        return;
+      }
+      const data = await res.json();
+      setDocuments((prev) => [data.document, ...prev]);
+      clearStaged();
+    } catch {
+      setUploadError('Network error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onDownload = async (doc: AgencyDocument) => {
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/documents/${doc.id}/download`, {
+        credentials: 'include',
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.url) window.open(data.url, '_blank', 'noopener');
+    } catch {
+      // silent — admin can retry
+    }
+  };
+
+  const onDelete = async (doc: AgencyDocument) => {
+    if (!confirm(`Remove "${doc.filename}"? This can't be undone from the UI.`)) return;
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/documents/${doc.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  // Group documents by traveller for display
+  const travellerById = new Map(travellers.map((t) => [t.id, t]));
+  const docsByTraveller = new Map<string, AgencyDocument[]>();
+  for (const d of documents) {
+    if (!docsByTraveller.has(d.travellerId)) docsByTraveller.set(d.travellerId, []);
+    docsByTraveller.get(d.travellerId)!.push(d);
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      {/* Upload */}
+      <Card>
+        <CardHeader title="Upload a document" subtitle="Pick a traveller, attach a file, confirm the category." />
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <FormField label="Traveller">
+            {travellersLoading ? (
+              <div style={{ height: 40, display: 'flex', alignItems: 'center', color: C.textTertiary, fontSize: 13 }}>
+                Loading travellers…
+              </div>
+            ) : travellersError ? (
+              <div style={{ height: 40, display: 'flex', alignItems: 'center', color: C.error, fontSize: 13 }}>
+                {travellersError}
+              </div>
+            ) : travellers.length === 0 ? (
+              <div style={{
+                padding: '12px', borderRadius: 8, backgroundColor: C.bg,
+                border: `1px dashed ${C.border}`,
+                fontSize: 13, color: C.textSecondary,
+              }}>
+                No travellers have redeemed an invite for this agency yet. Create an invite from <Link href="/admin/travellers" style={{ color: C.accent }}>Travellers</Link>, redeem it on a phone, then come back here.
+              </div>
+            ) : (
+              <select
+                value={selectedTravellerId}
+                onChange={(e) => setSelectedTravellerId(e.target.value)}
+                style={{
+                  width: '100%', height: 40, padding: '0 10px',
+                  borderRadius: 8, border: `1px solid ${C.border}`,
+                  backgroundColor: C.bgElevated, color: C.text,
+                  fontSize: 14, fontFamily: 'inherit',
+                  outline: 'none', cursor: 'pointer',
+                }}
+              >
+                <option value="">Pick a traveller…</option>
+                {travellers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name || '(no name)'} — {t.bookingRef || 'no booking ref'}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+
+          <FormField label="File" helper="PDF or image, max 10 MB.">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                borderRadius: 8,
+                border: `2px dashed ${dragOver ? C.accent : C.border}`,
+                backgroundColor: dragOver ? 'rgba(0,180,216,0.06)' : C.bg,
+                padding: '20px 16px',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                cursor: 'pointer',
+                transition: 'border-color 150ms, background-color 150ms',
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,image/*"
+                onChange={onFilePickerChange}
+                style={{ display: 'none' }}
+              />
+              {stagedFile ? (
+                <>
+                  <FileText style={{ height: 24, width: 24, color: C.accent }} strokeWidth={1.5} />
+                  <div style={{ fontSize: 14, fontWeight: 500, color: C.text, textAlign: 'center', wordBreak: 'break-all' }}>
+                    {stagedFile.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textTertiary }}>
+                    {formatBytes(stagedFile.size)} · {stagedFile.type || 'unknown type'}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); clearStaged(); }}
+                    style={{
+                      marginTop: 4, padding: '4px 10px', borderRadius: 6,
+                      border: 'none', backgroundColor: 'transparent', color: C.textSecondary,
+                      fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Choose a different file
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Upload style={{ height: 24, width: 24, color: C.textTertiary }} strokeWidth={1.5} />
+                  <div style={{ fontSize: 14, fontWeight: 500, color: C.text }}>
+                    Drop a file here, or click to choose
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textTertiary }}>PDF or image · up to 10 MB</div>
+                </>
+              )}
+            </div>
+          </FormField>
+
+          {stagedFile && (
+            <FormField label="Category" helper="We&apos;ve guessed based on the filename. Adjust if needed.">
+              <select
+                value={stagedCategory}
+                onChange={(e) => setStagedCategory(e.target.value as AgencyDocument['category'])}
+                style={{
+                  width: '100%', height: 40, padding: '0 10px',
+                  borderRadius: 8, border: `1px solid ${C.border}`,
+                  backgroundColor: C.bgElevated, color: C.text,
+                  fontSize: 14, fontFamily: 'inherit',
+                  outline: 'none', cursor: 'pointer',
+                }}
+              >
+                {(['voucher', 'ticket', 'itinerary', 'insurance', 'other'] as const).map((c) => (
+                  <option key={c} value={c}>{CATEGORY_META[c].label}</option>
+                ))}
+              </select>
+            </FormField>
+          )}
+
+          {uploadError && (
+            <div style={{
+              padding: '10px 12px', borderRadius: 8,
+              backgroundColor: C.errorSoft, color: C.error,
+              fontSize: 13, display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <AlertTriangle style={{ height: 14, width: 14 }} strokeWidth={1.75} />
+              {uploadError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingTop: 4 }}>
+            <Button
+              onClick={uploadStaged}
+              leftIcon={<FileUp style={{ height: 14, width: 14 }} strokeWidth={1.75} />}
+            >
+              {uploading ? 'Uploading…' : 'Upload document'}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Existing documents */}
+      <Card>
+        <CardHeader
+          title="Existing documents"
+          subtitle={documents.length === 0 ? 'Nothing uploaded yet.' : `${documents.length} document${documents.length === 1 ? '' : 's'} across ${docsByTraveller.size} traveller${docsByTraveller.size === 1 ? '' : 's'}.`}
+        />
+        <div style={{ padding: '8px 0' }}>
+          {docsError && (
+            <div style={{
+              margin: '8px 16px 0', padding: '10px 12px', borderRadius: 8,
+              backgroundColor: C.errorSoft, color: C.error, fontSize: 13,
+            }}>
+              {docsError}
+            </div>
+          )}
+          {docsLoading ? (
+            <div style={{ padding: '40px 16px', textAlign: 'center', fontSize: 13, color: C.textTertiary }}>
+              Loading…
+            </div>
+          ) : documents.length === 0 ? (
+            <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+              <FileText style={{ height: 28, width: 28, color: C.textTertiary, margin: '0 auto 10px' }} strokeWidth={1.5} />
+              <div style={{ fontSize: 13, color: C.textSecondary, maxWidth: 280, margin: '0 auto' }}>
+                Documents you upload will appear here, grouped by traveller.
+              </div>
+            </div>
+          ) : (
+            Array.from(docsByTraveller.entries()).map(([tId, docs]) => {
+              const t = travellerById.get(tId);
+              return (
+                <div key={tId} style={{ padding: '0 8px' }}>
+                  <div style={{
+                    padding: '8px 16px', display: 'flex', alignItems: 'baseline', gap: 8,
+                  }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                      {t?.name || '(unknown traveller)'}
+                    </span>
+                    {t?.bookingRef && (
+                      <span style={{ fontSize: 12, color: C.textTertiary, fontFamily: 'ui-monospace, monospace' }}>
+                        {t.bookingRef}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    {docs.map((d) => {
+                      const meta = CATEGORY_META[d.category];
+                      const Icon = meta.Icon;
+                      const isImage = d.mimeType.startsWith('image/');
+                      return (
+                        <div
+                          key={d.id}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '10px 16px',
+                            borderTop: `1px solid ${C.border}`,
+                          }}
+                        >
+                          <div style={{
+                            height: 32, width: 32, borderRadius: 8,
+                            backgroundColor: meta.bg, color: meta.fg,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0,
+                          }}>
+                            {isImage
+                              ? <FileImage style={{ height: 14, width: 14 }} strokeWidth={2} />
+                              : <Icon style={{ height: 14, width: 14 }} strokeWidth={2} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {d.filename}
+                            </div>
+                            <div style={{ fontSize: 12, color: C.textTertiary, display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <span>{meta.label}</span>
+                              <span>·</span>
+                              <span>{formatBytes(d.sizeBytes)}</span>
+                              <span>·</span>
+                              <span>{formatUploadedAt(d.uploadedAt)}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => onDownload(d)}
+                            title="Download"
+                            style={{
+                              height: 30, width: 30, borderRadius: 6, border: 'none',
+                              backgroundColor: 'transparent', cursor: 'pointer',
+                              color: C.textSecondary,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            <Download style={{ height: 14, width: 14 }} strokeWidth={1.75} />
+                          </button>
+                          <button
+                            onClick={() => onDelete(d)}
+                            title="Remove"
+                            style={{
+                              height: 30, width: 30, borderRadius: 6, border: 'none',
+                              backgroundColor: 'transparent', cursor: 'pointer',
+                              color: C.error,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            <Trash2 style={{ height: 14, width: 14 }} strokeWidth={1.75} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function StubTab({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
   return (
     <Card>
@@ -512,7 +989,7 @@ export default function AgencyDetailPage() {
   const router = useRouter();
   const id = params?.id as string;
   const agency = AGENCIES.find(a => a.id === id);
-  const [tab, setTab] = useState<'overview' | 'branding' | 'credentials' | 'travellers' | 'audit'>('overview');
+  const [tab, setTab] = useState<'overview' | 'branding' | 'credentials' | 'travellers' | 'documents' | 'audit'>('overview');
 
   if (!agency) {
     return (
@@ -537,6 +1014,7 @@ export default function AgencyDetailPage() {
     { id: 'branding' as const, label: 'White-label' },
     { id: 'credentials' as const, label: 'Travelify' },
     { id: 'travellers' as const, label: 'Travellers' },
+    { id: 'documents' as const, label: 'Documents' },
     { id: 'audit' as const, label: 'Activity' },
   ];
 
@@ -631,6 +1109,7 @@ export default function AgencyDetailPage() {
         {tab === 'branding' && <BrandingTab agency={agency} />}
         {tab === 'credentials' && <CredentialsTab agency={agency} />}
         {tab === 'travellers' && <StubTab icon={Users} title="Traveller management" description="List, search, install status, device management. Wired to Luna Work as source of truth. Building this view next." />}
+        {tab === 'documents' && <DocumentsTab agency={agency} />}
         {tab === 'audit' && <StubTab icon={Shield} title="Activity log" description="Every state change, who made it, when. Append-only." />}
       </div>
     </>

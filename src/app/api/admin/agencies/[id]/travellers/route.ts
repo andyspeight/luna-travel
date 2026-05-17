@@ -25,9 +25,9 @@ export async function GET(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('travellers')
-    .select('id, lead_passenger_name, booking_ref, departure_date, redeemed_at')
+    .select('id, lead_passenger_name, booking_ref, departure_date, created_at')
     .eq('agency_id', agencyId)
-    .order('redeemed_at', { ascending: false });
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('[travellers.GET]', error.message);
@@ -40,7 +40,7 @@ export async function GET(
       name: t.lead_passenger_name,
       bookingRef: t.booking_ref,
       departureDate: t.departure_date,
-      redeemedAt: t.redeemed_at,
+      redeemedAt: t.created_at,  // surface as redeemedAt — that's what it effectively means
     })),
   });
 }

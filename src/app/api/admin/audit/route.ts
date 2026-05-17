@@ -25,6 +25,8 @@ const ALLOWED_EVENT_TYPES = [
   'admin.signout',
   'invite.created',
   'invite.redeemed',
+  'document.uploaded',
+  'document.deleted',
 ];
 
 export async function GET(req: NextRequest) {

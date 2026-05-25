@@ -6,12 +6,14 @@ import Link from 'next/link';
 import {
   LayoutDashboard, Building2, Users, RefreshCw,
   Shield, Settings, Plane, Sun, Moon, LogOut, ChevronDown,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 const NAV = [
   { id: 'dashboard', label: 'Overview', href: '/admin/dashboard', icon: LayoutDashboard },
   { id: 'agencies', label: 'Agencies', href: '/admin/agencies', icon: Building2 },
   { id: 'travellers', label: 'Travellers', href: '/admin/travellers', icon: Users },
+  { id: 'heroes', label: 'Hero images', href: '/admin/heroes', icon: ImageIcon },
   { id: 'sync', label: 'Sync monitor', href: '/admin/sync', icon: RefreshCw },
   { id: 'audit', label: 'Audit log', href: '/admin/audit', icon: Shield },
   { id: 'settings', label: 'Settings', href: '/admin/settings', icon: Settings },

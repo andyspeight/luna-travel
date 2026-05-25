@@ -95,6 +95,13 @@ export default function HomePage() {
             className="relative h-48 p-4 text-white"
             style={{ background: hero.gradient }}
           >
+            {hero.image && (
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{ background: `center/cover no-repeat url("${hero.image}")` }}
+              />
+            )}
             <div
               aria-hidden
               className="absolute inset-0"
@@ -195,6 +202,13 @@ export default function HomePage() {
               className="w-24 flex-shrink-0 relative"
               style={{ background: hero.gradient }}
             >
+              {hero.image && (
+                <div
+                  aria-hidden
+                  className="absolute inset-0"
+                  style={{ background: `center/cover no-repeat url("${hero.image}")` }}
+                />
+              )}
               <div
                 aria-hidden
                 className="absolute inset-0"

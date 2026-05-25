@@ -27,7 +27,9 @@ export type AuditEventType =
   | 'invite.created'
   | 'invite.redeemed'
   | 'document.uploaded'
-  | 'document.deleted';
+  | 'document.deleted'
+  | 'hero.uploaded'
+  | 'hero.removed';
 
 export type AuditLogInput = {
   eventType: AuditEventType;

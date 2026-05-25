@@ -52,6 +52,13 @@ export default function HotelDetailPage() {
     <main className="pb-6">
       {/* Hero */}
       <section className="relative h-60 text-white" style={{ background: hero.gradient }}>
+        {hero.image && (
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{ background: `center/cover no-repeat url("${hero.image}")` }}
+          />
+        )}
         <div
           aria-hidden
           className="absolute inset-0"

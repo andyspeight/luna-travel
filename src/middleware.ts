@@ -1,82 +1,54 @@
 /**
- * Edge middleware — gates the admin surface and admin APIs.
+ * Edge middleware — gates the admin APIs using the central Travelgenix ID
+ * session (tg_session cookie).
  *
- * Matches:
- *   /admin/*       — except /admin/signin (the sign-in page itself)
- *   /api/invites*  — invite creation and lookup (but NOT /api/invites/[id]/redeem,
- *                    which travellers hit during onboarding and must stay public)
+ * WHAT CHANGED (SSO migration, 26 May 2026):
+ *   - Admin PAGES (/admin/*) are no longer gated here. They are gated
+ *     client-side by tg-auth-gate.js, which is included in the admin layout
+ *     <head>. That script handles sign-in redirect and the luna_travel
+ *     permission check, consistent with every other Travelgenix product.
+ *   - Admin API ROUTES are still gated here, server-side, because a
+ *     client-side gate cannot protect an API endpoint. We validate the
+ *     central session by calling id.travelify.io/api/auth/me (see
+ *     lib/admin-session.ts).
+ *   - The old local lt_admin_session cookie and shared ADMIN_PASSWORD are
+ *     gone. Auth is now per-user via Travelgenix ID.
  *
- * Behaviour:
- *   - Page route under /admin/*  → redirect to /admin/signin?return=<original>
- *   - API route under /api/invites* → 401 JSON
- *
- * Tomorrow when we move to a *.travelify.io subdomain, this middleware will
- * also check for the central `tg_session` cookie issued by id.travelify.io.
- * For now it only checks the local `lt_admin_session` cookie set by the
- * Luna Travel sign-in page.
+ * Matches ONLY the admin/invite APIs now — not the admin pages.
+ *   /api/admin/*   — admin API surface
+ *   /api/invites*  — invite creation and lookup, EXCEPT the public
+ *                    /api/invites/[id]/redeem endpoint travellers hit.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminSession, ADMIN_COOKIE_NAME } from '@/lib/admin-session';
+import { verifyAdminSession } from '@/lib/admin-session';
 
 export const config = {
-  // Apply to admin pages, admin APIs, and the invite API.
-  // /api/invites/[id]/redeem (traveller redemption) and /api/admin/signin
-  // /signout (the sign-in flow itself) are explicitly let through in the
-  // handler below.
-  matcher: [
-    '/admin/:path*',
-    '/api/admin/:path*',
-    '/api/invites/:path*',
-    '/api/invites',
-  ],
+  // Apply ONLY to the admin/invite APIs. Pages are gated client-side now.
+  matcher: ['/api/admin/:path*', '/api/invites/:path*', '/api/invites'],
 };
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Sign-in page itself is public — without this, redirect loop
-  if (pathname === '/admin/signin' || pathname === '/admin/signin/') {
-    return NextResponse.next();
-  }
-
-  // 2. Sign-in and sign-out APIs are public — without this, the user can't
-  //    actually sign in
-  if (pathname === '/api/admin/signin' || pathname === '/api/admin/signout') {
-    return NextResponse.next();
-  }
-
-  // 3. Traveller redemption endpoint MUST stay public — travellers don't
-  //    have admin credentials, that's the whole point. Match /api/invites/{id}/redeem
+  // 1. Traveller redemption endpoint MUST stay public — travellers don't
+  //    have admin sessions, that's the whole point.
+  //    Match /api/invites/{id}/redeem
   if (/^\/api\/invites\/[^/]+\/redeem\/?$/.test(pathname)) {
     return NextResponse.next();
   }
 
-  // 4. Everything else under the matched paths needs a valid admin cookie
-  const token = req.cookies.get(ADMIN_COOKIE_NAME)?.value;
-  if (!token) {
-    return unauthorised(req, pathname);
-  }
-
-  const claims = await verifyAdminSession(token);
+  // 2. Validate the central session. We forward the whole Cookie header to
+  //    Travelgenix ID; verifyAdminSession returns claims only if the
+  //    session is valid AND the user holds a luna_travel permission.
+  const claims = await verifyAdminSession(req.headers.get('cookie'));
   if (!claims) {
-    return unauthorised(req, pathname);
-  }
-
-  // Pass through with the email available to downstream handlers if they want it
-  const res = NextResponse.next();
-  res.headers.set('x-admin-email', claims.email);
-  return res;
-}
-
-function unauthorised(req: NextRequest, pathname: string) {
-  const isApi = pathname.startsWith('/api/');
-  if (isApi) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
-  // Page request — redirect to sign-in with return URL
-  const url = req.nextUrl.clone();
-  url.pathname = '/admin/signin';
-  url.search = `?return=${encodeURIComponent(pathname + req.nextUrl.search)}`;
-  return NextResponse.redirect(url);
+
+  // 3. Pass through, making identity available to downstream handlers.
+  const res = NextResponse.next();
+  res.headers.set('x-admin-email', claims.email);
+  res.headers.set('x-admin-role', claims.role);
+  return res;
 }

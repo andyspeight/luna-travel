@@ -61,9 +61,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     setMounted(true);
     const stored = localStorage.getItem('tg-admin-theme') as 'light' | 'dark' | null;
-    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initial = stored ?? (systemDark ? 'dark' : 'light');
-    setTheme(initial);
+    // Default to light. (Previously fell back to the OS dark preference, which
+    // loaded the admin dark on dark-OS machines and left it inconsistent with
+    // pages that default to light.)
+    setTheme(stored === 'dark' ? 'dark' : 'light');
 
     // Fetch the signed-in admin's identity. If this fails, middleware
     // should have already redirected to /admin/signin — but we handle
@@ -101,6 +102,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
     localStorage.setItem('tg-admin-theme', next);
+    // Notify other mounted admin pages (e.g. /admin/heroes) in THIS tab. The
+    // native 'storage' event only fires in other tabs, so without this the
+    // heroes page would not flip until a refresh.
+    window.dispatchEvent(new Event('tg-admin-theme-change'));
   };
 
   // Derive initials from email for the avatar — first letter of local part,

@@ -106,9 +106,31 @@ export default function HeroImagesPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const stored = localStorage.getItem('tg-admin-theme') as 'light' | 'dark' | null;
-    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setTheme(stored ?? (systemDark ? 'dark' : 'light'));
+    // Default to LIGHT (no longer falls back to the OS dark preference), and
+    // stay in sync with the header light/dark toggle. The toggle lives in the
+    // admin shell and writes the 'tg-admin-theme' localStorage key. We re-read
+    // that key whenever it changes so this page flips live instead of reading
+    // once on mount and getting stuck (the bug that left the slot boxes dark
+    // even after switching to light).
+    const readTheme = () => {
+      const stored = localStorage.getItem('tg-admin-theme') as 'light' | 'dark' | null;
+      setTheme(stored === 'dark' ? 'dark' : 'light');
+    };
+    readTheme();
+
+    // 'storage' covers changes made in other tabs. 'tg-admin-theme-change' is a
+    // same-tab custom event the shell toggle can dispatch (storage does not fire
+    // in the tab that made the change). 'visibilitychange' is a belt-and-braces
+    // re-read for when you tab back in after toggling elsewhere.
+    const onVisible = () => { if (document.visibilityState === 'visible') readTheme(); };
+    window.addEventListener('storage', readTheme);
+    window.addEventListener('tg-admin-theme-change', readTheme);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('storage', readTheme);
+      window.removeEventListener('tg-admin-theme-change', readTheme);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const c = theme === 'dark' ? DARK : LIGHT;

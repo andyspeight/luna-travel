@@ -259,6 +259,27 @@ function minutesBetween(a: string, b: string): number {
   return d > 0 && Number.isFinite(d) ? Math.round(d) : 0;
 }
 
+/**
+ * For flight-only bookings, derive the destination country from the final
+ * flight segment's arrival airport. Returns '' if not determinable.
+ */
+function lastFlightArrivalCountry(items: Record<string, unknown>[]): string {
+  let country = '';
+  for (const item of items) {
+    if (str(item.product) !== 'Flights') continue;
+    const data = obj(item.dataObject);
+    for (const routeRaw of arr(data.routes)) {
+      const route = obj(routeRaw);
+      for (const segRaw of arr(route.segments)) {
+        const dest = obj(obj(segRaw).destination);
+        const c = str(dest.country);
+        if (c) country = c.toUpperCase().slice(0, 2); // keep the latest = final arrival
+      }
+    }
+  }
+  return country;
+}
+
 // ───────────────────────── documents & payments (often empty now) ─────────────────────────
 
 function mapDocuments(raw: unknown[]): TravelDocument[] {
@@ -425,9 +446,11 @@ export function mapTravelifyBooking(
   else if (uniqueCities.length > 2) destinationLabel = `${uniqueCities[0]} & more`;
   else if (flights.length) destinationLabel = flights[flights.length - 1].arrCity || '';
 
+  // Primary country: prefer the first hotel's country; otherwise (flight-only
+  // bookings) use the final flight segment's arrival country, read from the raw
+  // flight items. Empty string if neither is available — UI hides the guide.
   const primaryCountryCode =
-    hotels.find((h) => h.countryCode)?.countryCode ??
-    (flights.length ? (str(obj(items.find((i) => str(i.product) === 'Flights'))).product) ? '' : '' : '');
+    hotels.find((h) => h.countryCode)?.countryCode ?? lastFlightArrivalCountry(items);
 
   // duration label
   const nightsTotal = hotels.reduce((sum, h) => sum + (h.nights || 0), 0);

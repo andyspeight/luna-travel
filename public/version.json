@@ -1,5 +1,5 @@
 {
   "version": "0.8.0",
-  "released": "2026-05-15",
-  "notes": "Real destination photography across all 4 destinations — cover splashes (PWA) and PDF heroes (offline documents). Maldives, Mallorca, Dubai, Athens."
+  "released": "2026-05-27",
+  "notes": "Prototype complete (6 sprints). Supabase-backed agency + admin platform live: invite/QR redemption validated against Travelify, signed-URL document storage, hero image manager, audit logging, Travelgenix ID SSO. Traveller PWA still on mock bookings."
 }

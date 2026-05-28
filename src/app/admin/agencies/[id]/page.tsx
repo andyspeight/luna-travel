@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { upload } from '@vercel/blob/client';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -261,8 +262,41 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
   const [welcome, setWelcome] = useState(
     (agency as { welcomeMessage?: string }).welcomeMessage || ''
   );
+  const [logoUrl, setLogoUrl] = useState((agency as { logoUrl?: string }).logoUrl || '');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const ALLOWED_LOGO = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+
+  async function handleLogoFile(file: File) {
+    if (!ALLOWED_LOGO.includes(file.type)) {
+      setSaveMsg({ kind: 'err', text: 'Please choose a PNG, JPG, SVG, GIF or WebP image.' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveMsg({ kind: 'err', text: 'Logo must be under 2MB — try a smaller or compressed image.' });
+      return;
+    }
+    setUploadingLogo(true);
+    setSaveMsg(null);
+    try {
+      const safe = file.name.replace(/[^a-zA-Z0-9._ -]/g, '').trim().slice(0, 80) || 'logo';
+      const pathname = `agency-logos/${agency.id}-${Date.now()}-${safe}`;
+      const blob = await upload(pathname, file, {
+        access: 'public',
+        contentType: file.type,
+        handleUploadUrl: `/api/admin/agencies/${agency.id}/upload-logo`,
+      });
+      setLogoUrl(blob.url);
+      setSaveMsg({ kind: 'ok', text: 'Logo uploaded — remember to Save changes.' });
+    } catch (e) {
+      const msg = (e as Error)?.message || 'Upload failed';
+      setSaveMsg({ kind: 'err', text: `Logo upload failed: ${msg}` });
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -277,6 +311,7 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
           brandPrimaryColour: primary,
           brandAccentColour: accent,
           welcomeMessage: welcome,
+          logoUrl,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -342,18 +377,43 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
             />
           </FormField>
 
-          <FormField label="Logo">
+          <FormField label="Logo" helper="PNG, JPG, SVG, GIF or WebP, under 2MB. Shown in the traveller's app.">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
                 height: 48, width: 48, borderRadius: 8,
-                border: `1px dashed ${C.border}`,
+                border: `1px ${logoUrl ? 'solid' : 'dashed'} ${C.border}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                backgroundColor: C.bgTertiary,
+                backgroundColor: C.bgTertiary, overflow: 'hidden', flexShrink: 0,
               }}>
-                <ImageIcon style={{ height: 16, width: 16, color: C.textTertiary }} strokeWidth={1.75} />
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="Agency logo" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <ImageIcon style={{ height: 16, width: 16, color: C.textTertiary }} strokeWidth={1.75} />
+                )}
               </div>
-              <Button variant="secondary">Upload light</Button>
-              <Button variant="secondary">Upload dark</Button>
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', height: 36, padding: '0 14px',
+                borderRadius: 8, border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
+                fontSize: 14, fontWeight: 500, color: C.text, cursor: uploadingLogo ? 'default' : 'pointer',
+                opacity: uploadingLogo ? 0.6 : 1,
+              }}>
+                {uploadingLogo ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                  disabled={uploadingLogo}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ''; if (f) handleLogoFile(f); }}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {logoUrl && !uploadingLogo && (
+                <button
+                  type="button"
+                  onClick={() => { setLogoUrl(''); setSaveMsg({ kind: 'ok', text: 'Logo removed — remember to Save changes.' }); }}
+                  style={{ background: 'none', border: 'none', color: C.textTertiary, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}
+                >Remove</button>
+              )}
             </div>
           </FormField>
 
@@ -383,6 +443,7 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
               setPrimary(agency.primary); setAccent(agency.accent);
               setAppName(agency.appName);
               setWelcome((agency as { welcomeMessage?: string }).welcomeMessage || '');
+              setLogoUrl((agency as { logoUrl?: string }).logoUrl || '');
               setSaveMsg(null);
             }}>Discard</Button>
             <Button onClick={handleSave}>{saving ? 'Saving…' : 'Save changes'}</Button>
@@ -1069,6 +1130,7 @@ export default function AgencyDetailPage() {
           accent: a.brandAccentColour || '#00B4D8',
           appName: a.appName || a.name || 'Luna Travel',
           welcomeMessage: a.welcomeMessage || '',
+          logoUrl: a.logoUrl || '',
           contact: a.contact || '',
           city: a.website || '',
           joined: a.goLive ? new Date(a.goLive).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—',

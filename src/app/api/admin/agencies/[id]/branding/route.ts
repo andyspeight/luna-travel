@@ -48,7 +48,7 @@ export async function POST(
 
   // Only forward the branding fields we own. id comes from the path.
   const payload: Record<string, unknown> = { id };
-  for (const key of ['appName', 'brandPrimaryColour', 'brandAccentColour', 'welcomeMessage']) {
+  for (const key of ['appName', 'brandPrimaryColour', 'brandAccentColour', 'welcomeMessage', 'logoUrl']) {
     if (body[key] !== undefined) payload[key] = body[key];
   }
 

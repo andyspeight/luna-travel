@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -258,7 +258,39 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
   const [primary, setPrimary] = useState(agency.primary);
   const [accent, setAccent] = useState(agency.accent);
   const [appName, setAppName] = useState(agency.appName);
-  const [welcome, setWelcome] = useState(`Welcome to ${agency.appName}, your trip is just a tap away.`);
+  const [welcome, setWelcome] = useState(
+    (agency as { welcomeMessage?: string }).welcomeMessage || ''
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/branding`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appName,
+          brandPrimaryColour: primary,
+          brandAccentColour: accent,
+          welcomeMessage: welcome,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveMsg({ kind: 'err', text: data?.detail || data?.error || 'Could not save — check the values and try again.' });
+      } else {
+        setSaveMsg({ kind: 'ok', text: 'Branding saved.' });
+      }
+    } catch {
+      setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 24 }}>
@@ -341,9 +373,19 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
             </div>
           </FormField>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, paddingTop: 16, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
-            <Button variant="secondary">Discard</Button>
-            <Button>Save changes</Button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, paddingTop: 16, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
+            {saveMsg && (
+              <span style={{ fontSize: 13, marginRight: 'auto', color: saveMsg.kind === 'ok' ? C.success : C.warning }}>
+                {saveMsg.text}
+              </span>
+            )}
+            <Button variant="secondary" onClick={() => {
+              setPrimary(agency.primary); setAccent(agency.accent);
+              setAppName(agency.appName);
+              setWelcome((agency as { welcomeMessage?: string }).welcomeMessage || '');
+              setSaveMsg(null);
+            }}>Discard</Button>
+            <Button onClick={handleSave}>{saving ? 'Saving…' : 'Save changes'}</Button>
           </div>
         </div>
       </Card>
@@ -988,8 +1030,90 @@ export default function AgencyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-  const agency = AGENCIES.find(a => a.id === id);
   const [tab, setTab] = useState<'overview' | 'branding' | 'credentials' | 'travellers' | 'documents' | 'audit'>('overview');
+
+  // Agency is a Control client, fetched live via the Control-backed endpoint.
+  // We shape it to the same fields the tabs already expect, defaulting the
+  // Luna-Travel-derived bits (stats, city, joined) that Control doesn't hold.
+  const [agency, setAgency] = useState<(typeof AGENCIES)[0] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/agencies?id=${encodeURIComponent(id)}`, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (cancelled) return;
+        if (res.status === 404) { setAgency(null); setLoading(false); return; }
+        if (res.status === 401) { setLoadError('Your session has expired. Please sign in again.'); setLoading(false); return; }
+        if (!res.ok) { setLoadError('Could not load this agency from Control.'); setLoading(false); return; }
+        const data = await res.json();
+        const a = data.agency;
+        if (!a) { setAgency(null); setLoading(false); return; }
+        // Shape to the existing tab contract. Real Control values where we have
+        // them; sensible defaults where Control doesn't store the field.
+        const shaped = {
+          id: a.id,
+          name: a.name || a.legalName || '',
+          tier: a.tier || '',
+          status: (a.status || '').toLowerCase(),
+          travellers: 0,
+          activeTrips: 0,
+          lastSync: '—',
+          primary: a.brandPrimaryColour || '#1B2B5B',
+          accent: a.brandAccentColour || '#00B4D8',
+          appName: a.appName || a.name || 'Luna Travel',
+          welcomeMessage: a.welcomeMessage || '',
+          contact: a.contact || '',
+          city: a.website || '',
+          joined: a.goLive ? new Date(a.goLive).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—',
+          deviceInstalls: 0,
+          last30dActives: 0,
+          travelifyAppId: a.travelifyAppId || '',
+          travelifySiteId: a.travelifySiteId || '',
+        } as unknown as (typeof AGENCIES)[0];
+        setAgency(shaped);
+        setLoading(false);
+      } catch {
+        if (!cancelled) { setLoadError('Could not reach the server.'); setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '32px', maxWidth: 1440, margin: '0 auto' }}>
+        <Card>
+          <div style={{ padding: '64px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 500, color: C.text, marginBottom: 4 }}>Loading agency…</div>
+            <div style={{ fontSize: 13, color: C.textTertiary }}>Reading from Control.</div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ padding: '32px', maxWidth: 1440, margin: '0 auto' }}>
+        <Card>
+          <div style={{ padding: '64px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 8 }}>Couldn&apos;t load agency</div>
+            <div style={{ fontSize: 14, color: C.textSecondary, marginBottom: 16 }}>{loadError}</div>
+            <Button onClick={() => router.push('/admin/agencies')} leftIcon={<ChevronLeft style={{ height: 14, width: 14 }} strokeWidth={1.75} />}>
+              All agencies
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (!agency) {
     return (
@@ -998,7 +1122,7 @@ export default function AgencyDetailPage() {
           <div style={{ padding: '64px 32px', textAlign: 'center' }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 8 }}>Agency not found</div>
             <div style={{ fontSize: 14, color: C.textSecondary, marginBottom: 16 }}>
-              The agency with ID <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>{id}</code> doesn&apos;t exist.
+              No agency with ID <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>{id}</code>, or it isn&apos;t entitled to Luna Travel.
             </div>
             <Button onClick={() => router.push('/admin/agencies')} leftIcon={<ChevronLeft style={{ height: 14, width: 14 }} strokeWidth={1.75} />}>
               All agencies

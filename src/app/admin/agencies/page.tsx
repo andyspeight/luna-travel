@@ -1,6 +1,6 @@
-'use client'; 
+'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Sparkles, ChevronRight } from 'lucide-react';
 
@@ -22,15 +22,33 @@ const C = {
   infoSoft: '#EFF6FF',
 };
 
-const AGENCIES = [
-  { id: 'agc_7k2n', name: 'Coast & Crown Travel', tier: 'Ignite', status: 'live', travellers: 847, activeTrips: 124, lastSync: '2m ago', primary: '#0F4C5C', contact: 'sophie@coastandcrown.co.uk', city: 'Brighton', joined: 'Feb 2026', deviceInstalls: 612 },
-  { id: 'agc_3p8m', name: 'Mercia Holidays', tier: 'Boost', status: 'live', travellers: 312, activeTrips: 47, lastSync: '14m ago', primary: '#1B2B5B', contact: 'bookings@merciaholidays.com', city: 'Worcester', joined: 'Mar 2026', deviceInstalls: 198 },
-  { id: 'agc_9w1q', name: 'Elite Bespoke', tier: 'Ignite', status: 'live', travellers: 1247, activeTrips: 203, lastSync: '47s ago', primary: '#0A0A0A', contact: 'concierge@elitebespoke.travel', city: 'Mayfair', joined: 'Jan 2026', deviceInstalls: 1024 },
-  { id: 'agc_2v6r', name: 'Brackenwood Travel', tier: 'Boost', status: 'live', travellers: 234, activeTrips: 38, lastSync: '3m ago', primary: '#2D5016', contact: 'hello@brackenwoodtravel.co.uk', city: 'Kendal', joined: 'Apr 2026', deviceInstalls: 142 },
-  { id: 'agc_5x4t', name: 'Halcyon Days Travel', tier: 'Spark', status: 'setup', travellers: 0, activeTrips: 0, lastSync: 'never', primary: '#1B2B5B', contact: 'mike@halcyondaystravel.co.uk', city: 'Cheltenham', joined: 'May 2026', deviceInstalls: 0 },
-  { id: 'agc_8h3y', name: 'Saltbreeze Travel', tier: 'Boost', status: 'paused', travellers: 178, activeTrips: 22, lastSync: '2d ago', primary: '#264653', contact: 'rachel@saltbreeze.travel', city: 'St Ives', joined: 'Mar 2026', deviceInstalls: 89 },
-  { id: 'agc_4n7c', name: 'Northstar Journeys', tier: 'Ignite', status: 'live', travellers: 567, activeTrips: 88, lastSync: '1m ago', primary: '#1A1A2E', contact: 'team@northstar.travel', city: 'Edinburgh', joined: 'Feb 2026', deviceInstalls: 412 },
-];
+// Agency shape returned by /api/admin/agencies (sourced from Control).
+// Stats (travellers/activeTrips/deviceInstalls/lastSync) are Luna-Travel-derived
+// and may be null until that data layer is wired — render '—' when null.
+interface Agency {
+  id: string;
+  name: string;
+  legalName: string;
+  tier: string;
+  status: string;
+  contact: string;
+  contactName: string;
+  website: string;
+  travelifyAppId: string;
+  travelifySiteId: string;
+  travellers: number | null;
+  activeTrips: number | null;
+  deviceInstalls: number | null;
+  lastSync: string | null;
+}
+
+// Deterministic brand colour per agency for the avatar (no Control field yet).
+const AVATAR_COLOURS = ['#0F4C5C', '#1B2B5B', '#0A0A0A', '#2D5016', '#264653', '#1A1A2E', '#3B2F5B'];
+function avatarColour(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLOURS[h % AVATAR_COLOURS.length];
+}
 
 function StatusDot({ status }: { status: string }) {
   const colour = status === 'live' ? C.success : status === 'paused' ? C.textTertiary : status === 'setup' ? C.info : C.warning;
@@ -85,15 +103,48 @@ function Avatar({ name, bg }: { name: string; bg: string }) {
   );
 }
 
+function statDisplay(v: number | null): string {
+  return v === null || v === undefined ? '—' : v.toLocaleString();
+}
+
 export default function AgenciesListPage() {
   const [query, setQuery] = useState('');
   const [tier, setTier] = useState<'all' | 'Spark' | 'Boost' | 'Ignite'>('all');
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const filtered = useMemo(() => AGENCIES.filter(a =>
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/agencies', { credentials: 'include', cache: 'no-store' });
+        if (cancelled) return;
+        if (res.status === 401) {
+          setError('Your session has expired. Please sign in again.');
+          return;
+        }
+        if (!res.ok) {
+          setError('Could not load agencies from Control. Please try again.');
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setAgencies(Array.isArray(data.agencies) ? data.agencies : []);
+      } catch {
+        if (!cancelled) setError('Could not reach the server. Please try again.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = useMemo(() => agencies.filter(a =>
     (tier === 'all' || a.tier === tier) &&
-    (query === '' || a.name.toLowerCase().includes(query.toLowerCase()) || a.city.toLowerCase().includes(query.toLowerCase()))
-  ), [query, tier]);
+    (query === '' || a.name.toLowerCase().includes(query.toLowerCase()) || (a.contact || '').toLowerCase().includes(query.toLowerCase()))
+  ), [agencies, query, tier]);
 
   return (
     <>
@@ -157,7 +208,7 @@ export default function AgenciesListPage() {
                 onChange={(e) => setQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setSearchFocused(false)}
-                placeholder="Search by name or city..."
+                placeholder="Search by name or contact..."
                 style={{
                   width: '100%', height: 36,
                   paddingLeft: 36, paddingRight: 12,
@@ -196,15 +247,31 @@ export default function AgenciesListPage() {
             <div style={{
               marginLeft: 'auto', fontSize: 13, color: C.textTertiary,
               fontVariantNumeric: 'tabular-nums',
-            }}>{filtered.length} results</div>
+            }}>{loading ? 'Loading…' : `${filtered.length} results`}</div>
           </div>
 
           {/* Rows */}
           <div>
-            {filtered.length === 0 ? (
+            {loading ? (
               <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: 15, fontWeight: 500, color: C.text, marginBottom: 4 }}>No agencies match your filter</div>
-                <div style={{ fontSize: 13, color: C.textTertiary }}>Try clearing your search or changing the tier filter.</div>
+                <div style={{ fontSize: 15, fontWeight: 500, color: C.text, marginBottom: 4 }}>Loading agencies…</div>
+                <div style={{ fontSize: 13, color: C.textTertiary }}>Reading from Control.</div>
+              </div>
+            ) : error ? (
+              <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: C.text, marginBottom: 4 }}>Couldn&apos;t load agencies</div>
+                <div style={{ fontSize: 13, color: C.textTertiary }}>{error}</div>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: C.text, marginBottom: 4 }}>
+                  {agencies.length === 0 ? 'No agencies have Luna Travel yet' : 'No agencies match your filter'}
+                </div>
+                <div style={{ fontSize: 13, color: C.textTertiary }}>
+                  {agencies.length === 0
+                    ? 'Enable Luna Travel for a client in Control and they will appear here.'
+                    : 'Try clearing your search or changing the tier filter.'}
+                </div>
               </div>
             ) : (
               filtered.map((a, i) => (
@@ -219,39 +286,37 @@ export default function AgenciesListPage() {
                     textDecoration: 'none',
                   }}
                 >
-                  <Avatar name={a.name} bg={a.primary} />
+                  <Avatar name={a.name} bg={avatarColour(a.id)} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{a.name}</span>
-                      <Pill tier={a.tier} />
+                      {a.tier ? <Pill tier={a.tier} /> : null}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: C.textTertiary, marginTop: 2 }}>
-                      <span>{a.city}</span>
-                      <span>·</span>
-                      <span>{a.contact}</span>
+                      <span>{a.contact || a.legalName}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 32, fontVariantNumeric: 'tabular-nums' }}>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{a.travellers.toLocaleString()}</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{statDisplay(a.travellers)}</div>
                       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textTertiary, marginTop: 2 }}>travellers</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{a.activeTrips}</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{statDisplay(a.activeTrips)}</div>
                       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textTertiary, marginTop: 2 }}>trips</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{a.deviceInstalls.toLocaleString()}</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: C.text }}>{statDisplay(a.deviceInstalls)}</div>
                       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textTertiary, marginTop: 2 }}>installs</div>
                     </div>
                     <div style={{ textAlign: 'right', width: 80 }}>
-                      <div style={{ fontSize: 13, color: C.textSecondary }}>{a.lastSync}</div>
+                      <div style={{ fontSize: 13, color: C.textSecondary }}>{a.lastSync || '—'}</div>
                       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textTertiary, marginTop: 2 }}>last sync</div>
                     </div>
                   </div>
                   <StatusLabel
                     status={a.status}
-                    label={a.status === 'live' ? 'Live' : a.status === 'paused' ? 'Paused' : a.status === 'setup' ? 'Setup' : 'Maintenance'}
+                    label={a.status === 'live' ? 'Live' : a.status === 'paused' ? 'Paused' : a.status === 'setup' ? 'Setup' : a.status === 'active' ? 'Active' : 'Maintenance'}
                   />
                   <ChevronRight style={{ height: 16, width: 16, color: C.textTertiary }} strokeWidth={1.75} />
                 </Link>

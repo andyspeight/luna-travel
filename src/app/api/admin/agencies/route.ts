@@ -71,6 +71,11 @@ function toAgency(
     website: row.websiteUrl || '',
     travelifyAppId: (d.travelifyAppId as string) || '',
     travelifySiteId: (d.travelifySiteId as string) || '',
+    // White-label branding (from Control). Blank until set.
+    appName: (d.appName as string) || '',
+    brandPrimaryColour: (d.brandPrimaryColour as string) || '',
+    brandAccentColour: (d.brandAccentColour as string) || '',
+    welcomeMessage: (d.welcomeMessage as string) || '',
     goLive: row.goLiveDate || null,
     lastLogin: row.lastLogin || null,
     // Stats (travellers, installs, lastSync) are derived from Luna Travel's

@@ -38,6 +38,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // 1b. Logo upload uses the Vercel Blob client-upload pattern, which has TWO
+  //     calls: the browser's token request (carries the tg_session cookie) and
+  //     a server-to-server "upload-completed" webhook from Vercel that carries
+  //     NO cookie. If middleware gated the webhook it would 401 before the
+  //     route's handleUpload could verify it cryptographically — which breaks
+  //     the whole token flow ("Failed to retrieve the client token"). So we let
+  //     this route through here; it does its OWN auth: requireAdmin gates the
+  //     token request, and handleUpload verifies the webhook via the Blob
+  //     public key. Same design as the widgets' /api/upload-pdf.
+  //     Match /api/admin/agencies/{id}/upload-logo
+  if (/^\/api\/admin\/agencies\/[^/]+\/upload-logo\/?$/.test(pathname)) {
+    return NextResponse.next();
+  }
+
   // 2. Validate the central session. We forward the whole Cookie header to
   //    Travelgenix ID; verifyAdminSession returns claims only if the
   //    session is valid AND the user holds a luna_travel permission.

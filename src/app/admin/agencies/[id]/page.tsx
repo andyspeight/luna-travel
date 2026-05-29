@@ -485,7 +485,7 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
                     <img
                       src={logoUrl}
                       alt={`${appName || 'Agency'} logo`}
-                      style={{ height: 28, maxWidth: 140, width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+                      style={{ height: 56, maxWidth: 280, width: 'auto', objectFit: 'contain', flexShrink: 0 }}
                     />
                   ) : (
                     <>

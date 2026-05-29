@@ -191,6 +191,55 @@ export async function POST(
     .single();
 
   if (insertErr || !traveller) {
+    // A unique violation on (agency_id, booking_ref) means this booking is
+    // already onboarded for this agency (a re-issued invite, a re-install, or
+    // a second device). The caller already passed the Travelify lookup above,
+    // so they are entitled to this booking. Reuse the existing traveller and
+    // issue a session, rather than the blunt 404 the old code returned. This
+    // is the "already onboarded, surface the existing row" behaviour the flow
+    // always intended.
+    const code = (insertErr as { code?: string } | null)?.code;
+    if (code === '23505') {
+      const { data: existing, error: existingErr } = await supabase
+        .from('travellers')
+        .select('id, agency_id, booking_ref, email')
+        .eq('agency_id', invite.agency_id as string)
+        .eq('booking_ref', bookingRef)
+        .single();
+
+      if (!existingErr && existing) {
+        // Best-effort: close this invite against the existing traveller so it
+        // does not sit pending. Compare-and-set on 'pending' keeps it safe.
+        await supabase
+          .from('invites')
+          .update({ status: 'redeemed', redeemed_at: now, redeemed_traveller_id: existing.id })
+          .eq('id', inviteId)
+          .eq('status', 'pending');
+
+        void logAuditEvent({
+          eventType: 'invite.redeemed',
+          actor: 'traveller',
+          targetId: inviteId,
+          targetLabel: `${invite.agency_id} / ${bookingRef}`,
+          metadata: {
+            agencyId: invite.agency_id,
+            bookingRef,
+            travellerEmail: email,
+            travellerId: existing.id,
+            reused: true,
+          },
+        });
+
+        const token = await signSession({
+          inviteId,
+          travellerId: existing.id as string,
+          bookingRef: existing.booking_ref as string,
+          agencyId: existing.agency_id as string,
+        });
+        return jsonWithCookie({ session: token }, token);
+      }
+    }
+
     console.error('[redeem] traveller insert failed:', inviteId, insertErr?.message);
     return notFound();
   }

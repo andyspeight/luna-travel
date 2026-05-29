@@ -5,6 +5,7 @@ import { upload } from '@vercel/blob/client';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import InvitesTab from './InvitesTab';
+import TravellersTab from './TravellersTab';
 import {
   ChevronLeft, ChevronRight, PauseCircle, MoreHorizontal,
   CheckCircle2, AlertTriangle, KeyRound, Eye, EyeOff, Copy,
@@ -1271,7 +1272,7 @@ export default function AgencyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
-  const [tab, setTab] = useState<'overview' | 'branding' | 'credentials' | 'travellers' | 'documents' | 'audit'>('overview');
+  const [tab, setTab] = useState<'overview' | 'branding' | 'credentials' | 'travellers' | 'invite' | 'documents' | 'audit'>('overview');
 
   // Agency is a Control client, fetched live via the Control-backed endpoint.
   // We shape it to the same fields the tabs already expect, defaulting the
@@ -1382,6 +1383,7 @@ export default function AgencyDetailPage() {
     { id: 'branding' as const, label: 'White-label' },
     { id: 'credentials' as const, label: 'Travelify' },
     { id: 'travellers' as const, label: 'Travellers' },
+    { id: 'invite' as const, label: 'Invite' },
     { id: 'documents' as const, label: 'Documents' },
     { id: 'audit' as const, label: 'Activity' },
   ];
@@ -1476,7 +1478,8 @@ export default function AgencyDetailPage() {
         {tab === 'overview' && <OverviewTab agency={agency} />}
         {tab === 'branding' && <BrandingTab agency={agency} />}
         {tab === 'credentials' && <CredentialsTab agency={agency} />}
-        {tab === 'travellers' && <InvitesTab agency={agency} />}
+        {tab === 'travellers' && <TravellersTab agency={agency} />}
+        {tab === 'invite' && <InvitesTab agency={agency} />}
         {tab === 'documents' && <DocumentsTab agency={agency} />}
         {tab === 'audit' && <StubTab icon={Shield} title="Activity log" description="Every state change, who made it, when. Append-only." />}
       </div>

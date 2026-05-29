@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { useTheme } from '@/lib/theme-context';
 import { useCover } from '@/lib/cover-context';
+import { useAgentMessages } from '@/lib/use-agent-messages';
 import { PageEnter } from '@/components/page-enter';
 import {
   IconSun,
@@ -26,6 +27,7 @@ export default function MePage() {
   const { booking } = useBooking();
   const { theme, toggle } = useTheme();
   const { coverEnabled, toggle: toggleCover } = useCover();
+  const { unreadCount } = useAgentMessages();
   const lead = booking.travellers.find((t) => t.isLead) ?? booking.travellers[0];
 
   return (
@@ -143,7 +145,8 @@ export default function MePage() {
             href="/notifications"
             icon={<IconBell size={18} />}
             title="Notifications"
-            sub="Trip updates, check-in reminders, weather"
+            sub="Messages from your agent, trip updates and reminders"
+            badge={unreadCount}
           />
           <ListAction
             icon={<IconHelp size={18} />}
@@ -185,13 +188,16 @@ function ListLink({
   title,
   sub,
   destructive,
+  badge,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   sub?: string;
   destructive?: boolean;
+  badge?: number;
 }) {
+  const showBadge = typeof badge === 'number' && badge > 0;
   return (
     <Link
       href={href}
@@ -213,6 +219,11 @@ function ListLink({
         </div>
         {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
       </div>
+      {showBadge && (
+        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center leading-none flex-shrink-0">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
       {!destructive && <IconChevR size={18} className="text-ink-3 flex-shrink-0" />}
     </Link>
   );

@@ -67,3 +67,4 @@ export async function POST(
       { status: 502 },
     );
   }
+}

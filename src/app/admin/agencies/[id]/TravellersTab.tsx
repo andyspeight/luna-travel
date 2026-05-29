@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Users, RefreshCw, AlertCircle, Loader2, Search, X } from 'lucide-react';
+import { Users, RefreshCw, AlertCircle, Loader2, Search, X, MessageSquare } from 'lucide-react';
+import MessageComposer from './MessageComposer';
 
 // Agency-scoped Travellers list. Pure read view: who has joined for this
 // agency, live from GET /api/admin/agencies/[id]/travellers (a traveller row
-// is created when an invite is redeemed). Now shows engagement too: a status
-// dot, total opens, and when they last opened the app — so an agency can spot
-// installed-but-never-opened and gone-quiet travellers at a glance. Creating
-// invites lives on the Invite tab. Full-width rows + client-side search.
+// is created when an invite is redeemed). Shows engagement (status dot, total
+// opens, last opened) and a per-row Message action that opens the composer.
+// Creating invites lives on the Invite tab. Full-width rows + client-side search.
 
 const C = {
   bg: '#F8FAFC',
@@ -80,13 +80,14 @@ function initials(name: string | null): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const GRID = '1.8fr 1fr 1.1fr 0.9fr 0.6fr 1fr';
+const GRID = '1.8fr 1fr 1.1fr 0.9fr 0.6fr 1fr auto';
 
 export default function TravellersTab({ agency }: { agency: { id: string; name?: string } }) {
   const [travellers, setTravellers] = useState<Traveller[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [composeFor, setComposeFor] = useState<Traveller | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -226,6 +227,7 @@ export default function TravellersTab({ agency }: { agency: { id: string; name?:
               <div>Departs</div>
               <div>Opens</div>
               <div>Last opened</div>
+              <div />
             </div>
             {filtered.map((t) => {
               const eng = engagement(t);
@@ -266,12 +268,35 @@ export default function TravellersTab({ agency }: { agency: { id: string; name?:
                   >
                     {relativeOpened(t.lastOpenedAt)}
                   </div>
+                  <div style={{ justifySelf: 'end' }}>
+                    <button
+                      onClick={() => setComposeFor(t)}
+                      style={{
+                        height: 30, padding: '0 10px', borderRadius: 7,
+                        border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
+                        color: C.primary, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap',
+                      }}
+                      aria-label={`Message ${t.name || 'traveller'}`}
+                    >
+                      <MessageSquare style={{ height: 13, width: 13 }} strokeWidth={1.75} />
+                      Message
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {composeFor && (
+        <MessageComposer
+          agency={agency}
+          traveller={{ id: composeFor.id, name: composeFor.name || 'Traveller' }}
+          onClose={() => setComposeFor(null)}
+        />
+      )}
     </>
   );
 }

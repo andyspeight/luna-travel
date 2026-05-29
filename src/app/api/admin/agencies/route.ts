@@ -76,6 +76,7 @@ function toAgency(
     brandPrimaryColour: (d.brandPrimaryColour as string) || '',
     brandAccentColour: (d.brandAccentColour as string) || '',
     welcomeMessage: (d.welcomeMessage as string) || '',
+    logoUrl: (d.logoUrl as string) || '',
     goLive: row.goLiveDate || null,
     lastLogin: row.lastLogin || null,
     // Stats (travellers, installs, lastSync) are derived from Luna Travel's

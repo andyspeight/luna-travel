@@ -29,13 +29,14 @@ const C = {
   infoSoft: '#EFF6FF',
 };
 
-const AGENCIES = [
-  { id: 'agc_7k2n', name: 'Coast & Crown Travel' },
-  { id: 'agc_3p8m', name: 'Mercia Holidays' },
-  { id: 'agc_9w1q', name: 'Elite Bespoke' },
-  { id: 'agc_2v6r', name: 'Brackenwood Travel' },
-  { id: 'agc_4n7c', name: 'Northstar Journeys' },
-];
+// An agency option for the dropdown. These are loaded live from Control via
+// /api/admin/agencies, so `id` is always the canonical Control client record
+// id (rec...). That id is what gets stored on the invite and copied onto the
+// traveller at redemption, and it is what the booking pull resolves against.
+// (Previously this page used a hardcoded list of placeholder slug ids like
+// 'agc_7k2n', which the booking pull rejects — every such invite fell back to
+// the mock booking. Loading the real list fixes that at source.)
+type AgencyOption = { id: string; name: string };
 
 type Invite = {
   inviteId: string;
@@ -230,7 +231,12 @@ function QrModal({ invite, onClose }: { invite: Invite; onClose: () => void }) {
 }
 
 export default function TravellersPage() {
-  const [agencyId, setAgencyId] = useState(AGENCIES[0].id);
+  // Live agencies from Control (replaces the old hardcoded placeholder list).
+  const [agencies, setAgencies] = useState<AgencyOption[]>([]);
+  const [agenciesLoading, setAgenciesLoading] = useState(true);
+  const [agenciesError, setAgenciesError] = useState<string | null>(null);
+
+  const [agencyId, setAgencyId] = useState('');
   const [bookingRef, setBookingRef] = useState('');
   const [email, setEmail] = useState('');
   const [departureDate, setDepartureDate] = useState('');
@@ -240,7 +246,46 @@ export default function TravellersPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [modalInvite, setModalInvite] = useState<Invite | null>(null);
 
+  // Load the real agencies once on mount. Same source as /admin/agencies:
+  // Control clients entitled to Luna Travel, each with its canonical rec id.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/agencies', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || `Could not load agencies (${res.status})`);
+        const list: AgencyOption[] = Array.isArray(data.agencies)
+          ? data.agencies
+              .map((a: { id?: string; name?: string; legalName?: string }) => ({
+                id: String(a.id || ''),
+                name: a.name || a.legalName || String(a.id || ''),
+              }))
+              .filter((a: AgencyOption) => a.id)
+              .sort((a: AgencyOption, b: AgencyOption) => a.name.localeCompare(b.name))
+          : [];
+        if (cancelled) return;
+        setAgencies(list);
+        if (list.length) {
+          setAgencyId(list[0].id);
+        } else {
+          setAgenciesError('No agencies are entitled to Luna Travel yet. Enable the Luna Travel product on a client in Control first.');
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setAgenciesError(e instanceof Error ? e.message : 'Could not load agencies');
+      } finally {
+        if (!cancelled) setAgenciesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const handleSubmit = async () => {
+    if (!agencyId) {
+      setError('Select an agency first.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -248,6 +293,7 @@ export default function TravellersPage() {
       const res = await fetch('/api/invites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           agencyId,
           bookingRef: bookingRef.trim() || undefined,
@@ -266,7 +312,7 @@ export default function TravellersPage() {
       // Generate the QR code data URL client-side
       const qrDataUrl = await generateQrDataUrl(data.qrUrl);
 
-      const agencyName = AGENCIES.find(a => a.id === agencyId)?.name ?? agencyId;
+      const agencyName = agencies.find(a => a.id === agencyId)?.name ?? agencyId;
       setInvites(prev => [
         {
           inviteId: data.inviteId,
@@ -310,6 +356,9 @@ export default function TravellersPage() {
     return `Expires in ${days} day${days === 1 ? '' : 's'}`;
   };
 
+  const selectDisabled = agenciesLoading || !!agenciesError || agencies.length === 0;
+  const submitDisabled = submitting || agenciesLoading || !agencyId;
+
   return (
     <>
       <style>{`
@@ -330,7 +379,7 @@ export default function TravellersPage() {
             Travellers
           </h1>
           <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 8 }}>
-            Test harness for the invite creation flow. Each invite creates a real row in the Supabase database.
+            Create a traveller invite for any of your live agencies. The QR encodes a one-time install link, and the invite is tagged with that agency&apos;s record id so the traveller&apos;s app loads their real booking.
           </div>
         </div>
 
@@ -348,24 +397,41 @@ export default function TravellersPage() {
               </div>
             </div>
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <FormField label="Agency" required>
-                <select
-                  value={agencyId}
-                  onChange={(e) => setAgencyId(e.target.value)}
-                  style={{
-                    width: '100%', height: 40, padding: '0 32px 0 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
-                    color: C.text, fontSize: 14, lineHeight: 1.5,
-                    outline: 'none', cursor: 'pointer', appearance: 'none',
-                    backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 12px center',
-                  }}
-                >
-                  {AGENCIES.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
+              <FormField label="Agency" required helper={agenciesError ? undefined : 'Live agencies from Control entitled to Luna Travel.'}>
+                <>
+                  <select
+                    value={agencyId}
+                    onChange={(e) => setAgencyId(e.target.value)}
+                    disabled={selectDisabled}
+                    style={{
+                      width: '100%', height: 40, padding: '0 32px 0 12px', borderRadius: 8,
+                      border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
+                      color: selectDisabled ? C.textTertiary : C.text, fontSize: 14, lineHeight: 1.5,
+                      outline: 'none', cursor: selectDisabled ? 'not-allowed' : 'pointer', appearance: 'none',
+                      opacity: agenciesLoading ? 0.7 : 1,
+                      backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                    }}
+                  >
+                    {agenciesLoading && <option value="">Loading agencies…</option>}
+                    {!agenciesLoading && agencies.length === 0 && <option value="">No agencies available</option>}
+                    {!agenciesLoading && agencies.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                  {agenciesError && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: C.error, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <AlertCircle style={{ height: 14, width: 14, flexShrink: 0, marginTop: 1 }} strokeWidth={1.75} />
+                      <span>{agenciesError}</span>
+                    </div>
+                  )}
+                  {!agenciesError && agencyId && (
+                    <div style={{ marginTop: 6, fontSize: 11, fontFamily: 'ui-monospace, monospace', color: C.textTertiary }}>
+                      {agencyId}
+                    </div>
+                  )}
+                </>
               </FormField>
 
               <FormField label="Booking reference" helper="The Travelify booking ref. Leave blank for a generic invite.">
@@ -393,14 +459,14 @@ export default function TravellersPage() {
 
               <button
                 onClick={handleSubmit}
-                disabled={submitting}
+                disabled={submitDisabled}
                 style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   width: '100%', height: 44, borderRadius: 8, border: 'none',
-                  backgroundColor: submitting ? C.textTertiary : C.primary,
+                  backgroundColor: submitDisabled ? C.textTertiary : C.primary,
                   color: '#fff', fontSize: 14, fontWeight: 500,
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  opacity: submitting ? 0.8 : 1,
+                  cursor: submitDisabled ? 'not-allowed' : 'pointer',
+                  opacity: submitDisabled ? 0.8 : 1,
                   transition: 'background-color 150ms',
                 }}
               >

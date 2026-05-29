@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { upload } from '@vercel/blob/client';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import InvitesTab from './InvitesTab';
 import {
   ChevronLeft, ChevronRight, PauseCircle, MoreHorizontal,
   CheckCircle2, AlertTriangle, KeyRound, Eye, EyeOff, Copy,
-  Globe, Image as ImageIcon, Bell, Plane, Clock, Users, Shield,
+  Globe, Image as ImageIcon, Bell, Plane, Clock, Shield,
   FileText, Upload, Trash2, Download, FileUp, X as XIcon,
   FileImage, File as FileIcon, Ticket, MapPin, Hotel,
 } from 'lucide-react';
@@ -1475,7 +1476,7 @@ export default function AgencyDetailPage() {
         {tab === 'overview' && <OverviewTab agency={agency} />}
         {tab === 'branding' && <BrandingTab agency={agency} />}
         {tab === 'credentials' && <CredentialsTab agency={agency} />}
-        {tab === 'travellers' && <StubTab icon={Users} title="Traveller management" description="List, search, install status, device management. Wired to Luna Work as source of truth. Building this view next." />}
+        {tab === 'travellers' && <InvitesTab agency={agency} />}
         {tab === 'documents' && <DocumentsTab agency={agency} />}
         {tab === 'audit' && <StubTab icon={Shield} title="Activity log" description="Every state change, who made it, when. Append-only." />}
       </div>

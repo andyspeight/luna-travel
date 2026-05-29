@@ -71,6 +71,10 @@ function toAgency(
     website: row.websiteUrl || '',
     travelifyAppId: (d.travelifyAppId as string) || '',
     travelifySiteId: (d.travelifySiteId as string) || '',
+    // API key is a secret — never expose the value to the browser. Surface
+    // only whether one is set and its last 4 chars, for confirmation.
+    apiKeySet: !!(d.apiKey as string),
+    apiKeyLast4: ((d.apiKey as string) || '').slice(-4),
     // White-label branding (from Control). Blank until set.
     appName: (d.appName as string) || '',
     brandPrimaryColour: (d.brandPrimaryColour as string) || '',

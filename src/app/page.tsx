@@ -29,6 +29,7 @@ import { destinationHero } from '@/lib/hero';
 import { PageEnter } from '@/components/page-enter';
 import { CoverSplash } from '@/components/cover-splash';
 import { useCover } from '@/lib/cover-context';
+import { useAgentMessages } from '@/lib/use-agent-messages';
 
 export default function HomePage() {
   const { booking } = useBooking();
@@ -87,6 +88,9 @@ export default function HomePage() {
           .
         </h1>
       </div>
+
+      {/* Message from your agent — prominent so it can't be missed */}
+      <AgentBanner />
 
       {/* Hero trip card */}
       <Link href="/itinerary" className="block">
@@ -286,6 +290,50 @@ function timeOfDayGreeting(): string {
   if (h < 12) return 'Good morning';
   if (h < 18) return 'Good afternoon';
   return 'Good evening';
+}
+
+function AgentBanner() {
+  const { unreadCount, latest } = useAgentMessages();
+  if (unreadCount === 0 || !latest) return null;
+  const urgent = latest.priority === 'urgent';
+  return (
+    <Link href="/notifications" className="block mb-5">
+      <div
+        className="rounded-2xl p-4 text-white relative overflow-hidden shadow-md hover:shadow-lg transition-shadow tap"
+        style={{
+          background: urgent
+            ? 'linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%)'
+            : 'linear-gradient(135deg, #1B2B5B 0%, #2A3F7A 100%)',
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse at 90% 15%, rgba(0,180,216,0.35), transparent 55%)',
+          }}
+        />
+        <div className="relative flex items-center gap-3">
+          <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+            <IconChat size={20} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] uppercase tracking-wider font-semibold opacity-80">
+              {unreadCount > 1 ? `${unreadCount} new messages` : 'New message from your agent'}
+            </div>
+            <div className="text-sm font-semibold leading-snug truncate mt-0.5">
+              {latest.subject || latest.body}
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/15 rounded-full px-2.5 py-1 flex-shrink-0">
+            View
+            <IconChevR size={14} />
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 function QuickTile({

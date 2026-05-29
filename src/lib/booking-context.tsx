@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Booking } from '@/types/booking';
@@ -78,6 +78,34 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // 3. Engagement ping - record that the traveller opened the app. Fire-and-
+  //    forget, gated server-side by the lt_session cookie (no session => 401,
+  //    a harmless no-op for the mock/demo path). Fires on open and on return to
+  //    the foreground; a client throttle plus the server's session window stop
+  //    refocus spam from inflating the open count.
+  useEffect(() => {
+    let lastPing = 0;
+    const ping = () => {
+      const now = Date.now();
+      if (now - lastPing < 5 * 60 * 1000) return; // at most once / 5 min client-side
+      lastPing = now;
+      fetch('/api/traveller/ping', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        keepalive: true,
+      }).catch(() => {
+        /* engagement is best-effort; never disturb the app */
+      });
+    };
+    ping();
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') ping();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   // Picker - drives MOCK data only, exactly as before. When the user picks a

@@ -553,55 +553,168 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
 }
 
 function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
-  const [showSecret, setShowSecret] = useState(false);
-  const [username, setUsername] = useState(`${agency.id.replace('agc_', '')}-api`);
+  const a = agency as unknown as {
+    id: string;
+    travelifyAppId?: string;
+    travelifySiteId?: string;
+    apiKeySet?: boolean;
+    apiKeyLast4?: string;
+  };
+
+  const [appId, setAppId] = useState(a.travelifyAppId || '');
+  const [siteId, setSiteId] = useState(a.travelifySiteId || '');
+  const [keySet, setKeySet] = useState(!!a.apiKeySet);
+  const [keyLast4, setKeyLast4] = useState(a.apiKeyLast4 || '');
+  const [replacingKey, setReplacingKey] = useState(false);
+  const [newKey, setNewKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  // Mirrors Control's update-integration validation for fast feedback.
+  const NUMERIC_RE = /^\d{1,10}$/;
+  const UUID_RE = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
+
+  // Show the key input when there is no key yet, or when replacing one.
+  const showKeyInput = !keySet || replacingKey;
+
+  async function handleSave() {
+    if (saving) return;
+    if (appId.trim() && !NUMERIC_RE.test(appId.trim())) {
+      setSaveMsg({ kind: 'err', text: 'App ID must be numeric, up to 10 digits.' });
+      return;
+    }
+    if (siteId.trim() && !NUMERIC_RE.test(siteId.trim())) {
+      setSaveMsg({ kind: 'err', text: 'Site ID must be numeric, up to 10 digits.' });
+      return;
+    }
+    // Only send the key if the admin actually entered a new one. We never
+    // round-trip the existing secret to or from the browser.
+    const sendingKey = showKeyInput && newKey.trim() !== '';
+    if (sendingKey && !UUID_RE.test(newKey.trim())) {
+      setSaveMsg({ kind: 'err', text: 'API key must be a UUID like A41D180E-CBFE-4E30-A47D-FAAB424A650D.' });
+      return;
+    }
+
+    const payload: Record<string, string> = {
+      travelifyAppId: appId.trim(),
+      travelifySiteId: siteId.trim(),
+    };
+    if (sendingKey) payload.apiKey = newKey.trim();
+
+    setSaving(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/integration`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaveMsg({ kind: 'err', text: data?.detail || data?.error || 'Could not save — check the values and try again.' });
+      } else {
+        setSaveMsg({ kind: 'ok', text: 'Travelify credentials saved.' });
+        if (sendingKey) {
+          setKeySet(true);
+          setKeyLast4(newKey.trim().slice(-4));
+          setNewKey('');
+          setReplacingKey(false);
+          setShowKey(false);
+        }
+      }
+    } catch {
+      setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div style={{ maxWidth: 640 }}>
       <Card>
         <CardHeader
           title="Travelify credentials"
-          subtitle="Encrypted at rest with AES-256-GCM. Never displayed after save."
+          subtitle="Links this agency to its Travelify app so the traveller app can pull bookings. The API key is stored securely and never shown again after saving."
         />
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <FormField label="App ID">
-            <Input value="250" readOnly />
-          </FormField>
-          <FormField label="API Username">
-            <Input value={username} onChange={setUsername} />
-          </FormField>
-          <FormField label="API Key" helper="Last rotated 12 Feb 2026.">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Input
-                value={showSecret ? 'tg_live_8e2c0f4a9b6d1e7f3a2c8d5b9e4f1a6c' : '•••• •••• •••• ••a6c'}
-                type={showSecret ? 'text' : 'password'}
-                readOnly
-              />
-              <button
-                onClick={() => setShowSecret(s => !s)}
-                style={{
-                  height: 40, width: 40, borderRadius: 8,
-                  border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', flexShrink: 0,
-                }}
-                aria-label={showSecret ? 'Hide secret' : 'Show secret'}
-              >
-                {showSecret ? <EyeOff style={{ height: 16, width: 16, color: C.textSecondary }} strokeWidth={1.75} /> : <Eye style={{ height: 16, width: 16, color: C.textSecondary }} strokeWidth={1.75} />}
-              </button>
-            </div>
+          <FormField label="App ID" helper="The Travelify application ID. Numbers only.">
+            <Input value={appId} onChange={setAppId} placeholder="e.g. 250" />
           </FormField>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
-            <button style={{ fontSize: 13, color: C.textTertiary, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-              Rotate key
-            </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Button variant="secondary" leftIcon={<CheckCircle2 style={{ height: 14, width: 14, color: C.success }} strokeWidth={1.75} />}>
-                Test connection
-              </Button>
-              <Button>Save</Button>
-            </div>
+          <FormField label="Site ID" helper="The Travelify site ID. Numbers only.">
+            <Input value={siteId} onChange={setSiteId} placeholder="e.g. 250" />
+          </FormField>
+
+          <FormField label="API key" helper="The Travelify primarygroupsid, a UUID.">
+            {!showKeyInput ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  flex: 1, height: 40, padding: '0 12px', borderRadius: 8,
+                  border: `1px solid ${C.border}`, backgroundColor: C.bg,
+                  display: 'flex', alignItems: 'center', gap: 8, color: C.textSecondary, fontSize: 14,
+                }}>
+                  <CheckCircle2 style={{ height: 15, width: 15, color: C.success, flexShrink: 0 }} strokeWidth={1.75} />
+                  Key set{keyLast4 ? `, ending ${keyLast4}` : ''}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setReplacingKey(true); setNewKey(''); setShowKey(false); }}
+                  style={{
+                    height: 40, padding: '0 14px', borderRadius: 8,
+                    border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
+                    fontSize: 14, fontWeight: 500, color: C.text, cursor: 'pointer', flexShrink: 0,
+                  }}
+                >Replace</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Input
+                  value={newKey}
+                  onChange={setNewKey}
+                  type={showKey ? 'text' : 'password'}
+                  placeholder="A41D180E-CBFE-4E30-A47D-FAAB424A650D"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(s => !s)}
+                  style={{
+                    height: 40, width: 40, borderRadius: 8,
+                    border: `1px solid ${C.border}`, backgroundColor: C.bgElevated,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', flexShrink: 0,
+                  }}
+                  aria-label={showKey ? 'Hide key' : 'Show key'}
+                >
+                  {showKey ? <EyeOff style={{ height: 16, width: 16, color: C.textSecondary }} strokeWidth={1.75} /> : <Eye style={{ height: 16, width: 16, color: C.textSecondary }} strokeWidth={1.75} />}
+                </button>
+                {keySet && (
+                  <button
+                    type="button"
+                    onClick={() => { setReplacingKey(false); setNewKey(''); setShowKey(false); }}
+                    style={{ background: 'none', border: 'none', color: C.textTertiary, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', flexShrink: 0 }}
+                  >Cancel</button>
+                )}
+              </div>
+            )}
+          </FormField>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, paddingTop: 16, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
+            {saveMsg && (
+              <span style={{ fontSize: 13, marginRight: 'auto', color: saveMsg.kind === 'ok' ? C.success : C.warning }}>
+                {saveMsg.text}
+              </span>
+            )}
+            <Button variant="secondary" onClick={() => {
+              setAppId(a.travelifyAppId || '');
+              setSiteId(a.travelifySiteId || '');
+              setReplacingKey(false);
+              setNewKey('');
+              setShowKey(false);
+              setSaveMsg(null);
+            }}>Discard</Button>
+            <Button onClick={handleSave}>{saving ? 'Saving…' : 'Save'}</Button>
           </div>
         </div>
       </Card>
@@ -1151,6 +1264,8 @@ export default function AgencyDetailPage() {
           last30dActives: 0,
           travelifyAppId: a.travelifyAppId || '',
           travelifySiteId: a.travelifySiteId || '',
+          apiKeySet: !!a.apiKeySet,
+          apiKeyLast4: a.apiKeyLast4 || '',
         } as unknown as (typeof AGENCIES)[0];
         setAgency(shaped);
         setLoading(false);

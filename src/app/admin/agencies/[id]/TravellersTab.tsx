@@ -5,9 +5,10 @@ import { Users, RefreshCw, AlertCircle, Loader2, Search, X } from 'lucide-react'
 
 // Agency-scoped Travellers list. Pure read view: who has joined for this
 // agency, live from GET /api/admin/agencies/[id]/travellers (a traveller row
-// is created when an invite is redeemed). Creating invites lives on its own
-// "Invite" tab now. Full-width table rows + client-side search so agencies
-// with a lot of customers stay manageable.
+// is created when an invite is redeemed). Now shows engagement too: a status
+// dot, total opens, and when they last opened the app — so an agency can spot
+// installed-but-never-opened and gone-quiet travellers at a glance. Creating
+// invites lives on the Invite tab. Full-width rows + client-side search.
 
 const C = {
   bg: '#F8FAFC',
@@ -19,6 +20,8 @@ const C = {
   textTertiary: '#94A3B8',
   primary: '#1B2B5B',
   accent: '#00B4D8',
+  success: '#10B981',
+  warning: '#F59E0B',
   error: '#EF4444',
 };
 
@@ -29,6 +32,9 @@ type Traveller = {
   destination: string | null;
   departureDate: string | null;
   redeemedAt: string | null;
+  firstOpenedAt: string | null;
+  lastOpenedAt: string | null;
+  openCount: number | null;
 };
 
 function formatDate(iso: string | null): string {
@@ -36,6 +42,34 @@ function formatDate(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function relativeOpened(iso: string | null): string {
+  if (!iso) return 'Never';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const ms = Date.now() - d.getTime();
+  if (ms < 60 * 1000) return 'Just now';
+  const days = daysSince(iso) ?? 0;
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return formatDate(iso);
+}
+
+function engagement(t: Traveller): { color: string; label: string } {
+  const opens = t.openCount ?? 0;
+  if (opens === 0 || !t.lastOpenedAt) return { color: C.textTertiary, label: 'Not opened yet' };
+  const days = daysSince(t.lastOpenedAt) ?? 999;
+  if (days <= 7) return { color: C.success, label: 'Active' };
+  return { color: C.warning, label: `Quiet — last opened ${relativeOpened(t.lastOpenedAt).toLowerCase()}` };
 }
 
 function initials(name: string | null): string {
@@ -46,7 +80,7 @@ function initials(name: string | null): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const GRID = '1.6fr 1fr 1.2fr 1fr 1fr';
+const GRID = '1.8fr 1fr 1.1fr 0.9fr 0.6fr 1fr';
 
 export default function TravellersTab({ agency }: { agency: { id: string; name?: string } }) {
   const [travellers, setTravellers] = useState<Traveller[]>([]);
@@ -190,34 +224,51 @@ export default function TravellersTab({ agency }: { agency: { id: string; name?:
               <div>Booking ref</div>
               <div>Destination</div>
               <div>Departs</div>
-              <div>Joined</div>
+              <div>Opens</div>
+              <div>Last opened</div>
             </div>
-            {filtered.map((t) => (
-              <div key={t.id} style={{
-                display: 'grid', gridTemplateColumns: GRID, gap: 12, padding: '14px 24px', alignItems: 'center',
-                borderBottom: `1px solid ${C.border}`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <div style={{
-                    height: 32, width: 32, borderRadius: 8, flexShrink: 0,
-                    backgroundColor: C.primary, color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 600,
-                  }}>{initials(t.name)}</div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.name || 'Unnamed traveller'}
+            {filtered.map((t) => {
+              const eng = engagement(t);
+              const opens = t.openCount ?? 0;
+              return (
+                <div key={t.id} style={{
+                  display: 'grid', gridTemplateColumns: GRID, gap: 12, padding: '14px 24px', alignItems: 'center',
+                  borderBottom: `1px solid ${C.border}`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <span
+                      title={eng.label}
+                      style={{ height: 8, width: 8, borderRadius: '50%', backgroundColor: eng.color, flexShrink: 0 }}
+                    />
+                    <div style={{
+                      height: 32, width: 32, borderRadius: 8, flexShrink: 0,
+                      backgroundColor: C.primary, color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, fontWeight: 600,
+                    }}>{initials(t.name)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.name || 'Unnamed traveller'}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: C.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t.bookingRef || '—'}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t.destination || '—'}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.textSecondary }}>{formatDate(t.departureDate)}</div>
+                  <div style={{ fontSize: 13, color: opens === 0 ? C.textTertiary : C.text, fontWeight: opens === 0 ? 400 : 600 }}>
+                    {opens}
+                  </div>
+                  <div
+                    style={{ fontSize: 13, color: t.lastOpenedAt ? C.textSecondary : C.textTertiary }}
+                    title={t.firstOpenedAt ? `First opened ${formatDate(t.firstOpenedAt)}` : 'Not opened yet'}
+                  >
+                    {relativeOpened(t.lastOpenedAt)}
                   </div>
                 </div>
-                <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: C.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.bookingRef || '—'}
-                </div>
-                <div style={{ fontSize: 13, color: C.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.destination || '—'}
-                </div>
-                <div style={{ fontSize: 13, color: C.textSecondary }}>{formatDate(t.departureDate)}</div>
-                <div style={{ fontSize: 13, color: C.textSecondary }}>{formatDate(t.redeemedAt)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

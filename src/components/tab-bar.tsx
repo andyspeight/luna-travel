@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCover } from '@/lib/cover-context';
+import { useAgentMessages } from '@/lib/use-agent-messages';
 import { IconHome, IconCalendar, IconDoc, IconChat, IconUser } from './icons';
 
 const TABS = [
@@ -16,6 +17,7 @@ const TABS = [
 export function TabBar() {
   const pathname = usePathname();
   const { coverEnabled, coverDismissed } = useCover();
+  const { unreadCount } = useAgentMessages();
 
   // Splash is showing → hide the tab bar so the cover is truly full-bleed.
   const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
@@ -35,11 +37,13 @@ export function TabBar() {
         {TABS.map(({ href, label, icon: Icon }) => {
           const isActive =
             href === '/' ? pathname === '/' : pathname.startsWith(href);
+          const showBadge = href === '/me' && unreadCount > 0;
           return (
             <li key={href}>
               <Link
                 href={href}
                 aria-current={isActive ? 'page' : undefined}
+                aria-label={showBadge ? `${label}, ${unreadCount} unread message${unreadCount === 1 ? '' : 's'}` : undefined}
                 className={[
                   'flex flex-col items-center justify-center gap-0.5 pt-2 pb-3 min-h-[56px]',
                   'transition-colors',
@@ -48,7 +52,14 @@ export function TabBar() {
                     : 'text-ink-3 hover:text-ink-2',
                 ].join(' ')}
               >
-                <Icon size={22} />
+                <span className="relative inline-flex">
+                  <Icon size={22} />
+                  {showBadge && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none ring-2 ring-surface">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </span>
                 <span className="text-[10px] font-medium tracking-wide">{label}</span>
               </Link>
             </li>

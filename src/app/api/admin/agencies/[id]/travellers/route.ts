@@ -1,7 +1,7 @@
 /**
  * GET /api/admin/agencies/[id]/travellers
  *
- * Returns travellers for an agency — id, lead passenger name, booking ref.
+ * Returns travellers for an agency — id, name, booking ref, destination, dates.
  * Used by the document-upload form to populate the traveller picker.
  *
  * Admin-gated (middleware).
@@ -25,7 +25,7 @@ export async function GET(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('travellers')
-    .select('id, lead_passenger_name, booking_ref, departure_date, created_at')
+    .select('id, lead_passenger_name, booking_ref, destination, departure_date, created_at')
     .eq('agency_id', agencyId)
     .order('created_at', { ascending: false });
 
@@ -39,6 +39,7 @@ export async function GET(
       id: t.id,
       name: t.lead_passenger_name,
       bookingRef: t.booking_ref,
+      destination: t.destination,
       departureDate: t.departure_date,
       redeemedAt: t.created_at,  // surface as redeemedAt — that's what it effectively means
     })),

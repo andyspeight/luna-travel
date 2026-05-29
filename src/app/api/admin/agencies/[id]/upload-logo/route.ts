@@ -6,9 +6,11 @@
  * pattern as the widgets' /api/upload-pdf (the file never routes through this
  * function, so it bypasses Vercel's 4.5MB body limit).
  *
- * Writes to the tg-widgets-blob store (connected to this project; resolves via
- * BLOB_READ_WRITE_TOKEN). Logos are scoped under the `agency-logos/` prefix to
- * keep them separate from the widgets' `quote-pdf/` uploads in the same store.
+ * Writes to luna-travel's own PUBLIC Blob store (resolves via
+ * BLOB_READ_WRITE_TOKEN). The store must be public, not private: logos have to
+ * be readable without a token so they can render on the white-label app, and a
+ * private store rejects public uploads outright. Files are scoped under the
+ * `agency-logos/` prefix.
  *
  * Auth: the initial token request is gated by requireAdmin (luna_travel admin,
  * same-origin tg_session cookie rides along — the Blob SDK can't set a custom
@@ -17,6 +19,11 @@
  *
  * The resulting URL is persisted to Control's Clients.logoUrl via the branding
  * save flow — this route only handles the upload, not persistence.
+ *
+ * Note: SVG is deliberately NOT allowed. Because the file streams straight to
+ * Blob and never passes through this function, we cannot sanitise it, and a
+ * public SVG URL can execute embedded script if opened directly. Raster formats
+ * only.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -27,7 +34,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 MB — plenty for a logo
-const ALLOWED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+const ALLOWED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
 export async function POST(
   req: NextRequest,

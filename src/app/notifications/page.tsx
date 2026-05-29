@@ -190,6 +190,9 @@ function AgentMessages() {
         const data = await res.json();
         if (alive) {
           setMessages(res.ok && Array.isArray(data.messages) ? (data.messages as AgentMessage[]) : []);
+          // The GET above marked these read server-side. Tell the rest of the app
+          // (bottom-bar badge, home card) so the unread count clears immediately.
+          try { window.dispatchEvent(new Event('lt:messages-changed')); } catch { /* no-op */ }
         }
       } catch {
         if (alive) setMessages([]);

@@ -267,11 +267,11 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  const ALLOWED_LOGO = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+  const ALLOWED_LOGO = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
   async function handleLogoFile(file: File) {
     if (!ALLOWED_LOGO.includes(file.type)) {
-      setSaveMsg({ kind: 'err', text: 'Please choose a PNG, JPG, SVG, GIF or WebP image.' });
+      setSaveMsg({ kind: 'err', text: 'Please choose a PNG, JPG, GIF or WebP image.' });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -377,10 +377,10 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
             />
           </FormField>
 
-          <FormField label="Logo" helper="PNG, JPG, SVG, GIF or WebP, under 2MB. Shown in the traveller's app.">
+          <FormField label="Logo" helper="PNG, JPG, GIF or WebP, under 2MB. Shown in the traveller's app.">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
-                height: 48, width: 48, borderRadius: 8,
+                height: 64, width: 120, borderRadius: 10, padding: 8,
                 border: `1px ${logoUrl ? 'solid' : 'dashed'} ${C.border}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 backgroundColor: C.bgTertiary, overflow: 'hidden', flexShrink: 0,
@@ -389,7 +389,7 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={logoUrl} alt="Agency logo" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
                 ) : (
-                  <ImageIcon style={{ height: 16, width: 16, color: C.textTertiary }} strokeWidth={1.75} />
+                  <ImageIcon style={{ height: 22, width: 22, color: C.textTertiary }} strokeWidth={1.75} />
                 )}
               </div>
               <label style={{
@@ -401,7 +401,7 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
                 {uploadingLogo ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
                   disabled={uploadingLogo}
                   onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ''; if (f) handleLogoFile(f); }}
                   style={{ display: 'none' }}
@@ -480,15 +480,26 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
                 borderBottom: `1px solid ${C.border}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <div style={{
-                    height: 28, width: 28, borderRadius: 8,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#fff', fontSize: 11, fontWeight: 600, flexShrink: 0,
-                    backgroundColor: primary,
-                  }}>
-                    {appName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{appName}</span>
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={logoUrl}
+                      alt={`${appName || 'Agency'} logo`}
+                      style={{ height: 28, maxWidth: 140, width: 'auto', objectFit: 'contain', flexShrink: 0 }}
+                    />
+                  ) : (
+                    <>
+                      <div style={{
+                        height: 28, width: 28, borderRadius: 8,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', fontSize: 11, fontWeight: 600, flexShrink: 0,
+                        backgroundColor: primary,
+                      }}>
+                        {appName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{appName}</span>
+                    </>
+                  )}
                 </div>
                 <Bell style={{ height: 14, width: 14, color: C.textTertiary, flexShrink: 0 }} strokeWidth={1.75} />
               </div>
@@ -525,9 +536,11 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
                 }}>View itinerary</button>
               </div>
               {/* Welcome */}
-              <div style={{ padding: '0 16px' }}>
-                <span style={{ fontSize: 11, color: C.textTertiary, fontStyle: 'italic' }}>&ldquo;{welcome}&rdquo;</span>
-              </div>
+              {welcome.trim() && (
+                <div style={{ padding: '4px 16px 16px' }}>
+                  <span style={{ fontSize: 13, lineHeight: 1.5, color: C.textSecondary, fontStyle: 'italic' }}>&ldquo;{welcome}&rdquo;</span>
+                </div>
+              )}
             </div>
           </div>
           <div style={{ fontSize: 11, color: C.textTertiary, marginTop: 12, textAlign: 'center' }}>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useBooking } from '@/lib/booking-context';
 import { NavBar } from '@/components/nav-bar';
 import { PageEnter } from '@/components/page-enter';
@@ -30,6 +30,20 @@ interface SamplePush {
   title: string;
   body: string;
   when: string;
+}
+
+type MsgAttachment =
+  | { type: 'image'; url: string }
+  | { type: 'link'; url: string; label?: string };
+
+interface AgentMessage {
+  id: string;
+  subject: string | null;
+  body: string;
+  attachments: MsgAttachment[];
+  priority: string;
+  sentAt: string;
+  readAt: string | null;
 }
 
 export default function NotificationsPage() {
@@ -95,6 +109,9 @@ export default function NotificationsPage() {
             </p>
           </header>
 
+          {/* Real messages from the travel agent */}
+          <AgentMessages />
+
           {/* Preferences */}
           <section className="mt-4 rounded-2xl bg-surface border border-line-light overflow-hidden">
             <div className="divide-y divide-line-light">
@@ -132,6 +149,162 @@ export default function NotificationsPage() {
         </main>
       </PageEnter>
     </>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Real agent-to-traveller messages, live from /api/traveller/messages.
+ * Loading the screen marks them read, which surfaces "read" back to the agent.
+ * ------------------------------------------------------------------------- */
+
+function msgRelTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const ms = Date.now() - d.getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return 'yesterday';
+  if (day < 7) return `${day}d ago`;
+  return formatDayMonth(iso);
+}
+
+function msgImage(atts: MsgAttachment[]): { url: string } | undefined {
+  return atts.find((a): a is { type: 'image'; url: string } => a.type === 'image');
+}
+function msgLink(atts: MsgAttachment[]): { url: string; label?: string } | undefined {
+  return atts.find((a): a is { type: 'link'; url: string; label?: string } => a.type === 'link');
+}
+
+function AgentMessages() {
+  const [messages, setMessages] = useState<AgentMessage[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/traveller/messages', { credentials: 'include' });
+        const data = await res.json();
+        if (alive) {
+          setMessages(res.ok && Array.isArray(data.messages) ? (data.messages as AgentMessage[]) : []);
+        }
+      } catch {
+        if (alive) setMessages([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Loading: a quiet placeholder so the screen doesn't jump.
+  if (messages === null) {
+    return (
+      <section className="mt-4">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2 px-1">
+          From your travel agent
+        </h2>
+        <div className="rounded-2xl bg-surface border border-line-light px-3.5 py-3 text-xs text-ink-3">
+          Loading…
+        </div>
+      </section>
+    );
+  }
+
+  // Nothing sent yet: render nothing, keep the screen clean.
+  if (messages.length === 0) return null;
+
+  return (
+    <section className="mt-4">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2 px-1">
+        From your travel agent
+      </h2>
+      <ul className="space-y-2.5">
+        {messages.map((m) => (
+          <li key={m.id}>
+            <AgentMessageCard m={m} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function AgentMessageCard({ m }: { m: AgentMessage }) {
+  const unread = !m.readAt;
+  const img = msgImage(m.attachments || []);
+  const link = msgLink(m.attachments || []);
+  const pri = m.priority;
+  const accent =
+    pri === 'urgent'
+      ? 'border-l-4 border-l-red-500'
+      : pri === 'important'
+        ? 'border-l-4 border-l-amber-500'
+        : '';
+
+  return (
+    <div
+      className={[
+        'rounded-2xl bg-surface border border-line-light shadow-sm px-3.5 py-3',
+        accent,
+        unread ? 'ring-1 ring-teal/40' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          aria-hidden
+          className="w-5 h-5 rounded-md bg-teal/15 text-teal-dark flex items-center justify-center flex-shrink-0"
+        >
+          <IconChat size={12} />
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-2">
+          Your travel agent
+        </span>
+        {(pri === 'urgent' || pri === 'important') && (
+          <span
+            className={[
+              'text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded',
+              pri === 'urgent' ? 'bg-red-500/15 text-red-600' : 'bg-amber-500/15 text-amber-600',
+            ].join(' ')}
+          >
+            {pri}
+          </span>
+        )}
+        <span className="ml-auto text-[10px] text-ink-3 flex items-center gap-1.5">
+          {unread && <span className="w-1.5 h-1.5 rounded-full bg-teal" aria-label="Unread" />}
+          {msgRelTime(m.sentAt)}
+        </span>
+      </div>
+      {m.subject && (
+        <div className="text-sm font-semibold text-ink leading-snug">{m.subject}</div>
+      )}
+      <div className="text-sm text-ink-2 mt-0.5 leading-snug whitespace-pre-wrap break-words">
+        {m.body}
+      </div>
+      {img && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={img.url}
+          alt=""
+          className="mt-2.5 w-full rounded-xl border border-line-light object-cover max-h-64"
+        />
+      )}
+      {link && (
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-teal/10 text-teal-dark px-3 py-1.5 text-xs font-medium"
+        >
+          {link.label || 'Open link'}
+        </a>
+      )}
+    </div>
   );
 }
 

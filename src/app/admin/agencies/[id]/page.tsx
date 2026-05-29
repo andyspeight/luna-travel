@@ -555,14 +555,16 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
 function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
   const a = agency as unknown as {
     id: string;
-    travelifyAppId?: string;
-    travelifySiteId?: string;
+    travelifyAppId?: string | number;
+    travelifySiteId?: string | number;
     apiKeySet?: boolean;
     apiKeyLast4?: string;
   };
 
-  const [appId, setAppId] = useState(a.travelifyAppId || '');
-  const [siteId, setSiteId] = useState(a.travelifySiteId || '');
+  // App ID / Site ID come back from Airtable as numbers; coerce to string so
+  // the inputs render and the .trim() validation below doesn't throw.
+  const [appId, setAppId] = useState(String(a.travelifyAppId ?? ''));
+  const [siteId, setSiteId] = useState(String(a.travelifySiteId ?? ''));
   const [keySet, setKeySet] = useState(!!a.apiKeySet);
   const [keyLast4, setKeyLast4] = useState(a.apiKeyLast4 || '');
   const [replacingKey, setReplacingKey] = useState(false);
@@ -570,6 +572,8 @@ function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
 
   // Mirrors Control's update-integration validation for fast feedback.
   const NUMERIC_RE = /^\d{1,10}$/;
@@ -604,6 +608,7 @@ function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
 
     setSaving(true);
     setSaveMsg(null);
+    setTestResult(null);
     try {
       const res = await fetch(`/api/admin/agencies/${agency.id}/integration`, {
         method: 'POST',
@@ -628,6 +633,37 @@ function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
       setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    if (testing) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/integration/test`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTestResult({ kind: 'warn', text: data?.detail || 'Could not run the test. Try again.' });
+        return;
+      }
+      const status = data?.status;
+      if (status === 'connected') {
+        setTestResult({ kind: 'ok', text: 'Connected. Travelify accepted the credentials.' });
+      } else if (status === 'rejected') {
+        setTestResult({ kind: 'err', text: data?.detail || 'Travelify rejected the credentials.' });
+      } else if (status === 'not_configured') {
+        setTestResult({ kind: 'warn', text: 'No credentials saved yet. Save the App ID and key first.' });
+      } else {
+        setTestResult({ kind: 'warn', text: data?.detail || 'Could not confirm the connection. Try again.' });
+      }
+    } catch {
+      setTestResult({ kind: 'warn', text: 'Could not reach the server.' });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -700,6 +736,23 @@ function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
             )}
           </FormField>
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Button variant="secondary" onClick={handleTest}>{testing ? 'Testing…' : 'Test connection'}</Button>
+            {testResult ? (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
+                color: testResult.kind === 'ok' ? C.success : testResult.kind === 'err' ? C.error : C.warning,
+              }}>
+                {testResult.kind === 'ok'
+                  ? <CheckCircle2 style={{ height: 15, width: 15, flexShrink: 0 }} strokeWidth={1.75} />
+                  : <AlertTriangle style={{ height: 15, width: 15, flexShrink: 0 }} strokeWidth={1.75} />}
+                {testResult.text}
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, color: C.textTertiary }}>Verifies the saved credentials with Travelify.</span>
+            )}
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, paddingTop: 16, borderTop: `1px solid ${C.border}`, marginTop: 4 }}>
             {saveMsg && (
               <span style={{ fontSize: 13, marginRight: 'auto', color: saveMsg.kind === 'ok' ? C.success : C.warning }}>
@@ -707,8 +760,8 @@ function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
               </span>
             )}
             <Button variant="secondary" onClick={() => {
-              setAppId(a.travelifyAppId || '');
-              setSiteId(a.travelifySiteId || '');
+              setAppId(String(a.travelifyAppId ?? ''));
+              setSiteId(String(a.travelifySiteId ?? ''));
               setReplacingKey(false);
               setNewKey('');
               setShowKey(false);
@@ -1262,8 +1315,8 @@ export default function AgencyDetailPage() {
           joined: a.goLive ? new Date(a.goLive).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—',
           deviceInstalls: 0,
           last30dActives: 0,
-          travelifyAppId: a.travelifyAppId || '',
-          travelifySiteId: a.travelifySiteId || '',
+          travelifyAppId: a.travelifyAppId != null ? String(a.travelifyAppId) : '',
+          travelifySiteId: a.travelifySiteId != null ? String(a.travelifySiteId) : '',
           apiKeySet: !!a.apiKeySet,
           apiKeyLast4: a.apiKeyLast4 || '',
         } as unknown as (typeof AGENCIES)[0];

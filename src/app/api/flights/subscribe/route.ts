@@ -12,20 +12,21 @@
  *
  * Conventions honoured:
  *  - AeroDataBox key read from env only (AERODATABOX_API_KEY), never client-side.
- *  - Supabase via getSupabaseAdmin (service role) against the luna_travel schema.
+ *  - Supabase via getSupabaseAdmin (service role). That client is already
+ *    configured with db.schema = 'luna_travel', so we call .from() directly.
  *  - No signature from AeroDataBox exists, so the webhook URL carries a secret
  *    token (AERODATABOX_WEBHOOK_TOKEN) which the webhook route checks.
  *  - All inputs validated before any outbound call.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import type { FlightStatusCode } from '@/types/booking';
 
 // ---- Config (the only AeroDataBox wiring; all from env) --------------------
 const ADA_BASE = 'https://prod.api.market/api/v1/aedbx/aerodatabox';
 const ADA_KEY = process.env.AERODATABOX_API_KEY || '';
-const WEBHOOK_BASE = process.env.LUNA_TRAVEL_PUBLIC_URL || ''; // e.g. https://luna-travel-seven.vercel.app
+const WEBHOOK_BASE = process.env.LUNA_TRAVEL_PUBLIC_URL || ''; // e.g. https://lunatravel.travelify.io
 const WEBHOOK_TOKEN = process.env.AERODATABOX_WEBHOOK_TOKEN || '';
 const INTERNAL_KEY = process.env.TG_INTERNAL_KEY || '';
 
@@ -183,7 +184,6 @@ export async function POST(req: NextRequest) {
       };
 
       const { error } = await supabase
-        .schema('luna_travel')
         .from('trip_flights')
         .upsert(row, { onConflict: 'booking_ref,flight_leg_id' });
 

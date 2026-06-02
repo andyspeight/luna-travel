@@ -1,13 +1,11 @@
 /**
  * GET /api/admin/flight-test?flight=BA852&date=2026-06-02
  *
- * Flight Hub test rig backend. Does a live AeroDataBox lookup for any flight
- * number + date and returns BOTH the normalised view (what the traveller sees)
- * and the full raw response (every field available), so we can develop and
- * debug against real data without a booking or subscription.
+ * Flight Hub test rig backend. Live AeroDataBox lookup for any flight number +
+ * date, returning the normalised view (what the traveller sees) and the full
+ * raw response. Requests live position too, so airborne flights show tracking.
  *
- * Admin-gated (requireAdmin), like the other admin API routes. No DB writes,
- * no subscription registered — purely a read/explore tool.
+ * Admin-gated (requireAdmin). No DB writes, no subscription.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,7 +20,6 @@ import {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// "BA852" / "ba 852" / "BA 852A" -> { carrier:'BA', number:'852' }
 function parseFlight(input: string): { carrier: string; number: string } | null {
   const cleaned = input.replace(/\s+/g, '').toUpperCase();
   const m = cleaned.match(/^([A-Z0-9]{2,3}?)(\d{1,4}[A-Z]?)$/);
@@ -55,22 +52,16 @@ export async function GET(req: NextRequest) {
 
   let raw: Record<string, unknown> | null;
   try {
-    raw = await fetchFlight(parsed.carrier, parsed.number, dateIn);
+    raw = await fetchFlight(parsed.carrier, parsed.number, dateIn, { withLocation: true });
   } catch (e) {
     return NextResponse.json({ error: 'lookup_failed', detail: (e as Error).message }, { status: 502 });
   }
 
   if (!raw) {
-    return NextResponse.json({
-      found: false,
-      flight: `${parsed.carrier}${parsed.number}`,
-      date: dateIn,
-    });
+    return NextResponse.json({ found: false, flight: `${parsed.carrier}${parsed.number}`, date: dateIn });
   }
 
   const normalised = normaliseFlight(raw);
-
-  // Coverage check for both airports (free tier).
   const depCoverage = await hasLiveFeed(normalised?.depAirportIcao);
   const arrCoverage = await hasLiveFeed(normalised?.arrAirportIcao);
 
@@ -80,6 +71,6 @@ export async function GET(req: NextRequest) {
     date: dateIn,
     normalised,
     coverage: { departure: depCoverage, arrival: arrCoverage },
-    raw, // full AeroDataBox object — every field available
+    raw,
   });
 }

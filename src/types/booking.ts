@@ -215,6 +215,17 @@ export interface FlightLiveStatus {
   checkInOpensAt?: string;
   boardingAt?: string;
 
+  /** Aircraft (when known). */
+  aircraftModel?: string;
+  aircraftReg?: string;
+
+  /** Live position — only when airborne. */
+  liveLat?: number;
+  liveLon?: number;
+  liveAltitudeFt?: number;
+  liveSpeedKt?: number;
+  liveReportedAt?: string;
+
   /** Derived "leave for the airport by" nudge (Phase 2). ISO. */
   leaveByAt?: string;
 

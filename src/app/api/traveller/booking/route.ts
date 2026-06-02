@@ -20,6 +20,9 @@
  *      the order, and returns it plus the agency's white-label branding. The
  *      internal key never reaches the browser.
  *   4. Map the trimmed order + branding into the Booking type.
+ *   5. Fire-and-forget: kick off Flight Hub auto-subscribe for this booking's
+ *      flights. Not awaited — the booking returns immediately; flights begin
+ *      being watched a beat later and live data appears on the next view.
  *
  * Failure → non-200, which leaves booking-context on its mock booking. The
  * happy path returns { booking, source: 'live' }.
@@ -29,6 +32,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
+import type { Booking } from '@/types/booking';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -36,6 +40,35 @@ export const runtime = 'nodejs';
 const SESSION_COOKIE = 'lt_session';
 const CONTROL_HOST = 'https://id.travelify.io'; // same host the agencies route uses
 const RECORD_ID_RE = /^rec[A-Za-z0-9]{14}$/;
+
+/**
+ * Fire-and-forget: trigger auto-subscribe for this booking's flights. We do NOT
+ * await this — it must never slow or break the booking response. The
+ * subscribe-booking route dedupes, so calling on every open is safe and cheap.
+ */
+function triggerAutoSubscribe(booking: Booking, agencyId: string, bookingRef: string) {
+  const base = process.env.LUNA_TRAVEL_PUBLIC_URL;
+  const key = process.env.TG_INTERNAL_KEY;
+  if (!base || !key || !booking.flights?.length) return;
+
+  const legs = booking.flights.map((f) => ({
+    flightLegId: f.id,
+    carrierCode: f.carrierCode,
+    flightNumber: f.flightNumber,
+    depDateLocal: String(f.depTime).slice(0, 10), // ISO -> YYYY-MM-DD
+  }));
+
+  // Intentionally not awaited.
+  void fetch(`${base}/api/flights/subscribe-booking`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tg-internal-key': key },
+    body: JSON.stringify({ agencyId, bookingRef, legs }),
+    cache: 'no-store',
+    keepalive: true,
+  }).catch(() => {
+    /* auto-subscribe is best-effort; never disturb the booking response */
+  });
+}
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -127,6 +160,9 @@ export async function GET(req: NextRequest) {
   if (!booking) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
+
+  // 4. Fire-and-forget Flight Hub auto-subscribe (deduped server-side).
+  triggerAutoSubscribe(booking, recordId, orderRef);
 
   return NextResponse.json({ booking, source: 'live' }, { status: 200 });
 }

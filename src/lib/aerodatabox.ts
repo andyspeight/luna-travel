@@ -42,14 +42,19 @@ export function mapStatus(s?: string): FlightStatusCode {
  * Look up a flight's status on its departure date. Returns the raw AeroDataBox
  * flight object (first match), or null on 204 / no match. Throws on a real
  * HTTP error so callers can decide how to handle it.
+ *
+ * withLocation=true asks for live position (lat/lon/altitude/speed) when the
+ * flight is airborne. It's a query flag, no extra cost beyond the request.
  */
 export async function fetchFlight(
   carrier: string,
   number: string,
   dateLocal: string,
+  opts: { withLocation?: boolean } = {},
 ): Promise<Record<string, unknown> | null> {
   const flightNo = `${carrier}${number}`;
-  const url = `${ADA_BASE}/flights/number/${encodeURIComponent(flightNo)}/${dateLocal}?dateLocalRole=Departure`;
+  const q = opts.withLocation ? '&withLocation=true' : '';
+  const url = `${ADA_BASE}/flights/number/${encodeURIComponent(flightNo)}/${dateLocal}?dateLocalRole=Departure${q}`;
   const res = await fetch(url, { headers: headers() });
   if (res.status === 204) return null;
   if (!res.ok) throw new Error(`ADA flight lookup ${res.status}`);
@@ -107,7 +112,7 @@ export async function getBalance(): Promise<{ creditsRemaining: number } | null>
   }
 }
 
-// --- helpers to read nested movement fields ---------------------------------
+// --- helpers ----------------------------------------------------------------
 
 function airportField(mv: Record<string, unknown> | undefined, key: string): string | undefined {
   const ap = mv?.airport as Record<string, unknown> | undefined;
@@ -115,7 +120,6 @@ function airportField(mv: Record<string, unknown> | undefined, key: string): str
   return typeof v === 'string' && v.length ? v : undefined;
 }
 
-/** Prefer revised (live) time, fall back to scheduled. Returns UTC ISO or undefined. */
 function movementTime(mv: Record<string, unknown> | undefined): { scheduled?: string; revised?: string } {
   const sched = (mv?.scheduledTime as Record<string, unknown> | undefined)?.utc as string | undefined;
   const revised = (mv?.revisedTime as Record<string, unknown> | undefined)?.utc as string | undefined;
@@ -129,13 +133,15 @@ function movementTime(mv: Record<string, unknown> | undefined): { scheduled?: st
  * Normalise a raw AeroDataBox flight object into the fields the UI cares about.
  * Pure mapping, no fetch — safe to reuse anywhere.
  *
- * Times: we expose BOTH scheduled and revised. `est*Time` is revised-or-
- * scheduled (a sensible single value for storage/display); `sched*Time` is the
- * scheduled baseline so the UI can show a strike-through only when revised
- * genuinely differs. IATA is for display; ICAO is kept for the coverage call.
+ * Times: BOTH scheduled and revised are exposed separately. `est*Time` is
+ * revised-or-scheduled; `sched*Time` is the scheduled baseline so the UI can
+ * strike-through only when revised genuinely differs. IATA for display; ICAO
+ * kept for the coverage call. Aircraft + live position included when present.
  */
 export interface NormalisedFlight {
   statusCode: FlightStatusCode;
+
+  airlineName?: string;
 
   depAirportIata?: string;
   depAirportIcao?: string;
@@ -154,18 +160,36 @@ export interface NormalisedFlight {
   estDepTime?: string;   // revised || scheduled
   schedArrTime?: string;
   estArrTime?: string;   // revised || scheduled
+
+  aircraftModel?: string;
+  aircraftReg?: string;
+
+  // Live position (only when airborne + withLocation requested)
+  liveLat?: number;
+  liveLon?: number;
+  liveAltitudeFt?: number;
+  liveSpeedKt?: number;
+  liveReportedAt?: string;
 }
 
 export function normaliseFlight(f: Record<string, unknown> | null): NormalisedFlight | null {
   if (!f) return null;
   const dep = (f.departure || undefined) as Record<string, unknown> | undefined;
   const arr = (f.arrival || undefined) as Record<string, unknown> | undefined;
+  const aircraft = (f.aircraft || undefined) as Record<string, unknown> | undefined;
+  const airline = (f.airline || undefined) as Record<string, unknown> | undefined;
+  const loc = (f.location || undefined) as Record<string, unknown> | undefined;
 
   const depT = movementTime(dep);
   const arrT = movementTime(arr);
 
+  const altFt = ((loc?.altitude as Record<string, unknown> | undefined)?.feet as number) ?? undefined;
+  const spdKt = ((loc?.groundSpeed as Record<string, unknown> | undefined)?.kt as number) ?? undefined;
+
   return {
     statusCode: mapStatus(f.status as string),
+
+    airlineName: (airline?.name as string) ?? undefined,
 
     depAirportIata: airportField(dep, 'iata'),
     depAirportIcao: airportField(dep, 'icao'),
@@ -186,6 +210,15 @@ export function normaliseFlight(f: Record<string, unknown> | null): NormalisedFl
     estDepTime: depT.revised || depT.scheduled,
     schedArrTime: arrT.scheduled,
     estArrTime: arrT.revised || arrT.scheduled,
+
+    aircraftModel: (aircraft?.model as string) ?? undefined,
+    aircraftReg: (aircraft?.reg as string) ?? undefined,
+
+    liveLat: typeof loc?.lat === 'number' ? (loc.lat as number) : undefined,
+    liveLon: typeof loc?.lon === 'number' ? (loc.lon as number) : undefined,
+    liveAltitudeFt: typeof altFt === 'number' ? altFt : undefined,
+    liveSpeedKt: typeof spdKt === 'number' ? spdKt : undefined,
+    liveReportedAt: (loc?.reportedAtUtc as string) ?? undefined,
   };
 }
 

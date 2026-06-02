@@ -3,22 +3,21 @@
 /**
  * Flight Hub test rig — /admin/flight-test
  *
- * Internal tool. Type a flight number + date, do a live AeroDataBox lookup, and
- * see (a) the REAL traveller flight card (the exact shared component the PWA
- * uses) rendered in a phone frame, and (b) the full raw response for debugging.
- * No booking, no subscription, no DB write — pure live explore.
- *
- * The card is fed a synthesised FlightLeg + FlightLiveStatus built from the
- * lookup, so what you see here is what a traveller sees.
+ * Renders the REAL traveller flight card (shared component) in a phone frame
+ * plus the full raw response. The synthesised leg uses SCHEDULED times only as
+ * its baseline, while the live overlay carries the REVISED times — so the
+ * card's strike-through logic shows revisions correctly (same as production,
+ * where booked time and live time are genuinely independent sources).
  */
 
 import React, { useState } from 'react';
 import { Plane, Search, AlertTriangle } from 'lucide-react';
-import { FlightHero, LiveNowPanel } from '@/components/flight-card';
+import { FlightHero, LiveNowPanel, AircraftPanel } from '@/components/flight-card';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
 
 interface Normalised {
   statusCode: string;
+  airlineName?: string;
   depAirportIata?: string;
   depAirportIcao?: string;
   depAirportName?: string;
@@ -34,6 +33,13 @@ interface Normalised {
   estDepTime?: string;
   schedArrTime?: string;
   estArrTime?: string;
+  aircraftModel?: string;
+  aircraftReg?: string;
+  liveLat?: number;
+  liveLon?: number;
+  liveAltitudeFt?: number;
+  liveSpeedKt?: number;
+  liveReportedAt?: string;
 }
 
 interface ApiResult {
@@ -51,7 +57,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Build a minimal FlightLeg from the lookup so the real card can render it. */
+/** Leg baseline = SCHEDULED times only (so revised shows as a change). */
 function toFlightLeg(flightLabel: string, n: Normalised): FlightLeg {
   const carrierMatch = flightLabel.match(/^([A-Z0-9]{2,3}?)(\d.*)$/);
   const carrierCode = carrierMatch?.[1] ?? flightLabel.slice(0, 2);
@@ -65,7 +71,7 @@ function toFlightLeg(flightLabel: string, n: Normalised): FlightLeg {
   return {
     id: 'rig-preview',
     carrierCode,
-    carrierName: carrierCode, // rig has no airline name; code stands in
+    carrierName: n.airlineName || carrierCode,
     flightNumber,
     cabin: 'Economy',
     depAirport: n.depAirportIata || n.depAirportIcao || '—',
@@ -79,10 +85,11 @@ function toFlightLeg(flightLabel: string, n: Normalised): FlightLeg {
     arrTime: arrISO,
     arrTerminal: n.arrTerminal,
     durationMinutes: durMin,
+    aircraft: n.aircraftModel,
   };
 }
 
-/** Build a FlightLiveStatus overlay from the lookup. */
+/** Overlay = REVISED times + live ops + aircraft + position. */
 function toLive(n: Normalised): FlightLiveStatus {
   return {
     flightLegId: 'rig-preview',
@@ -94,6 +101,13 @@ function toLive(n: Normalised): FlightLiveStatus {
     arrTerminalLive: n.arrTerminal,
     baggageBelt: n.baggageBelt,
     checkInDesk: n.checkInDesk,
+    aircraftModel: n.aircraftModel,
+    aircraftReg: n.aircraftReg,
+    liveLat: n.liveLat,
+    liveLon: n.liveLon,
+    liveAltitudeFt: n.liveAltitudeFt,
+    liveSpeedKt: n.liveSpeedKt,
+    liveReportedAt: n.liveReportedAt,
     hasLiveCoverage: true,
     lastUpdated: new Date().toISOString(),
     watchState: 'active',
@@ -147,7 +161,6 @@ export default function FlightTestPage() {
         </p>
       </header>
 
-      {/* Controls */}
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div className="flex-1 min-w-[160px]">
           <label htmlFor="flight" className="block text-[13px] font-medium text-tg-text-secondary mb-1">
@@ -203,15 +216,15 @@ export default function FlightTestPage() {
 
       {result && result.found && leg && live && (
         <div className="grid md:grid-cols-[380px_1fr] gap-6 items-start">
-          {/* Phone frame with the REAL card */}
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-2">
               What the traveller sees
             </div>
             <div className="mx-auto w-[360px] max-w-full rounded-[2rem] border-4 border-slate-800 bg-surface overflow-hidden shadow-xl">
               <FlightHero flight={leg} live={live} />
-              <div className="px-5 py-4">
+              <div className="px-5 py-4 space-y-3">
                 <LiveNowPanel flight={leg} live={live} />
+                <AircraftPanel live={live} />
               </div>
             </div>
             {result.coverage && (
@@ -222,7 +235,6 @@ export default function FlightTestPage() {
             )}
           </div>
 
-          {/* Raw */}
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-2">
               Full raw response

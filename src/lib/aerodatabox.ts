@@ -57,7 +57,7 @@ export async function fetchFlight(
   return Array.isArray(arr) && arr.length ? (arr[0] as Record<string, unknown>) : null;
 }
 
-/** Free-tier coverage check: does this airport have live flight updates? */
+/** Free-tier coverage check: does this airport have live flight updates? Needs ICAO. */
 export async function hasLiveFeed(icao?: string): Promise<boolean> {
   if (!icao) return false;
   try {
@@ -107,38 +107,85 @@ export async function getBalance(): Promise<{ creditsRemaining: number } | null>
   }
 }
 
+// --- helpers to read nested movement fields ---------------------------------
+
+function airportField(mv: Record<string, unknown> | undefined, key: string): string | undefined {
+  const ap = mv?.airport as Record<string, unknown> | undefined;
+  const v = ap?.[key];
+  return typeof v === 'string' && v.length ? v : undefined;
+}
+
+/** Prefer revised (live) time, fall back to scheduled. Returns UTC ISO or undefined. */
+function movementTime(mv: Record<string, unknown> | undefined): { scheduled?: string; revised?: string } {
+  const sched = (mv?.scheduledTime as Record<string, unknown> | undefined)?.utc as string | undefined;
+  const revised = (mv?.revisedTime as Record<string, unknown> | undefined)?.utc as string | undefined;
+  return {
+    scheduled: typeof sched === 'string' ? sched : undefined,
+    revised: typeof revised === 'string' ? revised : undefined,
+  };
+}
+
 /**
  * Normalise a raw AeroDataBox flight object into the fields the UI cares about.
  * Pure mapping, no fetch — safe to reuse anywhere.
+ *
+ * Times: we expose BOTH scheduled and revised. `est*Time` is revised-or-
+ * scheduled (a sensible single value for storage/display); `sched*Time` is the
+ * scheduled baseline so the UI can show a strike-through only when revised
+ * genuinely differs. IATA is for display; ICAO is kept for the coverage call.
  */
 export interface NormalisedFlight {
   statusCode: FlightStatusCode;
+
+  depAirportIata?: string;
   depAirportIcao?: string;
+  depAirportName?: string;
+  arrAirportIata?: string;
   arrAirportIcao?: string;
+  arrAirportName?: string;
+
   depTerminal?: string;
   depGate?: string;
   arrTerminal?: string;
   baggageBelt?: string;
   checkInDesk?: string;
-  estDepTime?: string;
-  estArrTime?: string;
+
+  schedDepTime?: string;
+  estDepTime?: string;   // revised || scheduled
+  schedArrTime?: string;
+  estArrTime?: string;   // revised || scheduled
 }
 
 export function normaliseFlight(f: Record<string, unknown> | null): NormalisedFlight | null {
   if (!f) return null;
   const dep = (f.departure || undefined) as Record<string, unknown> | undefined;
   const arr = (f.arrival || undefined) as Record<string, unknown> | undefined;
+
+  const depT = movementTime(dep);
+  const arrT = movementTime(arr);
+
   return {
     statusCode: mapStatus(f.status as string),
-    depAirportIcao: ((dep?.airport as Record<string, unknown>)?.icao as string) ?? undefined,
-    arrAirportIcao: ((arr?.airport as Record<string, unknown>)?.icao as string) ?? undefined,
+
+    depAirportIata: airportField(dep, 'iata'),
+    depAirportIcao: airportField(dep, 'icao'),
+    depAirportName:
+      airportField(dep, 'name') || airportField(dep, 'shortName') || airportField(dep, 'municipalityName'),
+    arrAirportIata: airportField(arr, 'iata'),
+    arrAirportIcao: airportField(arr, 'icao'),
+    arrAirportName:
+      airportField(arr, 'name') || airportField(arr, 'shortName') || airportField(arr, 'municipalityName'),
+
     depTerminal: (dep?.terminal as string) ?? undefined,
     depGate: (dep?.gate as string) ?? undefined,
     arrTerminal: (arr?.terminal as string) ?? undefined,
     baggageBelt: (arr?.baggageBelt as string) ?? undefined,
     checkInDesk: (dep?.checkInDesk as string) ?? undefined,
-    estDepTime: (((dep?.revisedTime as Record<string, unknown>) || {}).utc as string) ?? undefined,
-    estArrTime: (((arr?.revisedTime as Record<string, unknown>) || {}).utc as string) ?? undefined,
+
+    schedDepTime: depT.scheduled,
+    estDepTime: depT.revised || depT.scheduled,
+    schedArrTime: arrT.scheduled,
+    estArrTime: arrT.revised || arrT.scheduled,
   };
 }
 

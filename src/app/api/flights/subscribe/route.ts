@@ -1,59 +1,30 @@
 /**
  * POST /api/flights/subscribe
  *
- * Luna Travel — Flight Hub Phase 1.
- * Resolves one or more booked FlightLegs against AeroDataBox, checks live
- * coverage for the route, registers a credit-based web-hook subscription, and
+ * Luna Travel — Flight Hub. Resolves booked FlightLegs against AeroDataBox,
+ * checks live coverage, registers a credit-based web-hook subscription, and
  * upserts the live-status row into luna_travel.trip_flights.
  *
- * Called server-side (on trip view, or by the upcoming-trips cron). Not a
- * public traveller endpoint — guarded by the internal key, same pattern as the
- * Control internal routes.
- *
- * Conventions honoured:
- *  - AeroDataBox key read from env only (AERODATABOX_API_KEY), never client-side.
- *  - Supabase via getSupabaseAdmin (service role). That client is already
- *    configured with db.schema = 'luna_travel', so we call .from() directly.
- *  - No signature from AeroDataBox exists, so the webhook URL carries a secret
- *    token (AERODATABOX_WEBHOOK_TOKEN) which the webhook route checks.
- *  - All inputs validated before any outbound call.
+ * Internal-only (x-tg-internal-key). Uses the shared @/lib/aerodatabox client
+ * so the AeroDataBox base URL, key, status mapping and lookups live in one place.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import type { FlightStatusCode } from '@/types/booking';
+import {
+  adaConfigured,
+  fetchFlight,
+  hasLiveFeed,
+  createSubscription,
+  normaliseFlight,
+} from '@/lib/aerodatabox';
 
-// ---- Config (the only AeroDataBox wiring; all from env) --------------------
-const ADA_BASE = 'https://prod.api.market/api/v1/aedbx/aerodatabox';
-const ADA_KEY = process.env.AERODATABOX_API_KEY || '';
-const WEBHOOK_BASE = process.env.LUNA_TRAVEL_PUBLIC_URL || ''; // e.g. https://lunatravel.travelify.io
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+const WEBHOOK_BASE = process.env.LUNA_TRAVEL_PUBLIC_URL || '';
 const WEBHOOK_TOKEN = process.env.AERODATABOX_WEBHOOK_TOKEN || '';
 const INTERNAL_KEY = process.env.TG_INTERNAL_KEY || '';
-
-// ---- Helpers ---------------------------------------------------------------
-
-function adaHeaders() {
-  return { 'x-api-market-key': ADA_KEY, Accept: 'application/json' };
-}
-
-/** AeroDataBox FlightStatus -> our FlightStatusCode. */
-function mapStatus(s?: string): FlightStatusCode {
-  switch (s) {
-    case 'CheckIn': return 'CheckIn';
-    case 'Boarding': return 'Boarding';
-    case 'GateClosed': return 'GateClosed';
-    case 'EnRoute':
-    case 'Departed': return 'Departed';
-    case 'Delayed': return 'Delayed';
-    case 'Approaching': return 'Approaching';
-    case 'Arrived': return 'Landed';
-    case 'Canceled': return 'Cancelled';
-    case 'Diverted': return 'Diverted';
-    case 'CanceledUncertain': return 'CancelledUncertain';
-    case 'Expected': return 'Scheduled';
-    default: return 'Unknown';
-  }
-}
 
 const AIRLINE_RE = /^[A-Z0-9]{2,3}$/;
 const FLIGHTNO_RE = /^\d{1,4}[A-Z]?$/;
@@ -63,64 +34,14 @@ interface SubscribeLeg {
   flightLegId: string;
   carrierCode: string;
   flightNumber: string;
-  depDateLocal: string;   // YYYY-MM-DD
-  depAirportIata?: string;
-  arrAirportIata?: string;
+  depDateLocal: string;
 }
-
-/** Look up a single flight's current status on its departure date. */
-async function fetchFlight(carrier: string, number: string, dateLocal: string) {
-  const flightNo = `${carrier}${number}`;
-  const url = `${ADA_BASE}/flights/number/${encodeURIComponent(flightNo)}/${dateLocal}?dateLocalRole=Departure`;
-  const res = await fetch(url, { headers: adaHeaders() });
-  if (res.status === 204) return null;           // no flight that day
-  if (!res.ok) throw new Error(`ADA flight lookup ${res.status}`);
-  const arr = await res.json();
-  return Array.isArray(arr) && arr.length ? arr[0] : null;
-}
-
-/** Free-tier coverage check: does this airport have live flight updates? */
-async function hasLiveFeed(icao?: string): Promise<boolean> {
-  if (!icao) return false;
-  try {
-    const res = await fetch(
-      `${ADA_BASE}/health/services/airports/${encodeURIComponent(icao)}/feeds`,
-      { headers: adaHeaders() },
-    );
-    if (!res.ok) return false;
-    const data = await res.json();
-    const status = data?.liveFlightUpdatesFeed?.status;
-    return status === 'OK' || status === 'OKPartial';
-  } catch {
-    return false;
-  }
-}
-
-/** Register a credit-based web-hook subscription for this flight number. */
-async function createSubscription(carrier: string, number: string): Promise<string | null> {
-  if (!WEBHOOK_BASE || !WEBHOOK_TOKEN) return null; // can't subscribe without a callback URL yet
-  const subjectId = `${carrier}${number}`;
-  const url = `${ADA_BASE}/subscriptions/webhook/FlightByNumber/${encodeURIComponent(subjectId)}`;
-  const callback = `${WEBHOOK_BASE}/api/flights/webhook?t=${encodeURIComponent(WEBHOOK_TOKEN)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { ...adaHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: callback, maxDeliveryRetries: 1 }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  // 200 returns SubscriptionContract; 199 returns FlightNotificationContract w/ subscription
-  return data?.id || data?.subscription?.id || null;
-}
-
-// ---- Route -----------------------------------------------------------------
 
 export async function POST(req: NextRequest) {
-  // Internal-only guard
   if (!INTERNAL_KEY || req.headers.get('x-tg-internal-key') !== INTERNAL_KEY) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
-  if (!ADA_KEY) {
+  if (!adaConfigured()) {
     return NextResponse.json({ ok: false, error: 'flight api not configured' }, { status: 503 });
   }
 
@@ -144,21 +65,22 @@ export async function POST(req: NextRequest) {
     const number = (leg.flightNumber || '').toUpperCase().trim();
     const date = (leg.depDateLocal || '').trim();
 
-    // Validate before any outbound call
     if (!leg.flightLegId || !AIRLINE_RE.test(carrier) || !FLIGHTNO_RE.test(number) || !DATE_RE.test(date)) {
       results.push({ flightLegId: leg.flightLegId || '?', ok: false, reason: 'invalid leg' });
       continue;
     }
 
     try {
-      const flight = await fetchFlight(carrier, number, date);
+      const raw = await fetchFlight(carrier, number, date);
+      const n = normaliseFlight(raw);
 
-      const depIcao = flight?.departure?.airport?.icao || undefined;
-      const arrIcao = flight?.arrival?.airport?.icao || undefined;
+      const depIcao = n?.depAirportIcao;
+      const arrIcao = n?.arrAirportIcao;
       const coverage = (await hasLiveFeed(depIcao)) || (await hasLiveFeed(arrIcao));
 
-      // Only register a live webhook if there's a chance of updates
-      const subscriptionId = coverage ? await createSubscription(carrier, number) : null;
+      const subscriptionId = coverage
+        ? await createSubscription(carrier, number, WEBHOOK_BASE, WEBHOOK_TOKEN)
+        : null;
 
       const row = {
         agency_id: agencyId,
@@ -167,14 +89,14 @@ export async function POST(req: NextRequest) {
         carrier_code: carrier,
         flight_number: number.replace(/[A-Z]$/, ''),
         dep_date_local: date,
-        status_code: mapStatus(flight?.status),
-        est_dep_time: flight?.departure?.revisedTime?.utc ?? null,
-        est_arr_time: flight?.arrival?.revisedTime?.utc ?? null,
-        dep_terminal_live: flight?.departure?.terminal ?? null,
-        dep_gate: flight?.departure?.gate ?? null,
-        arr_terminal_live: flight?.arrival?.terminal ?? null,
-        baggage_belt: flight?.arrival?.baggageBelt ?? null,
-        check_in_desk: flight?.departure?.checkInDesk ?? null,
+        status_code: n?.statusCode ?? 'Unknown',
+        est_dep_time: n?.estDepTime ?? null,
+        est_arr_time: n?.estArrTime ?? null,
+        dep_terminal_live: n?.depTerminal ?? null,
+        dep_gate: n?.depGate ?? null,
+        arr_terminal_live: n?.arrTerminal ?? null,
+        baggage_belt: n?.baggageBelt ?? null,
+        check_in_desk: n?.checkInDesk ?? null,
         ada_subscription_id: subscriptionId,
         dep_airport_icao: depIcao ?? null,
         arr_airport_icao: arrIcao ?? null,
@@ -187,13 +109,12 @@ export async function POST(req: NextRequest) {
         .from('trip_flights')
         .upsert(row, { onConflict: 'booking_ref,flight_leg_id' });
 
-      if (error) {
-        results.push({ flightLegId: leg.flightLegId, ok: false, reason: 'db error' });
-      } else {
-        results.push({ flightLegId: leg.flightLegId, ok: true });
-      }
-    } catch (err) {
-      // Fail closed per leg; one bad leg never blocks the others
+      results.push(
+        error
+          ? { flightLegId: leg.flightLegId, ok: false, reason: 'db error' }
+          : { flightLegId: leg.flightLegId, ok: true },
+      );
+    } catch {
       results.push({ flightLegId: leg.flightLegId, ok: false, reason: 'lookup failed' });
     }
   }

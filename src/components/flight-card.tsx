@@ -102,11 +102,10 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
             dateLine={formatDate(flight.depTime, { weekday: 'short', day: 'numeric', month: 'short' })}
             terminal={flight.depTerminal ? formatTerminal(flight.depTerminal) : undefined}
           />
-          <div className="relative h-12 flex flex-col items-center justify-center pt-6">
-            <div className="w-20 h-px bg-white/35 relative">
-              <IconPlane size={22} className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-teal-light" />
-            </div>
-            <div className="text-[10px] opacity-75 mt-1 tracking-wide">
+          <div className="flex flex-col items-center justify-center pt-[60px]">
+            <IconPlane size={20} className="text-teal-light mb-1.5" />
+            <div className="w-16 h-px bg-white/35" />
+            <div className="text-[10px] opacity-75 mt-1.5 tracking-wide whitespace-nowrap">
               {formatDuration(flight.durationMinutes)}
             </div>
           </div>

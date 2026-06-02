@@ -6,9 +6,8 @@
  * pixel-identically. Driven by a booked FlightLeg plus an optional live
  * overlay; with no overlay it renders booked-only, exactly as before.
  *
- * This component owns the hero (carrier, status pill, route, revised times,
- * meta strip) and the "Live now" panel. The detail page keeps the surrounding
- * page chrome (NavBar, travellers, actions, booking ref).
+ * Owns: the hero (carrier, status pill, route, revised times, meta strip),
+ * the "Live now" panel, and the "Aircraft & tracking" panel.
  */
 
 import { IconPlane } from '@/components/icons';
@@ -30,7 +29,6 @@ const STATUS_STYLES: Record<FlightStatusCode, { label: string; cls: string }> = 
   Unknown: { label: '', cls: 'hidden' },
 };
 
-/** True if the live value exists and differs from booked by a minute or more. */
 function differsFromScheduled(liveIso: string | undefined, bookedIso: string): string | undefined {
   if (!liveIso) return undefined;
   const a = new Date(liveIso).getTime();
@@ -41,6 +39,10 @@ function differsFromScheduled(liveIso: string | undefined, bookedIso: string): s
 
 function hasLiveDetail(live: FlightLiveStatus): boolean {
   return !!(live.depGate || live.depTerminalLive || live.checkInDesk || live.boardingAt || live.baggageBelt);
+}
+
+function hasAircraftDetail(live: FlightLiveStatus): boolean {
+  return !!(live.aircraftModel || live.aircraftReg || (live.liveLat != null && live.liveLon != null));
 }
 
 export function StatusPill({ status }: { status: FlightStatusCode }) {
@@ -54,7 +56,6 @@ export function StatusPill({ status }: { status: FlightStatusCode }) {
   );
 }
 
-/** The branded hero block (carrier, status, route, times, meta). */
 export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightLiveStatus }) {
   const liveStatus = live?.statusCode;
   const depRevised = differsFromScheduled(live?.estDepTime ?? live?.actualDepTime, flight.depTime);
@@ -71,7 +72,6 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
         style={{ background: 'radial-gradient(ellipse at 85% 10%, rgba(0,180,216,0.45), transparent 50%)' }}
       />
       <div className="relative">
-        {/* Carrier */}
         <div className="flex items-center gap-3 mb-4">
           <span className="w-10 h-10 rounded-lg bg-white text-navy font-extrabold text-[15px] flex items-center justify-center">
             {flight.carrierCode}
@@ -84,7 +84,6 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
           </div>
         </div>
 
-        {/* Status pill */}
         {liveStatus && liveStatus !== 'Unknown' && (
           <div className="flex items-center gap-2 mb-4">
             <StatusPill status={liveStatus} />
@@ -94,7 +93,6 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
           </div>
         )}
 
-        {/* Route */}
         <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-start mb-5">
           <Endpoint
             code={flight.depAirport}
@@ -123,7 +121,6 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
           />
         </div>
 
-        {/* Meta strip */}
         {(flight.aircraft || flight.baggageAllowance || flight.pnr) && (
           <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/15">
             {flight.aircraft && <MetaCell label="Aircraft" value={flight.aircraft} />}
@@ -136,7 +133,6 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
   );
 }
 
-/** The "Live now" panel — only renders when live data carries something. */
 export function LiveNowPanel({ flight, live }: { flight: FlightLeg; live?: FlightLiveStatus }) {
   if (!live || !hasLiveDetail(live)) return null;
   const depTerminalLive = live.depTerminalLive;
@@ -146,9 +142,7 @@ export function LiveNowPanel({ flight, live }: { flight: FlightLeg; live?: Fligh
     <section className="bg-surface border border-line-light rounded-2xl p-4">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-3">Live now</h3>
       <ul className="divide-y divide-line-light text-sm">
-        {live.depGate && (
-          <Row label="Gate"><span className="font-semibold tabular">{live.depGate}</span></Row>
-        )}
+        {live.depGate && <Row label="Gate"><span className="font-semibold tabular">{live.depGate}</span></Row>}
         {depTerminalLive && (
           <Row label="Departure terminal">
             {formatTerminal(depTerminalLive)}
@@ -159,8 +153,35 @@ export function LiveNowPanel({ flight, live }: { flight: FlightLeg; live?: Fligh
         )}
         {live.checkInDesk && <Row label="Check-in desk">{live.checkInDesk}</Row>}
         {live.boardingAt && <Row label="Boarding"><span className="tabular">{formatTime(live.boardingAt)}</span></Row>}
-        {live.baggageBelt && (
-          <Row label="Baggage belt"><span className="font-semibold tabular">{live.baggageBelt}</span></Row>
+        {live.baggageBelt && <Row label="Baggage belt"><span className="font-semibold tabular">{live.baggageBelt}</span></Row>}
+      </ul>
+    </section>
+  );
+}
+
+/** Aircraft type, registration, and live position when airborne. */
+export function AircraftPanel({ live }: { live?: FlightLiveStatus }) {
+  if (!live || !hasAircraftDetail(live)) return null;
+  const airborne = live.liveLat != null && live.liveLon != null;
+
+  return (
+    <section className="bg-surface border border-line-light rounded-2xl p-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-3">Aircraft &amp; tracking</h3>
+      <ul className="divide-y divide-line-light text-sm">
+        {live.aircraftModel && <Row label="Aircraft"><span className="font-medium">{live.aircraftModel}</span></Row>}
+        {live.aircraftReg && <Row label="Registration"><span className="tabular">{live.aircraftReg}</span></Row>}
+        {airborne && live.liveAltitudeFt != null && (
+          <Row label="Altitude"><span className="tabular">{Math.round(live.liveAltitudeFt).toLocaleString()} ft</span></Row>
+        )}
+        {airborne && live.liveSpeedKt != null && (
+          <Row label="Ground speed"><span className="tabular">{Math.round(live.liveSpeedKt)} kts</span></Row>
+        )}
+        {airborne && (
+          <Row label="Position">
+            <span className="tabular text-ink-2">
+              {live.liveLat!.toFixed(2)}, {live.liveLon!.toFixed(2)}
+            </span>
+          </Row>
         )}
       </ul>
     </section>

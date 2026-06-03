@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/booking-context';
 import { NavBar } from '@/components/nav-bar';
 import { ActionButton } from '@/components/action-button';
 import { PageEnter } from '@/components/page-enter';
+import { MapSheet } from '@/components/map-sheet';
 import {
   IconLounge,
   IconCar,
@@ -23,6 +25,7 @@ export default function ExtraDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { booking } = useBooking();
+  const [showMap, setShowMap] = useState(false);
   const extra = findExtra(booking, params.id);
 
   if (!extra) {
@@ -122,11 +125,20 @@ export default function ExtraDetailPage() {
           </ul>
         </Panel>
 
-        <ActionButton icon={<IconNavigate size={18} />}>
+        <ActionButton icon={<IconNavigate size={18} />} onClick={() => setShowMap(true)}>
           Find it at {extra.airport}
         </ActionButton>
       </div>
     </main>
+
+    {showMap && (
+      <MapSheet
+        title={extra.name}
+        subtitle={`${extra.airport} airport`}
+        query={`${extra.name}, ${extra.airport} airport`}
+        onClose={() => setShowMap(false)}
+      />
+    )}
     </PageEnter>
   );
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.14.3",
+  "version": "0.14.4",
   "released": "2026-06-03",
-  "notes": "Storyboard now shows every day of the trip from start to end, not only days with events, and themes each day to where you actually are that day (the resort you're resident in, or the destination) with a location label. Quiet days mid-stay show a calm card for the hotel."
+  "notes": "Documents now preview inside the app on phones too. The PDF is rendered to page images on the device instead of relying on the browser's iframe viewer, which Android and iOS refuse to show inline. Open full screen and Download remain as a fallback."
 }

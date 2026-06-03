@@ -51,7 +51,7 @@ export function buildTimeline(booking: Booking): TimelineEvent[] {
       kind: 'flight',
       date: f.depTime,
       endDate: f.arrTime,
-      title: `${f.flightNumber} · ${f.depCity} → ${f.arrCity}`,
+      title: `${f.flightNumber}${f.depCity && f.arrCity ? ` · ${f.depCity} → ${f.arrCity}` : ''}`,
       subtitle: `${f.carrierName} ${cabinLabel(f.cabin)}`,
       meta: `${f.depAirport} → ${f.arrAirport}`,
       href: `/flight/${f.id}`,

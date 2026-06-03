@@ -1,5 +1,5 @@
 {
-  "version": "0.14.9",
+  "version": "0.14.10",
   "released": "2026-06-03",
-  "notes": "Luna chat input is now live — you can type questions, not just tap the suggestions. The catch-all reply is friendlier and points anything off-topic to your agent."
+  "notes": "When Luna can't answer a question she now says so honestly and offers to put you in touch with your agent by email or phone, instead of giving a vague reply with unrelated prompts."
 }

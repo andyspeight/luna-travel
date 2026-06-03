@@ -5,7 +5,7 @@
  * "Check for updates" row in the Me section, so the two can never drift apart.
  * Bump APP_VERSION on every release, alongside public/version.json.
  */
-export const APP_VERSION = '0.14.9';
+export const APP_VERSION = '0.14.10';
 
 /** The version published to the server, or null if it can't be read. */
 export async function getLatestVersion(): Promise<string | null> {

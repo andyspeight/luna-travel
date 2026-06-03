@@ -1,5 +1,5 @@
 {
-  "version": "0.14.7",
+  "version": "0.14.8",
   "released": "2026-06-03",
-  "notes": "Documents now preview inside the app on phones (rendered to page images). Storyboard now gives each day a clear headline (Travel day, Arrive, At leisure, Departure) and themes travel days to the right country so the days are distinct and read in order."
+  "notes": "Storyboard now starts on the real first day of the trip and lines up exactly with the timeline (fixed a phantom leading day caused by a timezone edge). Flight labels and the storyboard location line fall back to airport codes when the live booking has no city names."
 }

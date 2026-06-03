@@ -325,6 +325,8 @@ export default function DocumentsPage() {
  */
 function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const canPreview = !!doc.url && doc.url !== '#';
 
   const showToast = (msg: string) => {
     setShareToast(msg);
@@ -393,7 +395,7 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
       aria-label={doc.name}
     >
       <div
-        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up shadow-xl"
+        className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-surface rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up shadow-xl"
         onClick={(e) => e.stopPropagation()}
         style={{ paddingBottom: 'calc(1.5rem + var(--safe-bottom))' }}
       >
@@ -420,31 +422,43 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
           </div>
         </div>
 
-        {/* Tappable preview area */}
-        <button
-          type="button"
-          onClick={openDoc}
-          className="mb-4 w-full rounded-xl border border-line bg-surface-2 aspect-[3/4] flex items-center justify-center text-ink-3 hover:border-teal/40 hover:bg-teal/5 transition-colors tap"
-          aria-label={`Open ${doc.name}`}
-        >
-          <div className="text-center px-6">
-            <span
-              className="inline-flex w-14 h-16 rounded-lg text-white items-center justify-center mb-3 shadow-md"
-              style={{ background: doc.gradient }}
-            >
-              {doc.icon}
-            </span>
-            <div className="text-xs font-medium text-ink">Tap to open</div>
-            <div className="text-[10px] mt-1 opacity-75">
-              Opens the PDF in your browser
+        {/* In-app PDF preview — keeps the traveller inside the app */}
+        {canPreview ? (
+          <div
+            className="mb-4 relative rounded-xl border border-line bg-surface-2 overflow-hidden"
+            style={{ height: '52vh' }}
+          >
+            {!previewLoaded && (
+              <div className="absolute inset-0 animate-pulse bg-line-light" aria-hidden="true" />
+            )}
+            <iframe
+              title={doc.name}
+              src={doc.url}
+              className="w-full h-full border-0"
+              onLoad={() => setPreviewLoaded(true)}
+            />
+          </div>
+        ) : (
+          <div className="mb-4 w-full rounded-xl border border-line bg-surface-2 aspect-[3/4] flex items-center justify-center text-ink-3">
+            <div className="text-center px-6">
+              <span
+                className="inline-flex w-14 h-16 rounded-lg text-white items-center justify-center mb-3 shadow-md"
+                style={{ background: doc.gradient }}
+              >
+                {doc.icon}
+              </span>
+              <div className="text-xs font-medium text-ink">Preview unavailable</div>
+              <div className="text-[10px] mt-1 opacity-75">
+                This document isn&rsquo;t available in this build
+              </div>
             </div>
           </div>
-        </button>
+        )}
 
         {/* Actions */}
         <div className="space-y-2">
           <ActionButton onClick={openDoc} icon={<IconEye size={18} />}>
-            Open
+            Open full screen
           </ActionButton>
           <div className="grid grid-cols-2 gap-2">
             <ActionButton onClick={shareDoc} variant="secondary" icon={<IconShare size={16} />}>

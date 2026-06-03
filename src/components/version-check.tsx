@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-const CURRENT_VERSION = '0.14.0'; // bumped when we ship a new sprint
+const CURRENT_VERSION = '0.14.1'; // bumped when we ship a new sprint
 const STORAGE_KEY = 'luna-travel.dismissed-version';
 
 /**

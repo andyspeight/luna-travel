@@ -2,9 +2,11 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Instrument_Serif } from 'next/font/google';
 import { BookingProvider } from '@/lib/booking-context';
 import { ThemeProvider } from '@/lib/theme-context';
+import { LocaleProvider } from '@/lib/locale-context';
 import { CoverProvider } from '@/lib/cover-context';
 import { TabBar } from '@/components/tab-bar';
 import { VersionCheck } from '@/components/version-check';
+import { EngagementPing } from '@/components/engagement-ping';
 import './globals.css';
 
 const inter = Inter({
@@ -54,18 +56,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${instrument.variable}`}>
       <body className="font-sans antialiased">
         <ThemeProvider>
-          <BookingProvider>
-            <CoverProvider>
-              <VersionCheck />
-              <div
-                className="min-h-screen pb-[88px]"
-                style={{ paddingTop: 'var(--safe-top)' }}
-              >
-                {children}
-              </div>
-              <TabBar />
-            </CoverProvider>
-          </BookingProvider>
+          <LocaleProvider>
+            <BookingProvider>
+              <CoverProvider>
+                <VersionCheck />
+                <EngagementPing />
+                <div
+                  className="min-h-screen pb-[88px]"
+                  style={{ paddingTop: 'var(--safe-top)' }}
+                >
+                  {children}
+                </div>
+                <TabBar />
+              </CoverProvider>
+            </BookingProvider>
+          </LocaleProvider>
         </ThemeProvider>
       </body>
     </html>

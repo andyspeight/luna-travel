@@ -1,86 +1,90 @@
 /**
  * POST /api/traveller/ping
  *
- * Records that the traveller identified by the lt_session cookie opened the
- * app. Fire-and-forget from the client (booking-context). Updates three
- * engagement columns on the traveller row:
- *   - first_opened_at : set once, on the first ever open
- *   - last_opened_at  : set every ping
- *   - open_count      : bumped only when the previous open was more than the
- *                       session window ago, so flicking back to the app does
- *                       not inflate the count
+ * Lightweight engagement telemetry. The PWA calls this when it opens (and
+ * when it returns to the foreground), so we can report *real* active-user and
+ * install numbers instead of guessing.
  *
- * Auth: the lt_session cookie (same HS256 JWT used by the booking endpoint).
- * No session => 401, which is a harmless no-op for the mock/demo path.
+ * What we record (append-only, one row per open):
+ *   - traveller_id, agency_id  (from the session — never trusted from the body)
+ *   - standalone               (true when launched from a home-screen install:
+ *                               display-mode standalone / iOS navigator.standalone)
+ *   - platform                 (coarse "Safari on iPhone" style string, no full UA)
+ *
+ * We do NOT store IP, precise UA, or any new PII. "Installs" is derived later
+ * as "travellers who have ever opened in standalone mode" — an honest proxy,
+ * since the browser gives no reliable server-side install event.
+ *
+ * Auth: traveller session cookie (lt_session), same as /api/traveller/documents.
+ * Not behind the admin middleware.
+ *
+ * Throttle: at most one row per traveller per 10 minutes. Append-only inserts
+ * are atomic, so there's no read-modify-write race on a counter.
+ *
+ * Always returns 204 (even when throttled or unauthenticated-ish) so the
+ * client never retries or surfaces errors to the traveller.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
+import { shortUserAgent } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const SESSION_COOKIE = 'lt_session';
-const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+const THROTTLE_MS = 10 * 60 * 1000;
+
+const noContent = () => new NextResponse(null, { status: 204 });
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) {
-    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
-  }
-
-  const claims = await verifySession(token);
-  if (!claims) {
-    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
-  }
-
-  let supabase;
+  // Never let telemetry failures bubble up to the traveller.
   try {
-    supabase = getSupabaseAdmin();
+    if (checkSupabaseEnv()) return noContent();
+
+    const token = req.cookies.get(SESSION_COOKIE)?.value;
+    if (!token) return noContent();
+
+    const claims = await verifySession(token);
+    if (!claims) return noContent();
+
+    // Parse body defensively — only the standalone flag is read from it.
+    let standalone = false;
+    try {
+      const body = await req.json();
+      standalone = body?.standalone === true;
+    } catch {
+      /* no/!json body — treat as a plain open */
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Throttle: skip if this traveller already pinged in the last 10 minutes.
+    const since = new Date(Date.now() - THROTTLE_MS).toISOString();
+    const { data: recent } = await supabase
+      .from('app_opens')
+      .select('id')
+      .eq('traveller_id', claims.travellerId)
+      .gte('opened_at', since)
+      .limit(1);
+
+    if (recent && recent.length > 0) return noContent();
+
+    const { error } = await supabase.from('app_opens').insert({
+      traveller_id: claims.travellerId,
+      agency_id: claims.agencyId,
+      standalone,
+      platform: shortUserAgent(req),
+    });
+
+    // If the table doesn't exist yet (migration not run) we just swallow it —
+    // the dashboard shows "—" for these metrics until the migration lands.
+    if (error) console.warn('[ping] insert skipped:', error.message);
+
+    return noContent();
   } catch (e) {
-    console.error('[traveller.ping] supabase init failed:', (e as Error).message);
-    return NextResponse.json({ error: 'server_error' }, { status: 500 });
+    console.warn('[ping] threw:', (e as Error).message);
+    return noContent();
   }
-
-  // Read the current engagement state for this traveller.
-  const { data: row, error: readErr } = await supabase
-    .from('travellers')
-    .select('id, first_opened_at, last_opened_at, open_count')
-    .eq('id', claims.travellerId)
-    .maybeSingle();
-
-  if (readErr) {
-    console.error('[traveller.ping] read failed:', readErr.message);
-    return NextResponse.json({ error: 'query_failed' }, { status: 500 });
-  }
-  if (!row) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  }
-
-  const now = new Date();
-  const lastRaw = row.last_opened_at as string | null;
-  const last = lastRaw ? new Date(lastRaw) : null;
-  const isNewOpen = !last || (now.getTime() - last.getTime()) > SESSION_WINDOW_MS;
-  const currentCount = typeof row.open_count === 'number' ? row.open_count : 0;
-
-  const update: Record<string, unknown> = { last_opened_at: now.toISOString() };
-  if (!row.first_opened_at) {
-    update.first_opened_at = now.toISOString();
-  }
-  if (isNewOpen) {
-    update.open_count = currentCount + 1;
-  }
-
-  const { error: writeErr } = await supabase
-    .from('travellers')
-    .update(update)
-    .eq('id', claims.travellerId);
-
-  if (writeErr) {
-    console.error('[traveller.ping] update failed:', writeErr.message);
-    return NextResponse.json({ error: 'update_failed' }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, counted: isNewOpen });
 }

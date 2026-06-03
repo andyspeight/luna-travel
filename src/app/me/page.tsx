@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { useTheme } from '@/lib/theme-context';
+import { useI18n } from '@/lib/locale-context';
+import { LanguageSetting } from '@/components/language-switcher';
 import { useCover } from '@/lib/cover-context';
-import { useAgentMessages } from '@/lib/use-agent-messages';
 import { PageEnter } from '@/components/page-enter';
 import {
   IconSun,
@@ -26,15 +27,15 @@ import { initials } from '@/lib/format';
 export default function MePage() {
   const { booking } = useBooking();
   const { theme, toggle } = useTheme();
+  const { t } = useI18n();
   const { coverEnabled, toggle: toggleCover } = useCover();
-  const { unreadCount } = useAgentMessages();
   const lead = booking.travellers.find((t) => t.isLead) ?? booking.travellers[0];
 
   return (
     <PageEnter>
       <main className="px-5 pt-2 pb-6">
         <header className="py-3">
-          <h1 className="text-[28px] font-bold tracking-tight text-ink leading-none">Me</h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-ink leading-none">{t('me.title')}</h1>
         </header>
 
         {/* Identity card */}
@@ -49,7 +50,7 @@ export default function MePage() {
             </div>
             <div className="text-xs text-ink-2 truncate">{booking.leadEmail}</div>
             <div className="text-[11px] text-ink-3 mt-0.5">
-              Lead traveller · {booking.reference}
+              {t('me.leadTraveller')} · {booking.reference}
             </div>
           </div>
         </section>
@@ -59,14 +60,14 @@ export default function MePage() {
           <ListLink
             href="/travellers"
             icon={<IconUsers size={18} />}
-            title="Travellers"
-            sub={`${booking.travellers.length} on this booking`}
+            title={t('me.travellers')}
+            sub={t('me.travellersSub', { n: booking.travellers.length })}
           />
         </List>
 
         {/* Agency contact */}
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mt-6 mb-2 px-1">
-          Your agent
+          {t('me.yourAgent')}
         </h2>
         <section className="rounded-2xl bg-surface border border-line-light overflow-hidden">
           <div
@@ -102,20 +103,20 @@ export default function MePage() {
             <ContactRow
               href={`tel:${booking.agency.phone.replace(/\s/g, '')}`}
               icon={<IconPhone size={16} />}
-              label="Call"
+              label={t('me.call')}
               value={booking.agency.phone}
             />
             <ContactRow
               href={`mailto:${booking.agency.email}`}
               icon={<IconMail size={16} />}
-              label="Email"
+              label={t('me.email')}
               value={booking.agency.email}
             />
             {booking.agency.emergencyPhone && (
               <ContactRow
                 href={`tel:${booking.agency.emergencyPhone.replace(/\s/g, '')}`}
                 icon={<IconWarning size={16} />}
-                label="24h emergency"
+                label={t('me.emergency')}
                 value={booking.agency.emergencyPhone}
                 emphasised
               />
@@ -125,33 +126,33 @@ export default function MePage() {
 
         {/* Settings */}
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mt-6 mb-2 px-1">
-          Settings
+          {t('me.settings')}
         </h2>
         <List>
           <ListToggle
             on={coverEnabled}
             onChange={toggleCover}
             icon={<IconPin size={18} />}
-            title="Cover mode"
-            sub="Open the app on a destination splash"
+            title={t('me.coverMode')}
+            sub={t('me.coverSub')}
           />
           <ListAction
             onClick={() => toggle()}
             icon={theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
-            title="Appearance"
-            sub={theme === 'dark' ? 'Dark mode' : 'Light mode'}
+            title={t('me.appearance')}
+            sub={theme === 'dark' ? t('me.dark') : t('me.light')}
           />
+          <LanguageSetting />
           <ListLink
             href="/notifications"
             icon={<IconBell size={18} />}
-            title="Notifications"
-            sub="Messages from your agent, trip updates and reminders"
-            badge={unreadCount}
+            title={t('me.notifications')}
+            sub={t('me.notificationsSub')}
           />
           <ListAction
             icon={<IconHelp size={18} />}
-            title="Help &amp; FAQ"
-            sub="Ask Luna, or contact your agent"
+            title={t('me.help')}
+            sub={t('me.helpSub')}
           />
         </List>
 
@@ -160,13 +161,13 @@ export default function MePage() {
           <ListLink
             href="/welcome"
             icon={<IconLogOut size={18} />}
-            title="Sign out"
+            title={t('me.signOut')}
             destructive
           />
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
-          Luna Travel · v0.8 prototype · {booking.agency.name}
+          Luna Travel · v0.12 · {booking.agency.name}
         </p>
       </main>
     </PageEnter>
@@ -188,16 +189,13 @@ function ListLink({
   title,
   sub,
   destructive,
-  badge,
 }: {
   href: string;
   icon: React.ReactNode;
   title: string;
   sub?: string;
   destructive?: boolean;
-  badge?: number;
 }) {
-  const showBadge = typeof badge === 'number' && badge > 0;
   return (
     <Link
       href={href}
@@ -219,11 +217,6 @@ function ListLink({
         </div>
         {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
       </div>
-      {showBadge && (
-        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center leading-none flex-shrink-0">
-          {badge > 9 ? '9+' : badge}
-        </span>
-      )}
       {!destructive && <IconChevR size={18} className="text-ink-3 flex-shrink-0" />}
     </Link>
   );

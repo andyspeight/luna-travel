@@ -16,24 +16,28 @@ import {
   IconChevR,
   IconPin,
   IconClock,
+  IconMap,
+  IconCompass,
 } from '@/components/icons';
 import {
   countdownTo,
-  countdownLabel,
   formatDayMonth,
   formatTime,
   type CountdownParts,
 } from '@/lib/format';
 import { buildTimeline, nextEvent, type TimelineEvent } from '@/lib/booking-helpers';
 import { destinationHero } from '@/lib/hero';
+import { InspirationCard } from '@/components/inspiration-card';
+import { getInspirations } from '@/data/inspirations';
+import { useI18n } from '@/lib/locale-context';
 import { PageEnter } from '@/components/page-enter';
 import { CoverSplash } from '@/components/cover-splash';
 import { useCover } from '@/lib/cover-context';
-import { useAgentMessages } from '@/lib/use-agent-messages';
 
 export default function HomePage() {
   const { booking } = useBooking();
   const { coverEnabled, coverDismissed } = useCover();
+  const { t } = useI18n();
   const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
 
   useEffect(() => {
@@ -47,6 +51,8 @@ export default function HomePage() {
   const upcoming = buildTimeline(booking).filter((e) => !e.past).slice(0, 3);
   const hero = destinationHero(booking.primaryCountryCode);
   const hasFlights = booking.flights.length > 0;
+  const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
+  const inspirations = getInspirations(booking.primaryCountryCode);
 
   // Cover mode: full-bleed splash takes over the home route until the user
   // taps a dock action (which calls dismiss()). The dashboard then becomes
@@ -78,10 +84,10 @@ export default function HomePage() {
       {/* Greeting */}
       <div className="mt-2 mb-5">
         <p className="text-xs uppercase tracking-wide text-ink-3 font-medium">
-          {timeOfDayGreeting()}
+          {t(greetingKey())}
         </p>
         <h1 className="font-serif text-[34px] leading-tight text-ink">
-          Hello{' '}
+          {t('home.hello')}{' '}
           <em className="not-italic font-serif italic text-teal-dark dark:text-teal-light">
             {lead.firstName}
           </em>
@@ -89,8 +95,44 @@ export default function HomePage() {
         </h1>
       </div>
 
-      {/* Message from your agent — prominent so it can't be missed */}
-      <AgentBanner />
+      {/* Post-trip: lead with rebooking. Once the trip is over, the countdown
+          is spent — turn the top of the home screen into "where next?". */}
+      {tripOver && (
+        <Link href="/inspiration" className="block mb-4">
+          <article className="relative rounded-3xl overflow-hidden shadow-md p-5 text-white min-h-[132px] flex flex-col justify-end">
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(135deg, #1B2B5B 0%, #0096B7 60%, #00B4D8 100%)' }}
+            />
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(ellipse at 80% 10%, rgba(255,255,255,0.22), transparent 55%)',
+              }}
+            />
+            <div className="relative flex items-center gap-3">
+              <span className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
+                <IconCompass size={22} />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[11px] uppercase tracking-wider opacity-90">
+                  {t('next.welcomeHome')}
+                </div>
+                <h2 className="font-serif text-2xl leading-tight">
+                  <em>{t('next.whereNext')}</em>
+                </h2>
+                <p className="text-xs opacity-90 mt-0.5">
+                  {t('next.lovedX', { dest: booking.destinationLabel, agency: booking.agency.name })}
+                </p>
+              </div>
+              <IconChevR size={20} className="ml-auto flex-shrink-0 opacity-90" />
+            </div>
+          </article>
+        </Link>
+      )}
 
       {/* Hero trip card */}
       <Link href="/itinerary" className="block">
@@ -114,7 +156,7 @@ export default function HomePage() {
             <div className="relative flex justify-between items-start">
               <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-light shadow-[0_0_0_3px_rgba(72,202,228,0.3)]" />
-                {booking.status === 'confirmed' ? 'Upcoming' : booking.status}
+                {booking.status === 'confirmed' ? t('home.upcoming') : booking.status}
               </span>
               <span className="text-[11px] opacity-80 tabular tracking-wide">
                 REF · {booking.reference}
@@ -134,10 +176,10 @@ export default function HomePage() {
           {/* Countdown strip */}
           <div className="grid grid-cols-4 p-5 pb-3 divide-x divide-line-light">
             {[
-              { v: parts.days, l: 'Days' },
-              { v: parts.hours, l: 'Hours' },
-              { v: parts.minutes, l: 'Mins' },
-              { v: parts.seconds, l: 'Secs' },
+              { v: parts.days, l: t('cd.days') },
+              { v: parts.hours, l: t('cd.hours') },
+              { v: parts.minutes, l: t('cd.mins') },
+              { v: parts.seconds, l: t('cd.secs') },
             ].map((c) => (
               <div key={c.l} className="text-center">
                 <div className="text-2xl font-bold text-navy dark:text-teal-light tabular leading-none">
@@ -150,32 +192,33 @@ export default function HomePage() {
             ))}
           </div>
           <div className="text-center text-[11px] text-ink-2 pb-4">
-            {countdownLabel(booking.tripStartEvent)}
+            {t(countdownKey(booking.tripStartEvent))}
           </div>
         </article>
       </Link>
 
       {/* Quick tiles */}
-      <div className="grid grid-cols-4 gap-2 mt-4">
+      <div className="grid grid-cols-5 gap-2 mt-4">
         <QuickTile
           href={hasFlights ? `/flight/${booking.flights[0].id}` : '/itinerary'}
           icon={<IconPlane size={18} />}
-          label={hasFlights ? 'Flights' : 'Itinerary'}
+          label={hasFlights ? t('tile.flights') : t('tile.plan')}
         />
         <QuickTile
           href={`/hotel/${booking.hotels[0]?.id ?? ''}`}
           icon={<IconBed size={18} />}
-          label="Hotel"
+          label={t('tile.hotel')}
           disabled={!booking.hotels.length}
         />
-        <QuickTile href="/documents" icon={<IconDoc size={18} />} label="Docs" />
-        <QuickTile href="/luna" icon={<IconChat size={18} />} label="Ask Luna" />
+        <QuickTile href="/map" icon={<IconMap size={18} />} label={t('tile.map')} />
+        <QuickTile href="/documents" icon={<IconDoc size={18} />} label={t('tile.docs')} />
+        <QuickTile href="/luna" icon={<IconChat size={18} />} label={t('tile.luna')} />
       </div>
 
       {/* Up next */}
       {next && (
         <section className="mt-7">
-          <SectionHeading title="Up next" seeAllHref="/itinerary" />
+          <SectionHeading title={t('home.upNext')} seeAllHref="/itinerary" />
           <UpNextCard event={next} />
         </section>
       )}
@@ -183,7 +226,7 @@ export default function HomePage() {
       {/* Upcoming list (after the next one) */}
       {upcoming.length > 1 && (
         <section className="mt-6">
-          <SectionHeading title="Coming up" seeAllHref="/itinerary" />
+          <SectionHeading title={t('home.comingUp')} seeAllHref="/itinerary" />
           <ul className="space-y-2">
             {upcoming.slice(1).map((e) => (
               <li key={e.id}>
@@ -196,7 +239,7 @@ export default function HomePage() {
 
       {/* Destination guide */}
       <section className="mt-6">
-        <SectionHeading title="Get to know it" />
+        <SectionHeading title={t('home.getToKnow')} />
         <Link
           href="/destination"
           className="block rounded-2xl overflow-hidden bg-surface border border-line-light hover:shadow-sm transition-shadow tap"
@@ -221,13 +264,13 @@ export default function HomePage() {
             </div>
             <div className="flex-1 p-4 min-w-0">
               <div className="text-[11px] uppercase tracking-wider text-ink-3 font-semibold">
-                Destination guide
+                {t('home.destGuide')}
               </div>
               <div className="text-[15px] font-semibold text-ink mt-0.5 leading-tight">
                 {booking.destinationLabel}
               </div>
               <div className="text-xs text-ink-2 mt-1 line-clamp-2">
-                Visa, weather, currency, insider tips — everything we&rsquo;d tell a friend.
+                {t('home.destBlurb')}
               </div>
             </div>
             <div className="flex items-center pr-4 text-ink-3">
@@ -237,10 +280,30 @@ export default function HomePage() {
         </Link>
       </section>
 
+      {/* Inspiration teaser — discoverable before the trip, prominent after.
+          The dedicated /inspiration route carries the full collection. */}
+      {inspirations.length > 0 && (
+        <section className="mt-6">
+          <SectionHeading
+            title={tripOver ? t('next.whereNext') : t('home.teaserPre')}
+            seeAllHref="/inspiration"
+          />
+          <div className="-mx-5 px-5 overflow-x-auto scrollbar-none">
+            <div className="flex gap-3" style={{ width: 'max-content' }}>
+              {inspirations.slice(0, 4).map((ins) => (
+                <div key={ins.id} className="w-[200px] flex-shrink-0">
+                  <InspirationCard inspiration={ins} agency={booking.agency} variant="compact" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Airport extras */}
       {booking.airportExtras.length > 0 && (
         <section className="mt-6">
-          <SectionHeading title="Airport extras" />
+          <SectionHeading title={t('home.airportExtras')} />
           <ul className="space-y-2">
             {booking.airportExtras.map((x) => (
               <li key={x.id}>
@@ -285,55 +348,17 @@ export default function HomePage() {
   );
 }
 
-function timeOfDayGreeting(): string {
+function greetingKey(): string {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'home.morning';
+  if (h < 18) return 'home.afternoon';
+  return 'home.evening';
 }
 
-function AgentBanner() {
-  const { unreadCount, latest } = useAgentMessages();
-  if (unreadCount === 0 || !latest) return null;
-  const urgent = latest.priority === 'urgent';
-  return (
-    <Link href="/notifications" className="block mb-5">
-      <div
-        className="rounded-2xl p-4 text-white relative overflow-hidden shadow-md hover:shadow-lg transition-shadow tap"
-        style={{
-          background: urgent
-            ? 'linear-gradient(135deg, #7F1D1D 0%, #B91C1C 100%)'
-            : 'linear-gradient(135deg, #1B2B5B 0%, #2A3F7A 100%)',
-        }}
-      >
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(ellipse at 90% 15%, rgba(0,180,216,0.35), transparent 55%)',
-          }}
-        />
-        <div className="relative flex items-center gap-3">
-          <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-            <IconChat size={20} />
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-wider font-semibold opacity-80">
-              {unreadCount > 1 ? `${unreadCount} new messages` : 'New message from your agent'}
-            </div>
-            <div className="text-sm font-semibold leading-snug truncate mt-0.5">
-              {latest.subject || latest.body}
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/15 rounded-full px-2.5 py-1 flex-shrink-0">
-            View
-            <IconChevR size={14} />
-          </span>
-        </div>
-      </div>
-    </Link>
-  );
+function countdownKey(event: string): string {
+  if (event === 'flight') return 'cd.fly';
+  if (event === 'check-in') return 'cd.checkin';
+  return 'cd.travel';
 }
 
 function QuickTile({

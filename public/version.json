@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
-  "released": "2026-05-27",
-  "notes": "Prototype complete (6 sprints). Supabase-backed agency + admin platform live: invite/QR redemption validated against Travelify, signed-URL document storage, hero image manager, audit logging, Travelgenix ID SSO. Traveller PWA still on mock bookings."
+  "version": "0.14.0",
+  "released": "2026-06-02",
+  "notes": "Real engagement telemetry: the app records opens and install state so the admin Overview can show true installs, active users (7d/30d) and install rate. Requires the app_opens table migration. Traveller-facing features unchanged from 0.12.0."
 }

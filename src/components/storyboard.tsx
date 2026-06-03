@@ -1,11 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import type { Booking, Hotel } from '@/types/booking';
-import {
-  buildTimeline,
-  type TimelineEvent,
-} from '@/lib/booking-helpers';
+import type { Booking, Hotel, FlightLeg } from '@/types/booking';
+import { buildTimeline, type TimelineEvent } from '@/lib/booking-helpers';
 import { destinationHero } from '@/lib/hero';
 import { useI18n } from '@/lib/locale-context';
 import { formatDate, formatTime } from '@/lib/format';
@@ -22,12 +19,13 @@ import {
 /**
  * Storyboard — the image-led, day-by-day visual itinerary.
  *
- * Renders EVERY day of the trip from start to end (not only days that happen
- * to carry an event), and themes each day to where the traveller actually is
- * that day — the hotel they're resident in, otherwise the destination. Built
- * over the same canonical timeline the Itinerary list uses, so the two views
- * can't drift apart.
+ * Renders EVERY day of the trip from start to end, themes each day to where
+ * the traveller actually is that day (the hotel in residence, or the country
+ * they're travelling through), and gives each day a clear headline so the
+ * sequence reads at a glance. Built over the same canonical timeline as the
+ * Itinerary list, so event order can never diverge from it.
  */
+
 function dayKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
@@ -61,10 +59,40 @@ function hotelForDay(booking: Booking, day: string): Hotel | undefined {
   return booking.hotels.find((h) => dayKey(h.checkIn) <= day && day <= dayKey(h.checkOut));
 }
 
+/**
+ * Compact IATA → ISO-2 lookup so a pure travel day can be themed to the right
+ * country instead of falling back to the destination. Unknown airports fall
+ * back gracefully to the trip's primary country, so it never breaks.
+ */
+const IATA_COUNTRY: Record<string, string> = {
+  LHR: 'GB', LGW: 'GB', STN: 'GB', LTN: 'GB', LCY: 'GB', SEN: 'GB', MAN: 'GB', BHX: 'GB',
+  EDI: 'GB', GLA: 'GB', BRS: 'GB', NCL: 'GB', LPL: 'GB', LBA: 'GB', EMA: 'GB', BFS: 'GB',
+  BHD: 'GB', ABZ: 'GB', CWL: 'GB', DSA: 'GB', NWI: 'GB', EXT: 'GB',
+  DUB: 'IE', ORK: 'IE', SNN: 'IE',
+  MAD: 'ES', BCN: 'ES', AGP: 'ES', PMI: 'ES', ALC: 'ES', TFS: 'ES', TFN: 'ES', LPA: 'ES',
+  ACE: 'ES', FUE: 'ES', IBZ: 'ES', MAH: 'ES', VLC: 'ES', SVQ: 'ES',
+  LIS: 'PT', OPO: 'PT', FAO: 'PT', FNC: 'PT', PDL: 'PT',
+  CDG: 'FR', ORY: 'FR', NCE: 'FR', LYS: 'FR', MRS: 'FR',
+  FCO: 'IT', MXP: 'IT', LIN: 'IT', VCE: 'IT', NAP: 'IT', BLQ: 'IT', CTA: 'IT', PMO: 'IT',
+  ATH: 'GR', HER: 'GR', RHO: 'GR', CFU: 'GR', JTR: 'GR', JMK: 'GR', SKG: 'GR', KGS: 'GR', ZTH: 'GR',
+  AMS: 'NL', FRA: 'DE', MUC: 'DE', BER: 'DE', DUS: 'DE', HAM: 'DE',
+  ZRH: 'CH', GVA: 'CH', VIE: 'AT', SZG: 'AT',
+  IST: 'TR', SAW: 'TR', AYT: 'TR', DLM: 'TR', BJV: 'TR', ADB: 'TR',
+  HRG: 'EG', SSH: 'EG', CAI: 'EG',
+  DXB: 'AE', AUH: 'AE', SHJ: 'AE', DOH: 'QA', MLE: 'MV',
+  JFK: 'US', EWR: 'US', LGA: 'US', LAX: 'US', MCO: 'US', MIA: 'US', SFO: 'US', LAS: 'US', BOS: 'US', ORD: 'US',
+  BKK: 'TH', DMK: 'TH', HKT: 'TH', SIN: 'SG', HKG: 'HK',
+  MRU: 'MU', CMB: 'LK', BGI: 'BB', MBJ: 'JM', KIN: 'JM',
+  CUN: 'MX', PUJ: 'DO', SID: 'CV', BVC: 'CV',
+  RAK: 'MA', AGA: 'MA', TUN: 'TN', MIR: 'TN', DJE: 'TN',
+  LCA: 'CY', PFO: 'CY', MLA: 'MT', DBV: 'HR', SPU: 'HR', ZAG: 'HR',
+  TGD: 'ME', TIV: 'ME', KEF: 'IS',
+};
+
 export function Storyboard({ booking }: { booking: Booking }) {
   const events = buildTimeline(booking);
 
-  // Group events by UTC day.
+  // Group events by UTC day (events are already globally time-sorted).
   const byDay = new Map<string, TimelineEvent[]>();
   for (const e of events) {
     const k = dayKey(e.date);
@@ -73,11 +101,9 @@ export function Storyboard({ booking }: { booking: Booking }) {
     byDay.set(k, list);
   }
 
-  // Full day range: trip start → trip end, falling back to event days.
   const start = booking.tripStart || events[0]?.date || '';
   const end = booking.tripEnd || events[events.length - 1]?.date || '';
-  const dayList =
-    start && end ? eachDay(start, end) : Array.from(byDay.keys()).sort();
+  const dayList = start && end ? eachDay(start, end) : Array.from(byDay.keys()).sort();
 
   if (dayList.length === 0) {
     return (
@@ -115,22 +141,56 @@ function DayScene({
 }) {
   const { t } = useI18n();
 
-  // Theme the scene to where the traveller is that day: the hotel they're
-  // resident in, otherwise the trip's primary destination.
   const dayHotel = hotelForDay(booking, dayIso);
-  const cc = dayHotel?.countryCode ?? booking.primaryCountryCode;
+
+  // Flights that touch this day (depart or arrive).
+  const dayFlights = booking.flights.filter(
+    (f) => dayKey(f.depTime) === dayIso || dayKey(f.arrTime) === dayIso,
+  );
+  const arrivingToday = dayFlights.filter((f) => dayKey(f.arrTime) === dayIso);
+  const repFlight: FlightLeg | undefined =
+    arrivingToday[arrivingToday.length - 1] ?? dayFlights[dayFlights.length - 1];
+
+  // Theme: hotel in residence wins; else the country of the day's flight; else
+  // the trip's primary destination.
+  let cc = booking.primaryCountryCode;
+  if (dayHotel) {
+    cc = dayHotel.countryCode;
+  } else if (repFlight) {
+    const airport = arrivingToday.length ? repFlight.arrAirport : repFlight.depAirport;
+    cc = IATA_COUNTRY[airport] ?? booking.primaryCountryCode;
+  }
   const hero = destinationHero(cc);
 
-  const hasEvents = events.length > 0;
-  const headline = hasEvents
-    ? events[0]?.title ?? booking.destinationLabel
-    : dayHotel
-      ? 'At leisure'
-      : booking.destinationLabel;
+  const hasCheckIn = events.some((e) => e.kind === 'hotel-checkin');
+  const hasCheckOut = events.some((e) => e.kind === 'hotel-checkout');
+  const hasFlight = events.some((e) => e.kind === 'flight');
 
-  const locationLabel = dayHotel
-    ? [dayHotel.resort, dayHotel.city, dayHotel.country].filter(Boolean).join(' · ')
-    : booking.destinationLabel;
+  // A clear, descriptive headline so every day reads at a glance.
+  let headline: string;
+  if (hasCheckIn && dayHotel) {
+    headline = `Arrive · ${dayHotel.resort || dayHotel.city || dayHotel.country}`;
+  } else if (hasCheckOut) {
+    headline = 'Departure';
+  } else if (!dayHotel && hasFlight) {
+    headline = 'Travel day';
+  } else if (dayHotel) {
+    headline = 'At leisure';
+  } else {
+    headline = booking.destinationLabel;
+  }
+
+  // Location line under the headline — where you are that day.
+  let locationLabel: string;
+  if (dayHotel) {
+    locationLabel = [dayHotel.resort, dayHotel.city, dayHotel.country].filter(Boolean).join(' · ');
+  } else if (repFlight) {
+    locationLabel = `${repFlight.depCity} → ${repFlight.arrCity}`;
+  } else {
+    locationLabel = booking.destinationLabel;
+  }
+
+  const hasEvents = events.length > 0;
 
   return (
     <article className="rounded-3xl overflow-hidden shadow-sm border border-line-light">
@@ -143,7 +203,6 @@ function DayScene({
           />
         )}
         <div aria-hidden className="absolute inset-0" style={{ background: hero.glow }} />
-        {/* Bottom legibility gradient */}
         <div
           aria-hidden
           className="absolute inset-0"
@@ -153,7 +212,7 @@ function DayScene({
           }}
         />
 
-        {/* Day chip */}
+        {/* Day chip + date */}
         <div className="relative flex items-center justify-between">
           <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
             {t('itin.day')} {dayNumber}
@@ -193,7 +252,6 @@ function DayScene({
                 </li>
               ))
             ) : dayHotel ? (
-              // Quiet day mid-stay: one calm row pointing at the hotel.
               <li>
                 <Link
                   href={`/hotel/${dayHotel.id}`}

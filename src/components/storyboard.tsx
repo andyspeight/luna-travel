@@ -1,10 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import type { Booking } from '@/types/booking';
+import type { Booking, Hotel } from '@/types/booking';
 import {
   buildTimeline,
-  groupByDay,
   type TimelineEvent,
 } from '@/lib/booking-helpers';
 import { destinationHero } from '@/lib/hero';
@@ -23,16 +22,64 @@ import {
 /**
  * Storyboard — the image-led, day-by-day visual itinerary.
  *
- * A presentation layer over the same canonical timeline the Itinerary list
- * uses (buildTimeline + groupByDay), so the two views can never drift out of
- * sync. Each day becomes a full-bleed scene card themed to that day's
- * destination, with the day's events listed over a legibility gradient.
+ * Renders EVERY day of the trip from start to end (not only days that happen
+ * to carry an event), and themes each day to where the traveller actually is
+ * that day — the hotel they're resident in, otherwise the destination. Built
+ * over the same canonical timeline the Itinerary list uses, so the two views
+ * can't drift apart.
  */
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    d.getUTCDate(),
+  ).padStart(2, '0')}`;
+}
+
+/** Inclusive list of YYYY-MM-DD keys from start to end (UTC). */
+function eachDay(startIso: string, endIso: string): string[] {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  let cur = Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate());
+  const last = Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate());
+  const out: string[] = [];
+  let guard = 0;
+  while (cur <= last && guard < 400) {
+    const d = new Date(cur);
+    out.push(
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
+        d.getUTCDate(),
+      ).padStart(2, '0')}`,
+    );
+    cur += 86_400_000;
+    guard += 1;
+  }
+  return out;
+}
+
+/** The hotel the traveller is resident in on a given day (check-in..check-out inclusive). */
+function hotelForDay(booking: Booking, day: string): Hotel | undefined {
+  return booking.hotels.find((h) => dayKey(h.checkIn) <= day && day <= dayKey(h.checkOut));
+}
+
 export function Storyboard({ booking }: { booking: Booking }) {
   const events = buildTimeline(booking);
-  const days = groupByDay(events);
 
-  if (days.length === 0) {
+  // Group events by UTC day.
+  const byDay = new Map<string, TimelineEvent[]>();
+  for (const e of events) {
+    const k = dayKey(e.date);
+    const list = byDay.get(k) ?? [];
+    list.push(e);
+    byDay.set(k, list);
+  }
+
+  // Full day range: trip start → trip end, falling back to event days.
+  const start = booking.tripStart || events[0]?.date || '';
+  const end = booking.tripEnd || events[events.length - 1]?.date || '';
+  const dayList =
+    start && end ? eachDay(start, end) : Array.from(byDay.keys()).sort();
+
+  if (dayList.length === 0) {
     return (
       <div className="mt-6 p-6 rounded-2xl bg-surface border border-line-light text-center">
         <p className="text-sm text-ink-2">No events on this trip yet.</p>
@@ -42,13 +89,13 @@ export function Storyboard({ booking }: { booking: Booking }) {
 
   return (
     <div className="space-y-4 pt-1">
-      {days.map(({ day, events: dayEvents }, i) => (
+      {dayList.map((day, i) => (
         <DayScene
           key={day}
           booking={booking}
           dayIso={day}
           dayNumber={i + 1}
-          events={dayEvents}
+          events={byDay.get(day) ?? []}
         />
       ))}
     </div>
@@ -67,17 +114,23 @@ function DayScene({
   events: TimelineEvent[];
 }) {
   const { t } = useI18n();
-  // Theme the scene to the day's destination: prefer a hotel's country that
-  // day, else the trip's primary country.
-  const hotelEvent = events.find(
-    (e) => e.kind === 'hotel-checkin' || e.kind === 'hotel-checkout',
-  );
-  const hotelId = hotelEvent?.id.replace(/^hotel-(checkin|checkout)-/, '');
-  const hotel = booking.hotels.find((h) => h.id === hotelId);
-  const cc = hotel?.countryCode ?? booking.primaryCountryCode;
+
+  // Theme the scene to where the traveller is that day: the hotel they're
+  // resident in, otherwise the trip's primary destination.
+  const dayHotel = hotelForDay(booking, dayIso);
+  const cc = dayHotel?.countryCode ?? booking.primaryCountryCode;
   const hero = destinationHero(cc);
 
-  const headline = events[0]?.title ?? booking.destinationLabel;
+  const hasEvents = events.length > 0;
+  const headline = hasEvents
+    ? events[0]?.title ?? booking.destinationLabel
+    : dayHotel
+      ? 'At leisure'
+      : booking.destinationLabel;
+
+  const locationLabel = dayHotel
+    ? [dayHotel.resort, dayHotel.city, dayHotel.country].filter(Boolean).join(' · ')
+    : booking.destinationLabel;
 
   return (
     <article className="rounded-3xl overflow-hidden shadow-sm border border-line-light">
@@ -110,27 +163,50 @@ function DayScene({
           </span>
         </div>
 
-        {/* Headline + events */}
+        {/* Headline + location + events */}
         <div className="relative mt-auto pt-20">
           <h3 className="font-serif text-2xl leading-tight drop-shadow-sm">
             <em>{headline}</em>
           </h3>
+          {locationLabel && (
+            <div className="mt-1 inline-flex items-center gap-1.5 text-[12px] opacity-90">
+              <IconPin size={13} />
+              <span className="truncate">{locationLabel}</span>
+            </div>
+          )}
+
           <ul className="mt-3 space-y-1.5">
-            {events.map((e) => (
-              <li key={e.id}>
+            {hasEvents ? (
+              events.map((e) => (
+                <li key={e.id}>
+                  <Link
+                    href={e.href}
+                    className="group flex items-center gap-2.5 rounded-xl bg-white/12 hover:bg-white/20 backdrop-blur-sm px-3 py-2 transition-colors"
+                  >
+                    <span className="flex-shrink-0 opacity-90">{kindGlyph(e.kind)}</span>
+                    <span className="text-xs tabular opacity-90 flex-shrink-0 w-11">
+                      {formatTime(e.date)}
+                    </span>
+                    <span className="text-[13px] font-medium truncate flex-1">{e.title}</span>
+                    <IconChevR size={15} className="opacity-70 flex-shrink-0" />
+                  </Link>
+                </li>
+              ))
+            ) : dayHotel ? (
+              // Quiet day mid-stay: one calm row pointing at the hotel.
+              <li>
                 <Link
-                  href={e.href}
+                  href={`/hotel/${dayHotel.id}`}
                   className="group flex items-center gap-2.5 rounded-xl bg-white/12 hover:bg-white/20 backdrop-blur-sm px-3 py-2 transition-colors"
                 >
-                  <span className="flex-shrink-0 opacity-90">{kindGlyph(e.kind)}</span>
-                  <span className="text-xs tabular opacity-90 flex-shrink-0 w-11">
-                    {formatTime(e.date)}
+                  <span className="flex-shrink-0 opacity-90">
+                    <IconBed size={15} />
                   </span>
-                  <span className="text-[13px] font-medium truncate flex-1">{e.title}</span>
+                  <span className="text-[13px] font-medium truncate flex-1">{dayHotel.name}</span>
                   <IconChevR size={15} className="opacity-70 flex-shrink-0" />
                 </Link>
               </li>
-            ))}
+            ) : null}
           </ul>
         </div>
       </div>

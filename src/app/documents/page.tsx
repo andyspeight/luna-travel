@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
 import { PageEnter } from '@/components/page-enter';
 import { ActionButton } from '@/components/action-button';
@@ -325,7 +325,6 @@ export default function DocumentsPage() {
  */
 function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
   const [shareToast, setShareToast] = useState<string | null>(null);
-  const [previewLoaded, setPreviewLoaded] = useState(false);
   const canPreview = !!doc.url && doc.url !== '#';
 
   const showToast = (msg: string) => {
@@ -422,22 +421,9 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
           </div>
         </div>
 
-        {/* In-app PDF preview — keeps the traveller inside the app */}
+        {/* In-app PDF preview — rendered to canvas so it works on phones too */}
         {canPreview ? (
-          <div
-            className="mb-4 relative rounded-xl border border-line bg-surface-2 overflow-hidden"
-            style={{ height: '52vh' }}
-          >
-            {!previewLoaded && (
-              <div className="absolute inset-0 animate-pulse bg-line-light" aria-hidden="true" />
-            )}
-            <iframe
-              title={doc.name}
-              src={doc.url}
-              className="w-full h-full border-0"
-              onLoad={() => setPreviewLoaded(true)}
-            />
-          </div>
+          <PdfViewer url={doc.url} />
         ) : (
           <div className="mb-4 w-full rounded-xl border border-line bg-surface-2 aspect-[3/4] flex items-center justify-center text-ink-3">
             <div className="text-center px-6">
@@ -484,6 +470,149 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
           Close
         </button>
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * In-app PDF viewer
+ *
+ * Mobile browsers (Android Chrome, iOS Safari) refuse to render a PDF inside
+ * an <iframe> and substitute their own "tap to open" placeholder, which
+ * strands the traveller in an external tab. To keep them inside the app we
+ * render the PDF ourselves to <canvas> pages using PDF.js.
+ *
+ * PDF.js is loaded from a CDN on demand, so there's no npm dependency and the
+ * library is only fetched the first time a document is opened. The PDF bytes
+ * are fetched straight from the signed Supabase URL and processed entirely on
+ * the device — nothing is sent to any third party. If anything fails (e.g. an
+ * unexpected CORS block) we fall back to the Open / Download actions below.
+ * ---------------------------------------------------------------------- */
+const PDFJS_VERSION = '3.11.174';
+const PDFJS_LIB = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
+const PDFJS_WORKER = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+
+let pdfjsPromise: Promise<any> | null = null;
+function loadPdfjs(): Promise<any> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
+  const existing = (window as any).pdfjsLib;
+  if (existing) return Promise.resolve(existing);
+  if (pdfjsPromise) return pdfjsPromise;
+  pdfjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = PDFJS_LIB;
+    s.async = true;
+    s.onload = () => {
+      const lib = (window as any).pdfjsLib;
+      if (!lib) {
+        reject(new Error('pdfjsLib unavailable'));
+        return;
+      }
+      try {
+        lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      } catch {
+        /* worker is best-effort; PDF.js falls back to the main thread */
+      }
+      resolve(lib);
+    };
+    s.onerror = () => {
+      pdfjsPromise = null; // allow a retry next open
+      reject(new Error('failed to load PDF.js'));
+    };
+    document.head.appendChild(s);
+  });
+  return pdfjsPromise;
+}
+
+function PdfViewer({ url }: { url: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus('loading');
+
+    (async () => {
+      try {
+        const pdfjs = await loadPdfjs();
+        if (cancelled) return;
+
+        const pdf = await pdfjs.getDocument({ url }).promise;
+        if (cancelled) return;
+
+        const container = scrollRef.current;
+        if (!container) return;
+        container.querySelectorAll('canvas').forEach((c) => c.remove());
+
+        const cssWidth = container.clientWidth || 320;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        for (let n = 1; n <= pdf.numPages; n += 1) {
+          if (cancelled) return;
+          const page = await pdf.getPage(n);
+          if (cancelled) return;
+
+          const base = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: (cssWidth / base.width) * dpr });
+
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+          canvas.style.display = 'block';
+          canvas.style.borderRadius = '8px';
+          canvas.style.marginBottom = n < pdf.numPages ? '8px' : '0';
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) continue;
+          container.appendChild(canvas);
+
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          if (cancelled) {
+            canvas.remove();
+            return;
+          }
+          if (n === 1) setStatus('ready');
+        }
+
+        if (!cancelled) setStatus('ready');
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  return (
+    <div
+      className="mb-4 relative rounded-xl border border-line bg-surface-2 overflow-hidden"
+      style={{ height: '52vh' }}
+    >
+      <div ref={scrollRef} className="absolute inset-0 overflow-y-auto p-2" />
+
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface-2">
+          <div className="flex flex-col items-center gap-2 text-ink-3">
+            <span className="w-6 h-6 rounded-full border-2 border-teal/30 border-t-teal animate-spin" />
+            <span className="text-[11px]">Loading preview…</span>
+          </div>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="absolute inset-0 flex items-center justify-center text-center px-6 bg-surface-2">
+          <div>
+            <div className="text-xs font-medium text-ink">Preview couldn&rsquo;t load here</div>
+            <div className="text-[10px] mt-1 text-ink-3">
+              Use Open full screen or Download below.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

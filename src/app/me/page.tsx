@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { useTheme } from '@/lib/theme-context';
@@ -21,8 +22,11 @@ import {
   IconWarning,
   IconShield2,
   IconPin,
+  IconRefresh,
+  IconCheck,
 } from '@/components/icons';
 import { initials } from '@/lib/format';
+import { APP_VERSION, getLatestVersion, forceAppUpdate } from '@/lib/app-update';
 
 export default function MePage() {
   const { booking } = useBooking();
@@ -149,6 +153,7 @@ export default function MePage() {
             title={t('me.notifications')}
             sub={t('me.notificationsSub')}
           />
+          <UpdateRow />
           <ListAction
             icon={<IconHelp size={18} />}
             title={t('me.help')}
@@ -167,7 +172,7 @@ export default function MePage() {
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
-          Luna Travel · v0.12 · {booking.agency.name}
+          Luna Travel · v{APP_VERSION} · {booking.agency.name}
         </p>
       </main>
     </PageEnter>
@@ -345,5 +350,58 @@ function ContactRow({
       </div>
       <IconExternal size={14} className="text-ink-3 flex-shrink-0" />
     </a>
+  );
+}
+
+/**
+ * Manual "Check for updates" — a safety net for when the auto-update pill is
+ * missed. Checks the published version and, if newer, runs the shared
+ * forceAppUpdate(); otherwise confirms the app is already current.
+ */
+function UpdateRow() {
+  const [status, setStatus] = useState<'idle' | 'checking' | 'latest' | 'updating'>('idle');
+  const busy = status === 'checking' || status === 'updating';
+
+  const sub =
+    status === 'checking'
+      ? 'Checking…'
+      : status === 'updating'
+        ? 'Updating…'
+        : status === 'latest'
+          ? "You're on the latest version"
+          : `Version ${APP_VERSION}`;
+
+  const onClick = async () => {
+    if (busy) return;
+    setStatus('checking');
+    const latest = await getLatestVersion();
+    if (latest && latest !== APP_VERSION) {
+      setStatus('updating');
+      await forceAppUpdate(); // navigates away
+      return;
+    }
+    setStatus('latest');
+    window.setTimeout(() => setStatus('idle'), 3000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="w-full flex items-center gap-3 p-4 hover:bg-surface-2 transition-colors text-left disabled:opacity-70"
+    >
+      <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-teal/10 text-teal-dark dark:text-teal-light">
+        {status === 'latest' ? (
+          <IconCheck size={18} />
+        ) : (
+          <IconRefresh size={18} className={busy ? 'animate-spin' : undefined} />
+        )}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-ink">Check for updates</div>
+        <div className="text-xs text-ink-2 mt-0.5">{sub}</div>
+      </div>
+    </button>
   );
 }

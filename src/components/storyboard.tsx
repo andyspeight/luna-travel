@@ -101,9 +101,14 @@ export function Storyboard({ booking }: { booking: Booking }) {
     byDay.set(k, list);
   }
 
-  const start = booking.tripStart || events[0]?.date || '';
-  const end = booking.tripEnd || events[events.length - 1]?.date || '';
-  const dayList = start && end ? eachDay(start, end) : Array.from(byDay.keys()).sort();
+  // Derive the day range from the events themselves, using the same UTC day
+  // keys the Itinerary list groups by. This keeps the storyboard's days lined
+  // up exactly with the timeline and avoids a phantom leading day when
+  // tripStart is a timestamp that sits on the other side of midnight UTC.
+  const sortedKeys = Array.from(byDay.keys()).sort();
+  const start = sortedKeys[0] || booking.tripStart || '';
+  const end = sortedKeys[sortedKeys.length - 1] || booking.tripEnd || '';
+  const dayList = start && end ? eachDay(start, end) : [];
 
   if (dayList.length === 0) {
     return (
@@ -185,7 +190,9 @@ function DayScene({
   if (dayHotel) {
     locationLabel = [dayHotel.resort, dayHotel.city, dayHotel.country].filter(Boolean).join(' · ');
   } else if (repFlight) {
-    locationLabel = `${repFlight.depCity} → ${repFlight.arrCity}`;
+    const dep = repFlight.depCity || repFlight.depAirport;
+    const arr = repFlight.arrCity || repFlight.arrAirport;
+    locationLabel = `${dep} → ${arr}`;
   } else {
     locationLabel = booking.destinationLabel;
   }

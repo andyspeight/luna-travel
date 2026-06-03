@@ -36,6 +36,7 @@ export default function LunaPage() {
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages(booking, lead.firstName));
   const [typing, setTyping] = useState(false);
+  const [draft, setDraft] = useState('');
   const threadRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll to bottom on new message
@@ -45,7 +46,10 @@ export default function LunaPage() {
     }
   }, [messages, typing]);
 
-  const handlePill = (text: string) => {
+  const send = (raw: string) => {
+    const text = raw.trim();
+    if (!text || typing) return;
+    setDraft('');
     // Add user message
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, from: 'user', text };
     setMessages((prev) => [...prev, userMsg]);
@@ -59,7 +63,7 @@ export default function LunaPage() {
         { id: `l-${Date.now()}`, from: 'luna', text: reply.text, pills: reply.pills },
       ]);
       setTyping(false);
-    }, 900);
+    }, 700);
   };
 
   return (
@@ -95,20 +99,34 @@ export default function LunaPage() {
           className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-thin"
         >
           {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} onPill={handlePill} />
+            <MessageBubble key={m.id} message={m} onPill={send} />
           ))}
           {typing && <TypingBubble />}
         </div>
 
-        {/* Composer (display only in prototype) */}
+        {/* Composer */}
         <div className="px-4 py-3 border-t border-line-light bg-surface flex items-center gap-2">
-          <div className="flex-1 h-10 px-4 rounded-full bg-surface-3 text-sm text-ink-3 flex items-center">
-            Ask Luna anything about your trip…
-          </div>
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                send(draft);
+              }
+            }}
+            placeholder="Ask Luna anything about your trip…"
+            aria-label="Ask Luna"
+            enterKeyHint="send"
+            className="flex-1 h-10 px-4 rounded-full bg-surface-3 text-sm text-ink placeholder:text-ink-3 outline-none focus:ring-2 focus:ring-teal/40"
+          />
           <button
             type="button"
             aria-label="Send"
-            className="w-10 h-10 rounded-full bg-navy text-white dark:bg-teal dark:text-navy-dark flex items-center justify-center flex-shrink-0"
+            onClick={() => send(draft)}
+            disabled={!draft.trim() || typing}
+            className="w-10 h-10 rounded-full bg-navy text-white dark:bg-teal dark:text-navy-dark flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-opacity"
           >
             <IconSend size={18} />
           </button>
@@ -322,7 +340,7 @@ function lunaAnswer(
 
   // Generic fallback
   return {
-    text: `That's a good question. In production I'd reach out to my knowledge base and your agent if needed. For the prototype, try one of the suggested questions and I'll show you the kind of answer you'd get.`,
+    text: `Happy to help with that. I can answer questions about your flights, hotel, check-in, weather, packing, visas and lounges — or pass anything trickier to ${booking.agency.name}. What would you like to know?`,
     pills: pillsFor(booking),
   };
 }

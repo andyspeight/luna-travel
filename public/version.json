@@ -1,5 +1,5 @@
 {
-  "version": "0.14.10",
+  "version": "0.14.11",
   "released": "2026-06-03",
-  "notes": "When Luna can't answer a question she now says so honestly and offers to put you in touch with your agent by email or phone, instead of giving a vague reply with unrelated prompts."
+  "notes": "Agent messages are now front and centre. An urgent or unread message shows at the top of the home screen, the Me tab shows an unread count, and you can mark a message as read from the home banner or by opening Notifications."
 }

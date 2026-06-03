@@ -1,5 +1,5 @@
 {
-  "version": "0.14.6",
+  "version": "0.14.7",
   "released": "2026-06-03",
-  "notes": "Added a Check for updates button in the Me section so you can always pull the latest build, even if you miss the pill. Update logic is now shared so the pill and the button behave identically and force a clean network fetch."
+  "notes": "Documents now preview inside the app on phones (rendered to page images). Storyboard now gives each day a clear headline (Travel day, Arrive, At leisure, Departure) and themes travel days to the right country so the days are distinct and read in order."
 }

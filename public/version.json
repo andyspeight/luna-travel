@@ -1,5 +1,5 @@
 {
-  "version": "0.14.8",
+  "version": "0.14.9",
   "released": "2026-06-03",
-  "notes": "Storyboard now starts on the real first day of the trip and lines up exactly with the timeline (fixed a phantom leading day caused by a timezone edge). Flight labels and the storyboard location line fall back to airport codes when the live booking has no city names."
+  "notes": "Luna chat input is now live — you can type questions, not just tap the suggestions. The catch-all reply is friendlier and points anything off-topic to your agent."
 }

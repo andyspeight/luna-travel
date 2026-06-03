@@ -154,7 +154,8 @@ export default function MePage() {
             sub={t('me.notificationsSub')}
           />
           <UpdateRow />
-          <ListAction
+          <ListLink
+            href="/luna"
             icon={<IconHelp size={18} />}
             title={t('me.help')}
             sub={t('me.helpSub')}

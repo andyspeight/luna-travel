@@ -49,6 +49,23 @@ export default function LunaPage() {
   const send = (raw: string) => {
     const text = raw.trim();
     if (!text || typing) return;
+
+    // Agent handoff (offered when Luna can't answer) — open email/phone, no chat bubble
+    if (text === 'Email my agent' && booking.agency.email) {
+      setDraft('');
+      const subject = encodeURIComponent(`Question about my trip ${booking.reference}`);
+      const body = encodeURIComponent(
+        `Hi ${booking.agency.name},\n\nI have a question about my booking (${booking.reference}):\n\n`
+      );
+      window.location.href = `mailto:${booking.agency.email}?subject=${subject}&body=${body}`;
+      return;
+    }
+    if (text === 'Call my agent' && booking.agency.phone) {
+      setDraft('');
+      window.location.href = `tel:${booking.agency.phone.replace(/\s/g, '')}`;
+      return;
+    }
+
     setDraft('');
     // Add user message
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, from: 'user', text };
@@ -338,10 +355,13 @@ function lunaAnswer(
     };
   }
 
-  // Generic fallback
+  // Generic fallback — be honest, hand off to the agent (no unrelated topic pills)
+  const agentPills: string[] = [];
+  if (booking.agency.email) agentPills.push('Email my agent');
+  if (booking.agency.phone) agentPills.push('Call my agent');
   return {
-    text: `Happy to help with that. I can answer questions about your flights, hotel, check-in, weather, packing, visas and lounges — or pass anything trickier to ${booking.agency.name}. What would you like to know?`,
-    pills: pillsFor(booking),
+    text: `I can't answer that one for certain, and I'd rather not guess. Your agent at ${booking.agency.name} will be able to help. Want me to put you in touch?`,
+    pills: agentPills.length ? agentPills : undefined,
   };
 }
 

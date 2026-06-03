@@ -1,5 +1,5 @@
 {
-  "version": "0.14.1",
+  "version": "0.14.2",
   "released": "2026-06-03",
-  "notes": "Documents page now reads agency-uploaded documents from /api/traveller/documents (session-gated, signed URLs) and shows them in the offline vault. Category to style lookup is now crash-proof (unknown categories fall back to a generic Document style). Adds loading and empty states. No traveller-facing changes elsewhere."
+  "notes": "Traveller action buttons wired up. Documents now open in an in-app PDF viewer instead of a separate browser tab. Hotel, flight and extra pages have working Open in Maps / View at airport (in-app map sheet), Hotel info and policies, and airline check-in. No more dead buttons on the detail pages."
 }

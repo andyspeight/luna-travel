@@ -3,39 +3,59 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/booking-context';
+import { useFlightLive } from '@/lib/use-flight-live';
 import { NavBar } from '@/components/nav-bar';
 import { ActionButton } from '@/components/action-button';
 import { PageEnter } from '@/components/page-enter';
 import { MapSheet } from '@/components/map-sheet';
+import { FlightHero, LiveNowPanel } from '@/components/flight-card';
 import {
-  IconPin,
-  IconStar,
-  IconBed,
-  IconUsers,
-  IconClock,
-  IconNavigate,
-  IconInfo,
   IconCheck,
+  IconClock,
+  IconBaggage,
+  IconTicket,
+  IconUsers,
+  IconNavigate,
 } from '@/components/icons';
-import { findHotel } from '@/lib/booking-helpers';
-import { formatBoard, formatDate, formatTime } from '@/lib/format';
-import { destinationHero } from '@/lib/hero';
-import type { Hotel } from '@/types/booking';
+import { findFlight } from '@/lib/booking-helpers';
+import { formatDate, formatTime, formatDuration, formatCabin, formatTerminal } from '@/lib/format';
 
-export default function HotelDetailPage() {
+// Online check-in genuinely happens on the airline's own site, so this is the
+// one action that intentionally opens externally. Known carriers map directly;
+// anything else falls back to a search that lands on the airline check-in page.
+const CHECKIN_URLS: Record<string, string> = {
+  BA: 'https://www.britishairways.com/travel/olci/public/en_gb',
+  EY: 'https://www.etihad.com/en/manage/check-in',
+  EK: 'https://www.emirates.com/english/manage-booking/online-check-in/',
+  U2: 'https://www.easyjet.com/en/login',
+  LS: 'https://www.jet2.com/bookings/login',
+  FR: 'https://www.ryanair.com/gb/en/check-in',
+  VS: 'https://www.virginatlantic.com/gb/en/my-booking',
+  QR: 'https://www.qatarairways.com/en/manage-booking.html',
+};
+
+function checkInUrl(carrierCode: string, carrierName: string): string {
+  return (
+    CHECKIN_URLS[carrierCode] ??
+    `https://www.google.com/search?q=${encodeURIComponent(`${carrierName} online check in`)}`
+  );
+}
+
+export default function FlightDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { booking } = useBooking();
+  const flight = findFlight(booking, params.id);
+  const { getLive } = useFlightLive();
+  const live = flight ? getLive(flight.id) : undefined;
   const [showMap, setShowMap] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
-  const hotel = findHotel(booking, params.id);
 
-  if (!hotel) {
+  if (!flight) {
     return (
       <>
-        <NavBar title="Hotel" backLabel="Back" />
+        <NavBar title="Flight" backLabel="Back" />
         <main className="px-5 pt-12 text-center">
-          <p className="text-ink-2">Hotel not found.</p>
+          <p className="text-ink-2">Flight not found.</p>
           <button
             onClick={() => router.replace('/itinerary')}
             className="mt-4 text-teal-dark hover:underline text-sm"
@@ -47,264 +67,155 @@ export default function HotelDetailPage() {
     );
   }
 
-  const board = formatBoard(hotel.boardBasis);
-  const hero = destinationHero(hotel.countryCode);
-  const adults = booking.travellers.filter((t) => t.type === 'adult').length;
-  const children = booking.travellers.filter((t) => t.type === 'child').length;
+  const liveStatus = live?.statusCode;
+  const checkInOpenLive = liveStatus === 'CheckIn';
+  const checkInOpenHeuristic =
+    new Date(flight.depTime).getTime() - Date.now() < 24 * 60 * 60 * 1000 &&
+    new Date(flight.depTime).getTime() > Date.now();
+  const checkInOpen = checkInOpenLive || checkInOpenHeuristic;
 
   return (
     <PageEnter>
-    <main className="pb-6">
-      {/* Hero */}
-      <section className="relative h-60 text-white" style={{ background: hero.gradient }}>
-        {hero.image && (
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{ background: `center/cover no-repeat url("${hero.image}")` }}
-          />
-        )}
-        <div
-          aria-hidden
-          className="absolute inset-0"
-          style={{ background: hero.glow }}
-        />
-        <div
-          aria-hidden
-          className="absolute inset-x-0 bottom-0 h-24"
-          style={{
-            background:
-              'linear-gradient(180deg, transparent 0%, rgba(11,29,62,0.55) 100%)',
-          }}
-        />
+      <main className="pb-6">
+        {/* Hero with NavBar overlaid */}
         <div className="relative">
-          <NavBar title=" " backLabel="Trip" variant="dark" />
-        </div>
-        <div className="absolute right-4 top-16 z-10">
-          <span className="inline-flex items-center gap-1.5 bg-white/95 text-navy px-2.5 py-1 rounded-full text-[11px] font-semibold">
-            <IconCheck size={12} />
-            Confirmed
-          </span>
-        </div>
-      </section>
-
-      <div className="px-5 -mt-2">
-        {/* Stars */}
-        {hotel.stars && hotel.stars > 0 && (
-          <div className="flex items-center gap-0.5 text-gold mb-1">
-            {Array.from({ length: hotel.stars }).map((_, i) => (
-              <IconStar key={i} size={14} />
-            ))}
+          <div
+            className="absolute top-0 inset-x-0 z-10 px-5 pt-2"
+            style={{ background: 'transparent' }}
+          >
+            <NavBar title={flight.flightNumber} backLabel="Trip" variant="dark" />
           </div>
-        )}
-
-        {/* Name & location */}
-        <h1 className="font-serif text-[28px] leading-tight text-ink mt-1">
-          {hotel.name}
-        </h1>
-        <div className="mt-1.5 text-sm text-ink-2 inline-flex items-center gap-1.5">
-          <IconPin size={14} />
-          <span>
-            {[hotel.resort, hotel.city, hotel.country].filter(Boolean).join(' · ')}
-          </span>
+          <FlightHero flight={flight} live={live} />
         </div>
 
-        {/* Stat strip */}
-        <div className="grid grid-cols-3 gap-2 mt-4">
-          <Stat
-            icon={<IconBed size={16} />}
-            value={`${hotel.nights} night${hotel.nights === 1 ? '' : 's'}`}
-            label="Stay"
-          />
-          <Stat
-            icon={<IconUsers size={16} />}
-            value={`${booking.travellers.length} guest${booking.travellers.length === 1 ? '' : 's'}`}
-            label={
-              children > 0
-                ? `${adults} adult${adults === 1 ? '' : 's'} · ${children} child${children === 1 ? '' : 'ren'}`
-                : 'Party'
+        <div className="px-5 pt-4 space-y-3">
+          {/* Live now (shared component; renders nothing without live detail) */}
+          <LiveNowPanel flight={flight} live={live} />
+
+          {/* Travellers & seats */}
+          <Panel title="Travellers & seats" icon={<IconUsers size={14} />}>
+            <ul className="divide-y divide-line-light">
+              {booking.travellers.map((t) => {
+                const seat = flight.seats?.[t.id];
+                return (
+                  <li key={t.id} className="flex items-center justify-between py-2.5">
+                    <span className="text-sm text-ink font-medium">
+                      {t.title ? `${t.title} ` : ''}
+                      {t.firstName} {t.lastName}
+                    </span>
+                    {seat ? (
+                      <span className="text-xs font-bold text-teal-dark dark:text-teal-light bg-teal/10 px-2 py-1 rounded-md tabular">
+                        {seat}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-ink-3">Not yet assigned</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+
+          <ActionButton
+            icon={<IconCheck size={18} />}
+            onClick={() =>
+              window.open(
+                checkInUrl(flight.carrierCode, flight.carrierName),
+                '_blank',
+                'noopener,noreferrer',
+              )
             }
-          />
-          {board && <Stat icon={<IconInfo size={16} />} value={board} label="Board" />}
-        </div>
-
-        {/* Check-in/out info */}
-        <section className="mt-4 bg-surface border border-line-light rounded-2xl p-4">
-          <h3 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-3">
-            <IconClock size={14} />
-            Stay
-          </h3>
-          <ul className="divide-y divide-line-light text-sm">
-            <li className="py-2.5 flex justify-between">
-              <span className="text-ink-2">Check in</span>
-              <span className="text-ink font-medium">
-                {formatDate(hotel.checkIn, { weekday: 'short', day: 'numeric', month: 'short' })} ·{' '}
-                {formatTime(hotel.checkIn)}
-              </span>
-            </li>
-            <li className="py-2.5 flex justify-between">
-              <span className="text-ink-2">Check out</span>
-              <span className="text-ink font-medium">
-                {formatDate(hotel.checkOut, { weekday: 'short', day: 'numeric', month: 'short' })} ·{' '}
-                {formatTime(hotel.checkOut)}
-              </span>
-            </li>
-            <li className="py-2.5 flex justify-between">
-              <span className="text-ink-2">Room</span>
-              <span className="text-ink font-medium text-right max-w-[60%]">
-                {hotel.roomName}
-              </span>
-            </li>
-            {hotel.hotelReference && (
-              <li className="py-2.5 flex justify-between">
-                <span className="text-ink-2">Hotel reference</span>
-                <span className="text-ink font-medium tabular">{hotel.hotelReference}</span>
-              </li>
-            )}
-          </ul>
-        </section>
-
-        {/* Special requests */}
-        {hotel.specialRequests && (
-          <section className="mt-3 bg-surface border border-line-light rounded-2xl p-4">
-            <h3 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2">
-              <IconInfo size={14} />
-              Special requests
-            </h3>
-            <p className="text-sm text-ink-2 leading-relaxed">{hotel.specialRequests}</p>
-            <p className="text-[11px] text-ink-3 mt-2 italic">
-              Requests, not guarantees — hotel will do their best on arrival.
-            </p>
-          </section>
-        )}
-
-        {/* Location & actions */}
-        <div className="mt-4 space-y-3">
-          <ActionButton icon={<IconNavigate size={18} />} onClick={() => setShowMap(true)}>
-            Open in Maps
+          >
+            Check in for this flight
           </ActionButton>
+
+          {/* Status */}
+          <Panel title="Status" icon={<IconClock size={14} />}>
+            <ul className="divide-y divide-line-light text-sm">
+              <li className="py-2.5 flex justify-between">
+                <span className="text-ink-2">Online check-in</span>
+                <span className={checkInOpen ? 'text-success font-semibold' : 'text-ink font-medium'}>
+                  {checkInOpen
+                    ? `Open · closes ${formatTime(flight.depTime)}`
+                    : `Opens 24h before · ${formatDate(flight.depTime, { day: 'numeric', month: 'short' })}`}
+                </span>
+              </li>
+              {flight.depTerminal && (
+                <li className="py-2.5 flex justify-between">
+                  <span className="text-ink-2">Departure terminal</span>
+                  <span className="text-ink font-medium">{formatTerminal(flight.depTerminal)}</span>
+                </li>
+              )}
+              <li className="py-2.5 flex justify-between">
+                <span className="text-ink-2">Cabin</span>
+                <span className="text-ink font-medium">{formatCabin(flight.cabin)}</span>
+              </li>
+              <li className="py-2.5 flex justify-between">
+                <span className="text-ink-2">Duration</span>
+                <span className="text-ink font-medium">{formatDuration(flight.durationMinutes)}</span>
+              </li>
+            </ul>
+          </Panel>
+
+          {flight.baggageAllowance && (
+            <Panel title="Baggage allowance" icon={<IconBaggage size={14} />}>
+              <p className="text-sm text-ink-2 leading-relaxed">{flight.baggageAllowance}</p>
+            </Panel>
+          )}
+
+          <Panel title="Booking" icon={<IconTicket size={14} />}>
+            <ul className="divide-y divide-line-light text-sm">
+              <li className="py-2.5 flex justify-between">
+                <span className="text-ink-2">Booking reference</span>
+                <span className="text-ink font-medium tabular">{booking.reference}</span>
+              </li>
+              {flight.pnr && (
+                <li className="py-2.5 flex justify-between">
+                  <span className="text-ink-2">Airline PNR</span>
+                  <span className="text-ink font-medium tabular">{flight.pnr}</span>
+                </li>
+              )}
+            </ul>
+          </Panel>
+
           <ActionButton
             variant="secondary"
-            icon={<IconInfo size={18} />}
-            onClick={() => setShowInfo(true)}
+            icon={<IconNavigate size={18} />}
+            onClick={() => setShowMap(true)}
           >
-            Hotel info &amp; policies
+            View at {flight.depAirport} airport
           </ActionButton>
         </div>
-      </div>
-    </main>
+      </main>
 
-    {showMap && (
-      <MapSheet
-        title={hotel.name}
-        subtitle={[hotel.resort, hotel.city, hotel.country].filter(Boolean).join(', ')}
-        lat={hotel.lat}
-        lng={hotel.lng}
-        query={[hotel.name, hotel.resort, hotel.city, hotel.country].filter(Boolean).join(', ')}
-        onClose={() => setShowMap(false)}
-      />
-    )}
-    {showInfo && <HotelInfoSheet hotel={hotel} board={board} onClose={() => setShowInfo(false)} />}
+      {showMap && (
+        <MapSheet
+          title={flight.depAirportName || `${flight.depAirport} airport`}
+          subtitle={flight.depCity}
+          query={`${flight.depAirportName || flight.depAirport} airport`}
+          onClose={() => setShowMap(false)}
+        />
+      )}
     </PageEnter>
   );
 }
 
-function Stat({
+function Panel({
+  title,
   icon,
-  value,
-  label,
+  children,
 }: {
-  icon: React.ReactNode;
-  value: string;
-  label: string;
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="bg-surface border border-line-light rounded-2xl p-3 text-center">
-      <div className="w-7 h-7 mx-auto mb-1.5 rounded-lg bg-teal/10 text-navy dark:text-teal-light flex items-center justify-center">
+    <section className="bg-surface border border-line-light rounded-2xl p-4">
+      <h3 className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-3">
         {icon}
-      </div>
-      <div className="text-[13px] font-bold text-ink leading-tight">{value}</div>
-      <div className="text-[10px] text-ink-3 uppercase tracking-wider mt-0.5">{label}</div>
-    </div>
-  );
-}
-
-/**
- * In-app "Hotel info & policies" sheet. Shows the real stay details we hold
- * (times, board, room, reference, requests) plus standard, universally-true
- * policy notes. We never fabricate supplier specifics (amenities, descriptions).
- */
-function HotelInfoSheet({
-  hotel,
-  board,
-  onClose,
-}: {
-  hotel: Hotel;
-  board: string | null;
-  onClose: () => void;
-}) {
-  const rows: { label: string; value: string }[] = [
-    { label: 'Check-in from', value: formatTime(hotel.checkIn) },
-    { label: 'Check-out by', value: formatTime(hotel.checkOut) },
-  ];
-  if (board) rows.push({ label: 'Board', value: board });
-  rows.push({ label: 'Room', value: hotel.roomName });
-  if (hotel.hotelReference) rows.push({ label: 'Hotel reference', value: hotel.hotelReference });
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-black/50 animate-fade-in"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Hotel info and policies"
-    >
-      <div
-        className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-surface rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-        style={{ paddingBottom: 'calc(1.5rem + var(--safe-bottom))' }}
-      >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-ink-3/40" />
-        <h2 className="text-base font-semibold text-ink mb-0.5">Hotel info &amp; policies</h2>
-        <p className="text-xs text-ink-2 mb-4">{hotel.name}</p>
-
-        <ul className="divide-y divide-line-light text-sm rounded-2xl border border-line-light px-4">
-          {rows.map((r) => (
-            <li key={r.label} className="py-2.5 flex justify-between gap-3">
-              <span className="text-ink-2 flex-shrink-0">{r.label}</span>
-              <span className="text-ink font-medium text-right">{r.value}</span>
-            </li>
-          ))}
-        </ul>
-
-        {hotel.specialRequests && (
-          <div className="mt-3 rounded-2xl border border-line-light p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-1">
-              Special requests
-            </div>
-            <p className="text-sm text-ink-2 leading-relaxed">{hotel.specialRequests}</p>
-          </div>
-        )}
-
-        <div className="mt-3 rounded-2xl bg-surface-2 p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2">
-            Good to know
-          </div>
-          <ul className="space-y-1.5 text-[13px] text-ink-2 leading-relaxed list-disc pl-4">
-            <li>Photo ID and the lead guest&rsquo;s booking reference may be requested at check-in.</li>
-            <li>Special requests are subject to availability and are not guaranteed.</li>
-            <li>Check-in and check-out times are set by the hotel and can vary with room readiness.</li>
-          </ul>
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full mt-4 h-10 text-sm font-medium text-ink-2 hover:text-ink"
-        >
-          Close
-        </button>
-      </div>
-    </div>
+        {title}
+      </h3>
+      {children}
+    </section>
   );
 }

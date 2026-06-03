@@ -18,6 +18,7 @@ import {
   IconClock,
   IconMap,
   IconCompass,
+  IconBell,
 } from '@/components/icons';
 import {
   countdownTo,
@@ -33,11 +34,33 @@ import { useI18n } from '@/lib/locale-context';
 import { PageEnter } from '@/components/page-enter';
 import { CoverSplash } from '@/components/cover-splash';
 import { useCover } from '@/lib/cover-context';
+import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
 
 export default function HomePage() {
   const { booking } = useBooking();
   const { coverEnabled, coverDismissed } = useCover();
   const { t } = useI18n();
+  const { latest } = useAgentMessages();
+
+  // Mark a surfaced agent message read in place, then tell the rest of the app
+  // (bottom-bar badge, this banner) to refresh so it clears immediately.
+  const markRead = async (id: string) => {
+    try {
+      await fetch('/api/traveller/messages/read', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+    } catch {
+      /* ignore — a transient failure just leaves it unread */
+    }
+    try {
+      window.dispatchEvent(new Event('lt:messages-changed'));
+    } catch {
+      /* no-op */
+    }
+  };
   const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
 
   useEffect(() => {
@@ -94,6 +117,11 @@ export default function HomePage() {
           .
         </h1>
       </div>
+
+      {/* Urgent / unread agent message, surfaced at the top so it can't be missed */}
+      {latest && (
+        <AgentMessageBanner message={latest} agency={booking.agency.name} onRead={markRead} />
+      )}
 
       {/* Post-trip: lead with rebooking. Once the trip is over, the countdown
           is spent — turn the top of the home screen into "where next?". */}
@@ -476,4 +504,80 @@ function eventIcon(k: TimelineEvent['kind'], size = 18) {
     default:
       return <IconPin size={size} />;
   }
+}
+
+/**
+ * Home-screen banner for the newest unread agent message. Urgent messages take
+ * a red accent, important an amber one, so they can't be missed at the top of
+ * the trip screen. "View message" opens Notifications (which marks read);
+ * "Mark as read" clears it in place.
+ */
+function AgentMessageBanner({
+  message,
+  agency,
+  onRead,
+}: {
+  message: AgentLatest;
+  agency: string;
+  onRead: (id: string) => void;
+}) {
+  const pri = message.priority;
+  const urgent = pri === 'urgent';
+  const important = pri === 'important';
+  const accent = urgent
+    ? 'border-l-4 border-l-red-500'
+    : important
+      ? 'border-l-4 border-l-amber-500'
+      : 'border-l-4 border-l-teal';
+  const preview =
+    message.body.length > 160 ? `${message.body.slice(0, 157).trimEnd()}…` : message.body;
+
+  return (
+    <div
+      role="status"
+      className={['mb-5 rounded-2xl bg-surface border border-line-light shadow-sm px-4 py-3.5', accent].join(' ')}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          aria-hidden
+          className="w-6 h-6 rounded-lg bg-teal/15 text-teal-dark flex items-center justify-center flex-shrink-0"
+        >
+          <IconBell size={13} />
+        </span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-2">
+          Message from {agency}
+        </span>
+        {(urgent || important) && (
+          <span
+            className={[
+              'text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded',
+              urgent ? 'bg-red-500/15 text-red-600' : 'bg-amber-500/15 text-amber-600',
+            ].join(' ')}
+          >
+            {pri}
+          </span>
+        )}
+      </div>
+      {message.subject && (
+        <div className="text-sm font-semibold text-ink leading-snug">{message.subject}</div>
+      )}
+      <p className="text-sm text-ink-2 mt-0.5 leading-snug break-words">{preview}</p>
+      <div className="flex items-center gap-2 mt-3">
+        <Link
+          href="/notifications"
+          className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full bg-navy text-white dark:bg-teal dark:text-navy-dark"
+        >
+          View message
+          <IconChevR size={14} />
+        </Link>
+        <button
+          type="button"
+          onClick={() => onRead(message.id)}
+          className="text-xs font-medium px-3 py-1.5 rounded-full bg-surface border border-line text-ink-2 hover:text-ink hover:border-teal/40 transition-colors"
+        >
+          Mark as read
+        </button>
+      </div>
+    </div>
+  );
 }

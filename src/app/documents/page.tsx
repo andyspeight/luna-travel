@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
 import { PageEnter } from '@/components/page-enter';
 import { ActionButton } from '@/components/action-button';
@@ -14,16 +14,42 @@ import {
   IconTicket,
   IconBed,
   IconLounge,
+  IconList,
   IconMail,
   IconCheck,
 } from '@/components/icons';
 import { fileSize, formatDate } from '@/lib/format';
 import type { Document } from '@/types/booking';
 
-const KIND_META: Record<
-  Document['kind'],
-  { gradient: string; icon: React.ReactNode; pill: string }
-> = {
+/* -------------------------------------------------------------------------
+ * Display model
+ *
+ * Documents arrive from two places:
+ *   1. Agency uploads — the documents an agent attaches to a traveller via
+ *      Control. Served by GET /api/traveller/documents (session-gated, signed
+ *      URLs). These are the real, authoritative documents and take priority.
+ *   2. The booking's own documents — Travelify-embedded order docs on a live
+ *      booking, or the demo/mock placeholders on the TravelTech Show path.
+ *
+ * Both are normalised to a single DisplayDoc shape so the render path never
+ * does a fragile lookup and can never crash on an unrecognised category/kind.
+ * ---------------------------------------------------------------------- */
+
+type DisplayDoc = {
+  id: string;
+  name: string;
+  pill: string;
+  gradient: string;
+  icon: React.ReactNode;
+  sizeBytes?: number;
+  updatedAt?: string;
+  url: string;
+};
+
+type Style = { gradient: string; icon: React.ReactNode; pill: string };
+
+// Keyed by the booking Document['kind'] union (mock + Travelify order docs).
+const KIND_META: Record<Document['kind'], Style> = {
   'booking-pack': {
     gradient: 'linear-gradient(135deg, #DC2626, #991B1B)',
     icon: <IconDoc size={22} />,
@@ -61,9 +87,126 @@ const KIND_META: Record<
   },
 };
 
+// Keyed by the stored document category (categorise-document.ts):
+// 'voucher' | 'ticket' | 'itinerary' | 'insurance' | 'other'.
+const CATEGORY_META: Record<string, Style> = {
+  voucher: {
+    gradient: 'linear-gradient(135deg, #0EA5E9, #0369A1)',
+    icon: <IconBed size={22} />,
+    pill: 'Voucher',
+  },
+  ticket: {
+    gradient: 'linear-gradient(135deg, #1B2B5B, #2A3F7A)',
+    icon: <IconTicket size={22} />,
+    pill: 'E-ticket',
+  },
+  itinerary: {
+    gradient: 'linear-gradient(135deg, #0096B7, #1B2B5B)',
+    icon: <IconList size={22} />,
+    pill: 'Itinerary',
+  },
+  insurance: {
+    gradient: 'linear-gradient(135deg, #7C3AED, #4C1D95)',
+    icon: <IconShield2 size={22} />,
+    pill: 'Insurance',
+  },
+  other: {
+    gradient: 'linear-gradient(135deg, #475569, #1E293B)',
+    icon: <IconDoc size={22} />,
+    pill: 'Document',
+  },
+};
+
+// Safe lookups — an unknown kind/category can never blank the screen.
+const kindStyle = (kind: string): Style => KIND_META[kind as Document['kind']] ?? KIND_META.other;
+const categoryStyle = (category: string): Style => CATEGORY_META[category] ?? CATEGORY_META.other;
+
+/** The raw row shape returned by GET /api/traveller/documents. */
+type AgencyDoc = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number | null;
+  category: string;
+  uploadedAt: string;
+  url: string | null;
+};
+
+/** "01_flight-confirmation.pdf" -> "Flight confirmation". */
+function prettyName(filename: string): string {
+  const base = filename.replace(/\.[a-z0-9]+$/i, ''); // drop extension
+  const noPrefix = base.replace(/^\d+[\s._-]+/, ''); // drop a leading "01_" / "02 - "
+  const spaced = noPrefix.replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = spaced || base || filename;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function agencyToDisplay(d: AgencyDoc): DisplayDoc {
+  const m = categoryStyle(d.category);
+  return {
+    id: d.id,
+    name: prettyName(d.filename),
+    pill: m.pill,
+    gradient: m.gradient,
+    icon: m.icon,
+    sizeBytes: typeof d.sizeBytes === 'number' ? d.sizeBytes : undefined,
+    updatedAt: d.uploadedAt || undefined,
+    url: d.url || '#',
+  };
+}
+
+function bookingToDisplay(d: Document): DisplayDoc {
+  const m = kindStyle(d.kind);
+  return {
+    id: d.id,
+    name: d.name,
+    pill: m.pill,
+    gradient: m.gradient,
+    icon: m.icon,
+    sizeBytes: d.sizeBytes,
+    updatedAt: d.updatedAt || undefined,
+    url: d.url || '#',
+  };
+}
+
 export default function DocumentsPage() {
   const { booking } = useBooking();
-  const [active, setActive] = useState<Document | null>(null);
+  const [agencyDocs, setAgencyDocs] = useState<AgencyDoc[] | null>(null); // null = still loading
+  const [active, setActive] = useState<DisplayDoc | null>(null);
+
+  // Pull the traveller's agency-uploaded documents. Fail closed: any non-200
+  // (e.g. 401 on the mock/demo path with no session) or network error falls
+  // back to the booking's own documents, so the demo never breaks.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/traveller/documents', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (cancelled) return;
+        if (res.status === 200) {
+          const data = await res.json();
+          setAgencyDocs(Array.isArray(data?.documents) ? (data.documents as AgencyDoc[]) : []);
+        } else {
+          setAgencyDocs([]);
+        }
+      } catch {
+        if (!cancelled) setAgencyDocs([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loading = agencyDocs === null;
+  const realDocs = (agencyDocs ?? []).map(agencyToDisplay);
+  const fallbackDocs = booking.documents.map(bookingToDisplay);
+  // Real agency uploads win. Otherwise show the booking's own docs (live order
+  // docs, or the demo placeholders on the mock path).
+  const docs: DisplayDoc[] = realDocs.length > 0 ? realDocs : fallbackDocs;
 
   return (
     <PageEnter>
@@ -73,21 +216,57 @@ export default function DocumentsPage() {
             Documents
           </h1>
           <p className="text-sm text-ink-2 mt-1.5">
-            Available offline · {booking.documents.length} item
-            {booking.documents.length === 1 ? '' : 's'}
+            {loading
+              ? 'Loading your documents…'
+              : docs.length === 0
+                ? 'Nothing here yet'
+                : `Available offline · ${docs.length} item${docs.length === 1 ? '' : 's'}`}
           </p>
         </header>
 
-        {/* Offline-ready badge */}
-        <div className="mt-2 mb-4 inline-flex items-center gap-1.5 bg-success/10 text-success px-2.5 py-1 rounded-full text-[11px] font-semibold">
-          <IconCheck size={12} />
-          All saved on this device
-        </div>
+        {/* Offline-ready badge — only once we actually have documents */}
+        {!loading && docs.length > 0 && (
+          <div className="mt-2 mb-4 inline-flex items-center gap-1.5 bg-success/10 text-success px-2.5 py-1 rounded-full text-[11px] font-semibold">
+            <IconCheck size={12} />
+            All saved on this device
+          </div>
+        )}
 
-        <section className="space-y-2.5">
-          {booking.documents.map((d) => {
-            const meta = KIND_META[d.kind];
-            return (
+        {/* Loading skeleton */}
+        {loading && (
+          <section className="space-y-2.5" aria-hidden="true">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light animate-pulse"
+              >
+                <span className="rounded-lg bg-line-light flex-shrink-0" style={{ height: 60, width: 48 }} />
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="h-3.5 w-2/3 rounded bg-line-light" />
+                  <div className="h-2.5 w-2/5 rounded bg-line-light" />
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* Empty state */}
+        {!loading && docs.length === 0 && (
+          <section className="mt-6 flex flex-col items-center text-center px-6 py-10 rounded-2xl bg-surface border border-line-light">
+            <span className="w-12 h-12 rounded-full bg-surface-2 text-ink-3 flex items-center justify-center mb-3">
+              <IconDoc size={22} />
+            </span>
+            <div className="text-sm font-semibold text-ink">No documents yet</div>
+            <p className="text-xs text-ink-2 mt-1 max-w-[15rem]">
+              Your travel documents will appear here as soon as your travel agent adds them.
+            </p>
+          </section>
+        )}
+
+        {/* Document list */}
+        {!loading && docs.length > 0 && (
+          <section className="space-y-2.5">
+            {docs.map((d) => (
               <button
                 key={d.id}
                 type="button"
@@ -95,41 +274,44 @@ export default function DocumentsPage() {
                 className="w-full flex items-center gap-3 p-3.5 rounded-2xl bg-surface border border-line-light hover:shadow-sm transition-shadow tap text-left"
               >
                 <span
-                  className="w-12 h-15 rounded-lg text-white flex items-center justify-center flex-shrink-0 shadow-md"
-                  style={{ background: meta.gradient, height: 60, width: 48 }}
+                  className="rounded-lg text-white flex items-center justify-center flex-shrink-0 shadow-md"
+                  style={{ background: d.gradient, height: 60, width: 48 }}
                 >
-                  {meta.icon}
+                  {d.icon}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold text-ink truncate">{d.name}</div>
                   <div className="text-[11px] text-ink-3 mt-0.5">
-                    PDF · {fileSize(d.sizeBytes)} · Updated{' '}
-                    {formatDate(d.updatedAt, { day: 'numeric', month: 'short' })}
+                    PDF
+                    {typeof d.sizeBytes === 'number' ? ` · ${fileSize(d.sizeBytes)}` : ''}
+                    {d.updatedAt ? ` · Updated ${formatDate(d.updatedAt, { day: 'numeric', month: 'short' })}` : ''}
                   </div>
                 </div>
                 <IconChevR size={18} className="text-ink-3 flex-shrink-0" />
               </button>
-            );
-          })}
-        </section>
+            ))}
+          </section>
+        )}
 
         {/* Email all card */}
-        <section className="mt-6 p-4 rounded-2xl bg-surface border border-line-light">
-          <div className="flex items-start gap-3 mb-3">
-            <span className="w-9 h-9 rounded-xl bg-teal/10 text-teal-dark dark:text-teal-light flex items-center justify-center flex-shrink-0">
-              <IconMail size={18} />
-            </span>
-            <div className="flex-1">
-              <div className="text-sm font-semibold text-ink">Email everything to yourself</div>
-              <div className="text-xs text-ink-2 mt-0.5">
-                We&rsquo;ll send the whole pack to {booking.leadEmail}.
+        {!loading && docs.length > 0 && (
+          <section className="mt-6 p-4 rounded-2xl bg-surface border border-line-light">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="w-9 h-9 rounded-xl bg-teal/10 text-teal-dark dark:text-teal-light flex items-center justify-center flex-shrink-0">
+                <IconMail size={18} />
+              </span>
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-ink">Email everything to yourself</div>
+                <div className="text-xs text-ink-2 mt-0.5">
+                  We&rsquo;ll send the whole pack to {booking.leadEmail}.
+                </div>
               </div>
             </div>
-          </div>
-          <ActionButton variant="secondary" icon={<IconMail size={16} />}>
-            Email all documents
-          </ActionButton>
-        </section>
+            <ActionButton variant="secondary" icon={<IconMail size={16} />}>
+              Email all documents
+            </ActionButton>
+          </section>
+        )}
       </main>
 
       {active && <DocSheet doc={active} onClose={() => setActive(null)} />}
@@ -141,8 +323,7 @@ export default function DocumentsPage() {
  * Bottom sheet for a single document — preview, share, download.
  * Click outside, Escape, or the X button to close.
  */
-function DocSheet({ doc, onClose }: { doc: Document; onClose: () => void }) {
-  const meta = KIND_META[doc.kind];
+function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
   const [shareToast, setShareToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -222,19 +403,19 @@ function DocSheet({ doc, onClose }: { doc: Document; onClose: () => void }) {
         <div className="flex items-center gap-3 mb-5">
           <span
             className="w-14 rounded-lg text-white flex items-center justify-center flex-shrink-0 shadow-md"
-            style={{ background: meta.gradient, height: 70 }}
+            style={{ background: doc.gradient, height: 70 }}
           >
-            {meta.icon}
+            {doc.icon}
           </span>
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-              {meta.pill}
+              {doc.pill}
             </div>
             <h2 className="text-base font-semibold text-ink leading-snug mt-0.5">
               {doc.name}
             </h2>
             <div className="text-[11px] text-ink-3 mt-0.5">
-              PDF · {fileSize(doc.sizeBytes)}
+              PDF{typeof doc.sizeBytes === 'number' ? ` · ${fileSize(doc.sizeBytes)}` : ''}
             </div>
           </div>
         </div>
@@ -249,9 +430,9 @@ function DocSheet({ doc, onClose }: { doc: Document; onClose: () => void }) {
           <div className="text-center px-6">
             <span
               className="inline-flex w-14 h-16 rounded-lg text-white items-center justify-center mb-3 shadow-md"
-              style={{ background: meta.gradient }}
+              style={{ background: doc.gradient }}
             >
-              {meta.icon}
+              {doc.icon}
             </span>
             <div className="text-xs font-medium text-ink">Tap to open</div>
             <div className="text-[10px] mt-1 opacity-75">

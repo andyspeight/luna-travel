@@ -1,5 +1,5 @@
 {
-  "version": "0.14.4",
+  "version": "0.14.4", 
   "released": "2026-06-03",
   "notes": "Documents now preview inside the app on phones too. The PDF is rendered to page images on the device instead of relying on the browser's iframe viewer, which Android and iOS refuse to show inline. Open full screen and Download remain as a fallback."
 }

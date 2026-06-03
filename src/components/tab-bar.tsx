@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCover } from '@/lib/cover-context';
 import { useI18n } from '@/lib/locale-context';
+import { useAgentMessages } from '@/lib/use-agent-messages';
 import { IconHome, IconCalendar, IconDoc, IconChat, IconUser } from './icons';
 
 const TABS = [
@@ -18,6 +19,7 @@ export function TabBar() {
   const pathname = usePathname();
   const { coverEnabled, coverDismissed } = useCover();
   const { t } = useI18n();
+  const { unreadCount } = useAgentMessages();
 
   // Splash is showing → hide the tab bar so the cover is truly full-bleed.
   const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
@@ -50,7 +52,17 @@ export function TabBar() {
                     : 'text-ink-3 hover:text-ink-2',
                 ].join(' ')}
               >
-                <Icon size={22} />
+                <span className="relative">
+                  <Icon size={22} />
+                  {href === '/me' && unreadCount > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-4 text-center shadow-sm"
+                      aria-label={`${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`}
+                    >
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </span>
                 <span className="text-[10px] font-medium tracking-wide">{t(key)}</span>
               </Link>
             </li>

@@ -1,5 +1,5 @@
 {
-  "version": "0.14.2",
+  "version": "0.14.3",
   "released": "2026-06-03",
-  "notes": "Traveller action buttons wired up. Documents now open in an in-app PDF viewer instead of a separate browser tab. Hotel, flight and extra pages have working Open in Maps / View at airport (in-app map sheet), Hotel info and policies, and airline check-in. No more dead buttons on the detail pages."
+  "notes": "Storyboard now shows every day of the trip from start to end, not only days with events, and themes each day to where you actually are that day (the resort you're resident in, or the destination) with a location label. Quiet days mid-stay show a calm card for the hotel."
 }

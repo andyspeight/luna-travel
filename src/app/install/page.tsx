@@ -12,15 +12,20 @@ import { IconShare } from '@/components/icons';
  *
  *   1. NO ?invite=... param → existing TravelTech-Show landing page.
  *      iPad at the stand, big QR, demo creds visible, "scan with your camera".
- *      Unchanged from the original implementation.
  *
- *   2. WITH ?invite=... param → invite redemption form.
- *      A real traveller has scanned a QR generated for their booking.
- *      We pre-fill any fields the agency set, ask for the rest, POST to
- *      /api/invites/{id}/redeem, and on success redirect to / (the app).
+ *   2. WITH ?invite=... param → invite redemption, now in two phases:
+ *        a. GATE   — a warm, branded verification screen. The traveller
+ *           confirms booking ref + email + departure date. We deliberately
+ *           reveal nothing about the trip here, so a forwarded or leaked
+ *           link exposes no destination or dates. POSTs to
+ *           /api/invites/{id}/redeem.
+ *        b. REVEAL — on success the redeem endpoint returns the trip facts
+ *           and sets the session cookie. We show the Holiday Pass: a
+ *           countdown, the destination and an add-to-home moment, then
+ *           "Open my holiday" routes into the app at /.
  *
- * The visual treatment (gradient, brand mark, type) is shared so both
- * states feel like the same product.
+ * The visual treatment (gradient, brand mark, serif type) is shared so every
+ * state feels like the same product.
  */
 export default function InstallPage() {
   return (
@@ -42,20 +47,20 @@ function InstallPageInner() {
   return <TradeShowView />;
 }
 
+// Shared background — the Luna Travel ocean gradient.
+const OCEAN_BG =
+  'radial-gradient(ellipse 80% 60% at 75% 5%, rgba(0,180,216,0.35), transparent 55%), radial-gradient(ellipse 60% 50% at 15% 95%, rgba(245,158,11,0.15), transparent 60%), linear-gradient(160deg, #0F172A 0%, #1B2B5B 45%, #082F49 100%)';
+
 // ─────────────────────────────────────────────────────────────────
-// State 1: Trade-show landing (unchanged from the existing page)
+// State 1: Trade-show landing
 // ─────────────────────────────────────────────────────────────────
 
 function TradeShowView() {
   return (
     <main
       className="fixed inset-0 flex flex-col text-white overflow-hidden"
-      style={{
-        background:
-          'radial-gradient(ellipse 80% 60% at 75% 5%, rgba(0,180,216,0.35), transparent 55%), radial-gradient(ellipse 60% 50% at 15% 95%, rgba(245,158,11,0.15), transparent 60%), linear-gradient(160deg, #0F172A 0%, #1B2B5B 45%, #082F49 100%)',
-      }}
+      style={{ background: OCEAN_BG }}
     >
-      {/* Header */}
       <header className="px-8 pt-10 text-center">
         <div className="inline-flex items-center gap-3 mb-2">
           <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center shadow-md">
@@ -64,11 +69,10 @@ function TradeShowView() {
           <span className="text-base font-semibold tracking-tight">Luna Travel</span>
         </div>
         <p className="text-xs text-white/55 uppercase tracking-[0.18em]">
-          TravelTech Show · Stand TBC
+          TravelTech Show · ExCeL · Stand N60
         </p>
       </header>
 
-      {/* Body */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 -mt-4">
         <h1 className="font-serif text-[44px] leading-none tracking-tight text-center max-w-[480px] mb-3">
           Try it on <em className="text-teal-light">your phone</em>.
@@ -78,7 +82,6 @@ function TradeShowView() {
           It looks and feels exactly like an app.
         </p>
 
-        {/* QR card */}
         <div className="bg-white rounded-3xl p-6 shadow-2xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -91,7 +94,6 @@ function TradeShowView() {
           />
         </div>
 
-        {/* Demo creds hint */}
         <div className="mt-8 text-center">
           <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 mb-1.5">
             Demo credentials
@@ -104,7 +106,6 @@ function TradeShowView() {
         </div>
       </div>
 
-      {/* Footer instruction strip */}
       <footer className="px-8 pb-8 pt-4">
         <div className="grid grid-cols-3 gap-3 max-w-[560px] mx-auto">
           <Step n={1} label="Scan with your camera" />
@@ -131,18 +132,19 @@ function Step({ n, label, icon }: { n: number; label: string; icon?: React.React
 }
 
 // ─────────────────────────────────────────────────────────────────
-// State 2: Redemption form
+// State 2: Redemption — gate then reveal
 // ─────────────────────────────────────────────────────────────────
 
 type InviteInfo = {
   status: 'pending' | 'redeemed' | 'expired';
-  prefill: {
-    bookingRef: string | null;
-    // ⚠️ Security: email and departureDate are deliberately NOT pre-filled.
-    // See /api/invites/[id]/route.ts for the rationale. The customer must
-    // type these from memory or their booking confirmation — that's the
-    // knowledge check that protects the booking if the invite URL leaks.
-  };
+  prefill: { bookingRef: string | null };
+};
+
+type Trip = {
+  destination: string | null;
+  departureDate: string | null; // YYYY-MM-DD
+  returnDate: string | null;
+  leadName: string | null;
 };
 
 function RedeemView({ inviteId }: { inviteId: string }) {
@@ -154,8 +156,9 @@ function RedeemView({ inviteId }: { inviteId: string }) {
   const [bookingRef, setBookingRef] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trip, setTrip] = useState<Trip | null>(null); // set on success → switches to reveal
 
-  // Fetch invite info on mount to pre-fill any fields the agency set
+  // Fetch invite info on mount to pre-fill any fields the agency set.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -172,7 +175,6 @@ function RedeemView({ inviteId }: { inviteId: string }) {
           prefill: data.prefill || { bookingRef: null },
         });
         if (data.prefill?.bookingRef) setBookingRef(data.prefill.bookingRef);
-        // email and departureDate intentionally not pre-filled — see type comment above
       } catch {
         if (!cancelled) setLoadFailed(true);
       }
@@ -197,8 +199,16 @@ function RedeemView({ inviteId }: { inviteId: string }) {
         setError("We couldn't find a booking with those details. Please check and try again.");
         return;
       }
-      // Success — session cookie is set by the endpoint. Redirect to the app.
-      router.push('/');
+      // Success — session cookie is set by the endpoint. Show the reveal.
+      const data = await res.json().catch(() => ({}));
+      setTrip(
+        (data && data.trip) || {
+          destination: null,
+          departureDate: departureDate.trim() || null,
+          returnDate: null,
+          leadName: null,
+        },
+      );
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -212,15 +222,17 @@ function RedeemView({ inviteId }: { inviteId: string }) {
     bookingRef.trim().length >= 3 &&
     !submitting;
 
+  // ── Reveal phase ────────────────────────────────────────────────
+  if (trip) {
+    return <RevealView trip={trip} onOpen={() => router.push('/')} />;
+  }
+
+  // ── Gate phase ──────────────────────────────────────────────────
   return (
     <main
       className="fixed inset-0 flex flex-col text-white overflow-y-auto"
-      style={{
-        background:
-          'radial-gradient(ellipse 80% 60% at 75% 5%, rgba(0,180,216,0.35), transparent 55%), radial-gradient(ellipse 60% 50% at 15% 95%, rgba(245,158,11,0.15), transparent 60%), linear-gradient(160deg, #0F172A 0%, #1B2B5B 45%, #082F49 100%)',
-      }}
+      style={{ background: OCEAN_BG }}
     >
-      {/* Header */}
       <header className="px-6 pt-10 text-center">
         <div className="inline-flex items-center gap-3 mb-2">
           <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center shadow-md">
@@ -233,9 +245,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
         </p>
       </header>
 
-      {/* Body */}
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-8">
-        {/* If we successfully loaded info and the invite is expired/redeemed */}
         {info?.status === 'expired' ? (
           <StateCard
             title="This invite has expired"
@@ -249,13 +259,12 @@ function RedeemView({ inviteId }: { inviteId: string }) {
         ) : (
           <>
             <h1 className="font-serif text-[36px] leading-none tracking-tight text-center max-w-[420px] mb-2">
-              Welcome <em className="text-teal-light">aboard</em>.
+              Your holiday is <em className="text-teal-light">ready</em>.
             </h1>
             <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
-              Confirm your booking details to load your trip.
+              One quick check it&rsquo;s you, then your whole trip opens up.
             </p>
 
-            {/* Form card */}
             <div className="w-full max-w-[420px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 p-5 shadow-2xl">
               <Field label="Booking reference">
                 <input
@@ -315,13 +324,9 @@ function RedeemView({ inviteId }: { inviteId: string }) {
           </>
         )}
 
-        {/* If the GET endpoint failed (network, bad invite ID), still show
-            the form — the redemption endpoint will return its own generic
-            error if the invite truly doesn't exist. Better than blocking
-            the user on a transient fetch failure. */}
         {loadFailed && !info && (
           <div className="mt-5 text-[11px] text-white/45 text-center max-w-[320px]">
-            Couldn&rsquo;t load invite details — you can still try the form below.
+            Couldn&rsquo;t load invite details — you can still try the form above.
           </div>
         )}
       </div>
@@ -334,6 +339,145 @@ function RedeemView({ inviteId }: { inviteId: string }) {
     </main>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────
+// State 2b: The reveal — the Holiday Pass
+// ─────────────────────────────────────────────────────────────────
+
+function RevealView({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setShown(true), 30);
+    return () => clearTimeout(t);
+  }, []);
+
+  const leadFirst = (trip.leadName || '').trim().split(/\s+/)[0] || '';
+  const dest = trip.destination?.trim() || '';
+  const days = daysUntil(trip.departureDate);
+  const range = fmtRange(trip.departureDate, trip.returnDate);
+  const nights = nightsBetween(trip.departureDate, trip.returnDate);
+
+  const headline = dest
+    ? `${leadFirst ? leadFirst + ', ' : ''}your ${dest} holiday is almost here.`
+    : `${leadFirst ? leadFirst + ', ' : ''}your holiday is almost here.`;
+
+  let cdNum = '✦';
+  let cdLabel = 'enjoy every minute';
+  if (typeof days === 'number') {
+    if (days > 1) { cdNum = String(days); cdLabel = 'days until you fly'; }
+    else if (days === 1) { cdNum = '1'; cdLabel = 'day until you fly'; }
+    else if (days === 0) { cdNum = 'Today'; cdLabel = 'you fly today'; }
+    else { cdNum = '✦'; cdLabel = 'enjoy every minute'; }
+  }
+
+  return (
+    <main
+      className="fixed inset-0 flex flex-col text-white overflow-y-auto"
+      style={{ background: OCEAN_BG }}
+    >
+      <div
+        className="flex-1 flex flex-col items-center justify-center px-6 py-10 transition-all duration-700 ease-out"
+        style={{ opacity: shown ? 1 : 0, transform: shown ? 'none' : 'translateY(12px)' }}
+      >
+        <div className="inline-flex items-center gap-2.5 mb-8">
+          <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-navy to-teal text-white font-bold text-xs flex items-center justify-center shadow-md">
+            L
+          </span>
+          <span className="text-sm font-semibold tracking-tight text-white/90">Luna Travel</span>
+        </div>
+
+        <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight text-center max-w-[440px] mb-9">
+          {headline.split(dest).map((part, i, arr) =>
+            i < arr.length - 1 ? (
+              <span key={i}>{part}<em className="text-teal-light not-italic">{dest}</em></span>
+            ) : (
+              <span key={i}>{part}</span>
+            ),
+          )}
+        </h1>
+
+        {/* Countdown */}
+        <div className="text-center mb-9">
+          <div className="font-serif text-[76px] leading-none text-teal-light tracking-tight">
+            {cdNum}
+          </div>
+          <div className="mt-2 text-[12px] uppercase tracking-[0.16em] text-white/55 font-semibold">
+            {cdLabel}
+          </div>
+        </div>
+
+        {/* At a glance */}
+        {(range || nights) && (
+          <div className="flex items-center gap-3 text-sm text-white/75 mb-9">
+            {range && <span>{range}</span>}
+            {range && nights && <span className="text-white/30">·</span>}
+            {nights && <span>{nights} {nights === 1 ? 'night' : 'nights'}</span>}
+          </div>
+        )}
+
+        {/* What's inside */}
+        <div className="w-full max-w-[360px] space-y-3 mb-9">
+          <InsideRow
+            icon={<path d="M6 4v16M6 7h11l-2.2 3L17 13H6" />}
+            label="Your day-by-day plan"
+          />
+          <InsideRow
+            icon={<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>}
+            label="Tickets and documents, even offline"
+          />
+          <InsideRow
+            icon={<path d="M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-6A8.4 8.4 0 1 1 21 11.5z" />}
+            label="Your agent, a tap away"
+          />
+        </div>
+
+        {/* CTA */}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="w-full max-w-[360px] h-14 rounded-2xl bg-teal text-white font-semibold text-[16px] hover:bg-teal-dark transition-colors flex items-center justify-center gap-2 shadow-2xl"
+        >
+          Open my holiday
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
+
+        {/* Add to home screen */}
+        <div className="mt-5 flex items-start gap-2.5 max-w-[360px] text-[12px] text-white/55 leading-relaxed">
+          <span className="mt-[1px] text-white/70"><IconShare size={15} /></span>
+          <span>
+            Tip: add Luna Travel to your home screen so your trip is one tap away.
+            Open the share menu, then <span className="text-white/80 font-medium">Add to Home Screen</span>.
+          </span>
+        </div>
+      </div>
+
+      <footer className="px-6 pb-8 pt-2 text-center">
+        <p className="text-[10px] text-white/40 tracking-[0.06em]">
+          travelgenix.io · The post-booking trip experience for SME travel agents
+        </p>
+      </footer>
+    </main>
+  );
+}
+
+function InsideRow({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-9 h-9 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-teal-light flex-none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          {icon}
+        </svg>
+      </span>
+      <span className="text-[14px] text-white/85">{label}</span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Shared bits
+// ─────────────────────────────────────────────────────────────────
 
 function Field({
   label,
@@ -364,4 +508,41 @@ function StateCard({ title, body }: { title: string; body: string }) {
       <p className="text-sm text-white/70 leading-relaxed">{body}</p>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Date helpers (UTC-safe, no external deps)
+// ─────────────────────────────────────────────────────────────────
+
+function daysUntil(dep?: string | null): number | null {
+  if (!dep || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) return null;
+  const t = new Date(dep + 'T12:00:00Z').getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.ceil((t - Date.now()) / 86400000);
+}
+
+function nightsBetween(dep?: string | null, ret?: string | null): number | null {
+  if (!dep || !ret) return null;
+  const a = new Date(dep + 'T00:00:00Z').getTime();
+  const b = new Date(ret + 'T00:00:00Z').getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  const n = Math.round((b - a) / 86400000);
+  return n > 0 ? n : null;
+}
+
+function fmtRange(dep?: string | null, ret?: string | null): string | null {
+  if (!dep || !/^\d{4}-\d{2}-\d{2}$/.test(dep)) return null;
+  const d = new Date(dep + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return null;
+  const r = ret && /^\d{4}-\d{2}-\d{2}$/.test(ret) ? new Date(ret + 'T00:00:00Z') : null;
+  const mon = (x: Date) => x.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+  const day = (x: Date) => x.getUTCDate();
+  const yr = d.getUTCFullYear();
+  if (r && !Number.isNaN(r.getTime())) {
+    if (mon(d) === mon(r) && d.getUTCFullYear() === r.getUTCFullYear()) {
+      return `${day(d)} – ${day(r)} ${mon(r)} ${yr}`;
+    }
+    return `${day(d)} ${mon(d)} – ${day(r)} ${mon(r)} ${r.getUTCFullYear()}`;
+  }
+  return `${day(d)} ${mon(d)} ${yr}`;
 }

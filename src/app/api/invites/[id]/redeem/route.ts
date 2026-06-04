@@ -13,7 +13,12 @@
  *   4. Call Travelify (via lookupBooking)
  *   5. Atomic invite update: pending → redeemed (so concurrent calls can't double-spend)
  *   6. Insert traveller row (or return existing on idempotent re-redeem)
- *   7. Sign JWT, set HttpOnly cookie, return token in body
+ *   7. Sign JWT, set HttpOnly cookie, return token + trip teaser in body
+ *
+ * On success the body also carries a `trip` object (destination, dates, lead
+ * name) so the install page can show the post-verification "Holiday Pass"
+ * reveal. This is only ever returned AFTER the knowledge check passes, so a
+ * leaked invite link never exposes it.
  *
  * Errors: ALL failures return generic 404 (anti-enumeration). Logs are
  * detailed for our own debugging but the client never learns which field
@@ -52,6 +57,29 @@ function validateOrderRef(s: unknown): string | null {
   if (!/^[A-Z0-9_\-]{3,40}$/.test(v)) return null;
   return v;
 }
+
+// ───────── Trip teaser builders (post-verification only) ─────────
+
+type TripTeaser = {
+  destination: string | null;
+  departureDate: string | null;
+  returnDate: string | null;
+  leadName: string | null;
+};
+
+function tripFromTravellerRow(row: Record<string, unknown> | null): TripTeaser {
+  return {
+    destination: (row?.destination as string) ?? null,
+    departureDate: (row?.departure_date as string) ?? null,
+    returnDate: (row?.return_date as string) ?? null,
+    leadName: (row?.lead_passenger_name as string) ?? null,
+  };
+}
+
+// Columns selected whenever we surface an existing traveller (idempotent /
+// reuse paths) so the reveal has the same teaser as a fresh redemption.
+const TRAVELLER_TEASER_COLS =
+  'id, agency_id, booking_ref, email, destination, departure_date, return_date, lead_passenger_name';
 
 // ───────── Generic 404 helper (no info leak) ─────────
 
@@ -128,7 +156,7 @@ export async function POST(
   if (invite.status === 'redeemed' && invite.redeemed_traveller_id) {
     const { data: existing, error: existingErr } = await supabase
       .from('travellers')
-      .select('id, agency_id, booking_ref, email')
+      .select(TRAVELLER_TEASER_COLS)
       .eq('id', invite.redeemed_traveller_id as string)
       .single();
 
@@ -139,7 +167,7 @@ export async function POST(
         bookingRef: existing.booking_ref as string,
         agencyId: existing.agency_id as string,
       });
-      return jsonWithCookie({ session: token }, token);
+      return jsonWithCookie({ session: token, trip: tripFromTravellerRow(existing) }, token);
     }
     // Already redeemed but details don't match — treat as not found
     console.warn('[redeem] invite already redeemed by different details:', inviteId);
@@ -202,7 +230,7 @@ export async function POST(
     if (code === '23505') {
       const { data: existing, error: existingErr } = await supabase
         .from('travellers')
-        .select('id, agency_id, booking_ref, email')
+        .select(TRAVELLER_TEASER_COLS)
         .eq('agency_id', invite.agency_id as string)
         .eq('booking_ref', bookingRef)
         .single();
@@ -236,7 +264,7 @@ export async function POST(
           bookingRef: existing.booking_ref as string,
           agencyId: existing.agency_id as string,
         });
-        return jsonWithCookie({ session: token }, token);
+        return jsonWithCookie({ session: token, trip: tripFromTravellerRow(existing) }, token);
       }
     }
 
@@ -291,7 +319,15 @@ export async function POST(
     },
   });
 
-  return jsonWithCookie({ session: token }, token);
+  // Teaser comes straight from the Travelify booking we just validated.
+  const trip: TripTeaser = {
+    destination: booking.destination ?? null,
+    departureDate: booking.departureDate || departureDate,
+    returnDate: booking.returnDate ?? null,
+    leadName,
+  };
+
+  return jsonWithCookie({ session: token, trip }, token);
 }
 
 // ───────── Cookie helper ─────────

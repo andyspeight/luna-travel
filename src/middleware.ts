@@ -16,8 +16,18 @@
  *
  * Matches ONLY the admin/invite APIs now — not the admin pages.
  *   /api/admin/*   — admin API surface
- *   /api/invites*  — invite creation and lookup, EXCEPT the public
- *                    /api/invites/[id]/redeem endpoint travellers hit.
+ *   /api/invites*  — invite creation (POST, admin) and lookup/redeem
+ *                    (public, traveller-facing). The public endpoints are
+ *                    allowlisted below; everything else needs an admin session.
+ *
+ * PUBLIC, traveller-facing exceptions (no admin session required):
+ *   - POST /api/invites/[id]/redeem  — a traveller redeems their invite.
+ *   - GET  /api/invites/[id]         — the install page reads the invite to
+ *                                      pre-fill the booking ref before the
+ *                                      traveller has any session. The route
+ *                                      itself returns only safe fields
+ *                                      (status, agencyId, booking ref).
+ *   - POST /api/admin/agencies/[id]/upload-logo — Vercel Blob webhook leg.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -35,6 +45,18 @@ export async function middleware(req: NextRequest) {
   //    have admin sessions, that's the whole point.
   //    Match /api/invites/{id}/redeem
   if (/^\/api\/invites\/[^/]+\/redeem\/?$/.test(pathname)) {
+    return NextResponse.next();
+  }
+
+  // 1a. Public invite lookup — GET ONLY. The /install page calls this before
+  //     the traveller has any session, to pre-fill the booking reference and
+  //     read the invite status. The route returns only safe fields (status,
+  //     agencyId, booking ref — see /api/invites/[id]/route.ts), so it is
+  //     intended to be open. Gated to GET so that POST /api/invites (invite
+  //     creation) stays admin-only. The redeem POST is handled above and the
+  //     extra /redeem path segment keeps it out of this single-segment match.
+  //     Match GET /api/invites/{id}
+  if (req.method === 'GET' && /^\/api\/invites\/[^/]+\/?$/.test(pathname)) {
     return NextResponse.next();
   }
 

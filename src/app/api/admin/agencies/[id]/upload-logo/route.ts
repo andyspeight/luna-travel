@@ -36,10 +36,8 @@ export const runtime = 'nodejs';
 const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 MB — plenty for a logo
 const ALLOWED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     console.error('[upload-logo] BLOB_READ_WRITE_TOKEN not set');
     return NextResponse.json({ error: 'storage_not_configured' }, { status: 500 });

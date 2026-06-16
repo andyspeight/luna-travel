@@ -25,10 +25,8 @@ function notFound() {
   return NextResponse.json({ error: 'not_found' }, { status: 404 });
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const inviteId = params.id;
   if (!inviteId || typeof inviteId !== 'string' || inviteId.length < 8 || inviteId.length > 64) {
     return notFound();

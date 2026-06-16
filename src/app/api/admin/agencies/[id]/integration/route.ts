@@ -27,10 +27,8 @@ export const runtime = 'nodejs';
 const CONTROL_HOST = 'https://id.travelify.io';
 const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const claims = await requireAdmin(req as unknown as Request);
   if (!claims) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });

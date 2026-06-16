@@ -31,10 +31,8 @@ const CATEGORIES: DocumentCategory[] = ['voucher', 'ticket', 'itinerary', 'insur
 
 // ─────────── GET ───────────
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const claims = await requireAdmin(req as unknown as Request);
   if (!claims) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
@@ -83,10 +81,8 @@ export async function GET(
 
 // ─────────── POST ───────────
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const claims = await requireAdmin(req as unknown as Request);
   if (!claims) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });

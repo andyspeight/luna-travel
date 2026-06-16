@@ -21,8 +21,9 @@ const SIGN_VALIDITY_SECONDS = 5 * 60;
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string; docId: string } },
+  props: { params: Promise<{ id: string; docId: string }> }
 ) {
+  const params = await props.params;
   const claims = await requireAdmin(req as unknown as Request);
   if (!claims) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });

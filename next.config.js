@@ -43,7 +43,6 @@ const withPWA = withPWAInit({
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: { typedRoutes: false },
 };
 
 module.exports = withPWA(nextConfig);

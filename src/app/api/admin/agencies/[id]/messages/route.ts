@@ -55,10 +55,8 @@ function str(v: unknown): string {
 
 // ---------------------------------------------------------------- POST (send)
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const claims = await requireAdmin(req as unknown as Request);
   if (!claims) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
@@ -207,10 +205,8 @@ export async function POST(
 
 // ---------------------------------------------------------------- GET (list)
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const agencyId = (params?.id || '').trim();
   if (!agencyId) {
     return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });

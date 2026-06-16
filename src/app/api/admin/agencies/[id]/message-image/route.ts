@@ -28,10 +28,8 @@ export const runtime = 'nodejs';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     console.error('[message-image] BLOB_READ_WRITE_TOKEN not set');
     return NextResponse.json({ error: 'storage_not_configured' }, { status: 500 });

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
+import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -18,6 +19,11 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string; docId: string } },
 ) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const agencyId = params.id;
   const docId = params.docId;
   if (!agencyId || !docId) {

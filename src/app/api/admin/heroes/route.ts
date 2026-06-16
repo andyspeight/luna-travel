@@ -27,6 +27,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
 import { HERO_DESTINATION_BY_CODE } from '@/data/hero-destinations';
+import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -53,7 +54,12 @@ function publicUrl(code: string, variant: string): string {
 
 // ─────────── GET — list all stored heroes ───────────
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const supabase = getSupabaseAdmin();
 
   // List every object under the bucket, per-code folder. Supabase list is
@@ -102,6 +108,11 @@ export async function GET() {
 // ─────────── POST — upload one converted webp ───────────
 
 export async function POST(req: NextRequest) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   let form: FormData;
   try {
     form = await req.formData();
@@ -182,6 +193,11 @@ export async function POST(req: NextRequest) {
 // ─────────── DELETE — remove one hero ───────────
 
 export async function DELETE(req: NextRequest) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const code = (req.nextUrl.searchParams.get('code') || '').trim().toUpperCase();
   const variant = (req.nextUrl.searchParams.get('variant') || '').trim().toLowerCase();
 

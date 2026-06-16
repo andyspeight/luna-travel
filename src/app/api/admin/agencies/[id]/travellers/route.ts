@@ -9,14 +9,20 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const agencyId = params.id;
   if (!agencyId) {
     return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });

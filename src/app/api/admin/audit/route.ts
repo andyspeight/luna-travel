@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/admin-session';
 
 const ALLOWED_EVENT_TYPES = [
   'admin.signin',
@@ -30,6 +31,11 @@ const ALLOWED_EVENT_TYPES = [
 ];
 
 export async function GET(req: NextRequest) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const url = req.nextUrl;
   const eventTypeRaw = url.searchParams.get('eventType') || '';
   const actor = (url.searchParams.get('actor') || '').trim().toLowerCase();

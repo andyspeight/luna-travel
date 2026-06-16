@@ -24,6 +24,7 @@
 
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -44,7 +45,12 @@ type DocRow = { id: string; agency_id: string | null; deleted_at: string | null;
 type AuditRow = { id: string; event_type: string; actor: string; target_label: string | null; metadata: Record<string, unknown> | null; created_at: string };
 type AgencyMeta = { id: string; name: string | null; tier: string | null; status: string | null };
 
-export async function GET() {
+export async function GET(req: Request) {
+  const claims = await requireAdmin(req);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const envErr = checkSupabaseEnv();
   if (envErr) {
     // Not an error state for the page — render a clear "not configured" view.

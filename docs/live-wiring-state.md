@@ -2,7 +2,46 @@
 
 **Working branch: `main`** (consolidated 28 May — see Branch note below)
 **Show URL:** https://lunatravel.travelify.io (deploys from main)
-**Last updated:** 28 May 2026 (afternoon)
+**Last updated:** 16 June 2026 (status addendum below; original notes from 28 May retained)
+
+---
+
+## 16 June 2026 — status addendum
+
+This doc is the Control-integration architecture record from 28 May. The build
+has moved a long way since (v0.8.0 → **v0.14.11**). The canonical "what we built"
+doc is now the root `README.md`; today's go-live verification is in
+`docs/smoke-test-2026-06-16.md`. Quick reconciliation against the lists below:
+
+**Resolved since 28 May**
+- ✅ Temporary spikes removed — `spike-booking`, `spike-invite`, `map-test` are
+  all gone, and `SPIKE_SECRET` is no longer referenced.
+- ✅ Remaining admin pages wired off the hardcoded `AGENCIES` array — the
+  agencies list, `new`, `travellers`, and the **detail page + its tabs** now
+  fetch `/api/admin/agencies`. The detail page keeps an in-file `AGENCIES` const
+  only as a vestigial **type anchor** (it fetches live data); worth replacing
+  with a named interface.
+- ✅ Luna-Travel-derived stats now exist (`/api/admin/stats`, `app_opens`).
+- ✅ Shipped beyond the original wiring scope: Flight Hub (AeroDataBox live
+  status + webhook fan-out), agent ↔ traveller messaging, trip map, 6-locale
+  i18n, inspiration feed, per-agency branding + Travelify integration, live
+  traveller booking fetch, PWA force-update.
+
+**Still open**
+- `/admin/sync` still **simulates** its activity feed from a hardcoded agency
+  list — not wired to live data (visualisation only).
+- Per-agency Travelify creds: live booking lookup still uses the demo App 250
+  bypass rather than each agency's own credentials.
+- Status vocab ("active" vs "live"), `arrCity` IATA→city refinement, and PWA
+  empty-state placeholders remain as noted below.
+
+**New (16 June)**
+- 🔒 Next.js upgraded 14.2.13 → **14.2.35** — closes the middleware
+  authorization-bypass (CVE-2025-29927) that threatened this exact admin gate.
+  Verified: the `x-middleware-subrequest` spoof now returns 401. See the smoke
+  test for detail and the defense-in-depth recommendation (7 admin routes lean
+  on middleware alone).
+- 🧹 Added `.eslintrc.json` so `npm run lint` runs and passes clean.
 
 ---
 

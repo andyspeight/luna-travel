@@ -107,19 +107,40 @@ remains splits into two lower-risk buckets:
 
 ---
 
-## Recommended before / shortly after go-live
+## Follow-up — same-day hardening (16 Jun)
 
-1. **Defense in depth:** add `requireAdmin()` inside the 7 admin API routes that
-   currently lean on middleware alone (documents ×3, travellers, audit, stats,
-   heroes). Low effort, removes the single-point-of-failure on the edge gate.
-2. **Plan the Next 15+ upgrade** and the **`next-pwa` migration** to clear the
-   remaining audit items.
-3. **Wire `/admin/sync`** to live data (currently a simulated feed) and replace
-   the vestigial `AGENCIES` type-anchor const in `admin/agencies/[id]/page.tsx`
-   with a named interface.
-4. **Per-agency Travelify creds:** switch the live booking lookup from the demo
-   App 250 path to each agency's own credentials (already available via Control).
-5. Confirm production env vars are set for the live subsystems:
-   `AERODATABOX_API_KEY`, `AERODATABOX_WEBHOOK_TOKEN`, `LUNA_TRAVEL_PUBLIC_URL`,
-   `TG_INTERNAL_KEY`, `BLOB_READ_WRITE_TOKEN` (plus the existing Supabase /
-   Travelify / JWT set).
+Done after the baseline above, each its own commit, each re-verified
+(type-check + lint + build + route sweep all green):
+
+1. ✅ **Defense in depth** — all 17 admin API routes now call `requireAdmin()`
+   in-handler (the 7 previously middleware-only routes: documents ×3, travellers,
+   audit, stats, heroes). Verified every one returns 401 (GET/POST/DELETE)
+   without a session.
+2a. ✅ **PWA tooling migrated** — `next-pwa@5.6.0` → `@ducanh2912/next-pwa@10`
+   (maintained, Next 15-compatible). Service worker still generated; high-severity
+   audit advisories dropped 10 → 6 (residual workbox/glob items are build-time
+   only).
+2b. ✅ **Next.js 14.2.35 → 15.5.19** (React kept at 18.3.1). All 12 dynamic route
+   handlers migrated to async `params` via the official codemod. Verified: the
+   public invite route resolves async params at runtime (404, not a crash); the
+   bypass probe still returns 401.
+
+## Recommended next
+
+- **#3 (held):** wire `/admin/sync` to live data and replace the vestigial
+  `AGENCIES` type-anchor const in `admin/agencies/[id]/page.tsx`.
+- **#4 (held):** switch the live booking lookup from the demo App 250 path to
+  each agency's own Travelify credentials (already available via Control).
+- **Env vars (#5):** the Vercel MCP exposes no env API, so values can't be read
+  here. Confirm in the Vercel dashboard (Settings → Environment Variables, scope
+  Production) or `vercel env ls production` that these are set:
+  `AERODATABOX_API_KEY`, `AERODATABOX_WEBHOOK_TOKEN`, `LUNA_TRAVEL_PUBLIC_URL`,
+  `TG_INTERNAL_KEY`, `BLOB_READ_WRITE_TOKEN`, plus the existing
+  `SUPABASE_*`, `AIRTABLE_KEY`, `TG_ENCRYPTION_KEY`, `JWT_SECRET` set.
+- **Merge to `main`:** the security/upgrade work is on branch
+  `claude/wonderful-rubin-hjvp9t` (built as Vercel previews). Production still
+  runs the pre-upgrade `main` build until this branch is merged.
+- **Lint CLI:** Next 15 deprecates `next lint` (removed in 16); migrate to the
+  ESLint CLI when convenient.
+- **Residual audit items:** the remaining Next/​workbox advisories are build-time
+  or only fully resolved by a future Next 16 jump — track, don't force.

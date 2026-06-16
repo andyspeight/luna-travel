@@ -38,8 +38,8 @@ Luna Travel is two connected systems in one repo:
 
 ## Tech stack
 
-- **Next.js 14.2.35** (App Router) + **TypeScript** + **Tailwind**
-- **`next-pwa`** — service worker, manifest, install prompt, offline cache
+- **Next.js 15.5.19** (App Router, React 18.3) + **TypeScript** + **Tailwind**
+- **`@ducanh2912/next-pwa`** — service worker, manifest, install prompt, offline cache
 - **Supabase** — Postgres (`luna_travel` schema) for agencies, travellers,
   invites, documents, messages and live flight rows; Storage for hero images
   (public bucket) and traveller documents (private bucket, signed URLs)
@@ -89,8 +89,10 @@ Luna Travel is two connected systems in one repo:
 | **Live booking fetch** | **PWA asks `/api/traveller/booking` on mount; uses a real `lt_session` booking if present, else falls back to the mock picker (additive).** | DONE |
 | **Engagement ping** | **`/api/traveller/ping` records app opens (`app_opens`) for admin stats.** | DONE |
 | **PWA force-update** | **`app-update.ts` + `version-check.tsx`: drop the SW, wipe caches, navigate cache-busted — fixes the stale-shell reload loop.** | DONE |
-| Security upgrade | 16 Jun — Next.js 14.2.13 → 14.2.35 (closes the middleware auth-bypass CVE-2025-29927 + others) | DONE |
-| Lint config | 16 Jun — added `.eslintrc.json` (`next/core-web-vitals` + `@typescript-eslint`); `npm run lint` now passes clean | DONE |
+| Security upgrade | 16 Jun — Next.js 14.2.13 → 14.2.35 → **15.5.19** (closes the middleware auth-bypass CVE-2025-29927 + others) | DONE |
+| Admin defense-in-depth | 16 Jun — all 17 admin API routes now re-verify the session in-handler (not middleware alone) | DONE |
+| PWA tooling | 16 Jun — `next-pwa@5.6.0` → `@ducanh2912/next-pwa@10` (maintained; Next 15-compatible) | DONE |
+| Lint config | 16 Jun — added `.eslintrc.json` (`next/core-web-vitals` + `@typescript-eslint`); `npm run lint` passes clean | DONE |
 | Real photography | Cover splashes + PDF heroes for all 4 demo destinations | DONE |
 
 ---
@@ -193,16 +195,15 @@ Ported from My Booking widget v1.4.1 (`src/lib/format.ts`):
 
 ## Security notes (travelgenix-security)
 
-- **Next.js pinned to 14.2.35** — closes the middleware authorization-bypass
+- **Next.js pinned to 15.5.19** — closes the middleware authorization-bypass
   (CVE-2025-29927) and other advisories present in 14.2.13. The
   `x-middleware-subrequest` spoof is verified to no longer bypass the admin gate.
 - Service-role key stays server-side via `getSupabaseAdmin()` only
 - Admin API routes gated server-side in `src/middleware.ts` against the central
   Travelgenix ID session; admin pages gated client-side by `tg-auth-gate.js`.
-  **Hardening recommended:** 10 of 17 admin API routes also re-verify the
-  session inside the handler (defense in depth) — extend that to the remaining
-  document/traveller/audit/stats/heroes routes so a future middleware regression
-  cannot expose data
+  **Defense in depth (done 16 Jun):** all 17 admin API routes also re-verify the
+  session inside the handler via `requireAdmin()`, so a bypassed or regressed
+  middleware cannot reach the logic
 - The AeroDataBox webhook is unauthenticated by the provider, so it is gated by
   a secret token in the query string, compared in constant time
 - Travelify calls require the `Origin` header or the API returns a silent 401 —
@@ -341,6 +342,8 @@ docs/
 (AeroDataBox live status + webhook fan-out), agent ↔ traveller messaging, trip
 map, 6-locale i18n, inspiration feed, per-agency branding/integration, live
 booking fetch, engagement ping and PWA force-update — none of which existed at
-the previous (0.8.0) update. Records the Next.js 14.2.35 security upgrade, the
-new lint config, the refreshed env/data-model tables, and an honest
-real-vs-mock breakdown. See `docs/smoke-test-2026-06-16.md` for go-live status.
+the previous (0.8.0) update. Records the security/quality hardening shipped the
+same day: Next.js upgraded to 15.5.19 (async route params; React stays 18.3),
+all 17 admin API routes self-gated for defense in depth, the PWA tooling moved
+to `@ducanh2912/next-pwa`, plus the new lint config and refreshed env/data-model
+tables. See `docs/smoke-test-2026-06-16.md` for go-live status.

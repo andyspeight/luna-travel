@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
 import { NavBar } from '@/components/nav-bar';
 import { PageEnter } from '@/components/page-enter';
@@ -15,14 +15,102 @@ import {
 import { destinationHero } from '@/lib/hero';
 import { getDestinationGuide } from '@/data/destinations';
 
-const TABS = ['Overview', 'Essentials', 'Visa & safety', 'Insider tips'] as const;
-type Tab = (typeof TABS)[number];
+// ───────── Luna Brain shapes (mirror src/lib/luna-brain.ts) ─────────
+
+interface BrainAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  category: string;
+  confidence?: string;
+  source?: string;
+  seasonal: boolean;
+  fcdoSensitive: boolean;
+  lastVerified?: string;
+}
+
+interface BrainGuide {
+  configured: boolean;
+  destination?: {
+    name: string;
+    currency?: string;
+    capital?: string;
+    languages?: string;
+    timeZone?: string;
+    emergencyNumber?: string;
+    drivingSide?: string;
+    plugType?: string;
+    voltage?: string;
+    ukVisaRequired?: string;
+    tapWaterSafe?: string;
+    fcdoStatus?: string;
+    bestMonths?: string;
+    cheapestToFly?: string;
+    vaccinations?: string;
+    lastVerified?: string;
+  } | null;
+  byCategory?: { category: string; items: BrainAnswer[] }[];
+  forYourDates?: {
+    travelLabel: string;
+    bestMonths?: string;
+    cheapestToFly?: string;
+    climate: BrainAnswer[];
+  } | null;
+}
+
+const STATIC_TABS = ['Overview', 'Essentials', 'Visa & safety', 'Insider tips'] as const;
 
 export default function DestinationGuidePage() {
   const { booking } = useBooking();
   const guide = getDestinationGuide(booking.primaryCountryCode);
   const hero = destinationHero(booking.primaryCountryCode);
-  const [tab, setTab] = useState<Tab>('Overview');
+  const [brain, setBrain] = useState<BrainGuide | null>(null);
+  const [tab, setTab] = useState<string>('Overview');
+
+  // Pull the verified Luna Brain layer for this booking's destination + dates.
+  // Additive: any failure (offline, no key) simply leaves the static guide.
+  useEffect(() => {
+    let alive = true;
+    const labelParts = booking.destinationLabel.split(/[&,/]+/);
+    const tokens = Array.from(
+      new Set(
+        [
+          ...labelParts,
+          ...booking.hotels.map((h) => h.city),
+          ...booking.hotels.map((h) => h.resort || ''),
+        ]
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    ).join(',');
+
+    const qs = new URLSearchParams({
+      cc: booking.primaryCountryCode,
+      tokens,
+      from: booking.tripStart,
+      to: booking.tripEnd,
+    });
+    fetch(`/api/traveller/destination?${qs.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: BrainGuide | null) => {
+        if (alive && data && data.configured) setBrain(data);
+      })
+      .catch(() => {
+        /* ignore — static guide stands */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booking.primaryCountryCode, booking.destinationLabel, booking.tripStart, booking.tripEnd, booking.hotels]);
+
+  const hasDates = !!brain?.forYourDates;
+  const tabs = useMemo<string[]>(() => {
+    if (!hasDates) return [...STATIC_TABS];
+    return ['Overview', 'For your dates', 'Essentials', 'Visa & safety', 'Insider tips'];
+  }, [hasDates]);
+
+  const essentialsQA = brainSectionFor(brain, /money|getting (around|there)|culture|practical/i);
+  const visaQA = brainSectionFor(brain, /entry|visa|health|safety/i);
 
   if (!guide) {
     return (
@@ -78,7 +166,7 @@ export default function DestinationGuidePage() {
         {/* Tabs */}
         <div className="sticky top-0 z-20 bg-surface border-b border-line-light">
           <div className="flex gap-1.5 px-4 py-2.5 overflow-x-auto scrollbar-none">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t}
                 type="button"
@@ -111,16 +199,22 @@ export default function DestinationGuidePage() {
 
               {/* Quick facts */}
               <div className="grid grid-cols-2 gap-2 mt-5">
-                <Fact icon={<IconCoin size={14} />} label="Currency" value={guide.currency} />
-                <Fact icon={<IconClock size={14} />} label="Time zone" value={guide.timeZone} />
+                <Fact icon={<IconCoin size={14} />} label="Currency" value={brain?.destination?.currency || guide.currency} />
+                <Fact icon={<IconClock size={14} />} label="Time zone" value={brain?.destination?.timeZone || guide.timeZone} />
                 <Fact
                   icon={<IconInfo size={14} />}
                   label="Languages"
-                  value={guide.languages.join(' · ')}
+                  value={brain?.destination?.languages || guide.languages.join(' · ')}
                 />
                 <Fact icon={<IconInfo size={14} />} label="Weather" value={guide.weatherSummary} />
               </div>
+
+              {brain?.destination && <VerifiedChip lastVerified={brain.destination.lastVerified} />}
             </>
+          )}
+
+          {tab === 'For your dates' && brain?.forYourDates && (
+            <ForYourDates fyd={brain.forYourDates} fcdoStatus={brain.destination?.fcdoStatus} />
           )}
 
           {tab === 'Essentials' && (
@@ -129,34 +223,25 @@ export default function DestinationGuidePage() {
                 The basics
               </h2>
               <div className="space-y-2">
-                <EssentialRow
-                  icon={<IconCoin size={14} />}
-                  label="Currency"
-                  value={guide.currency}
-                />
-                <EssentialRow
-                  icon={<IconClock size={14} />}
-                  label="Time zone"
-                  value={guide.timeZone}
-                />
-                <EssentialRow
-                  icon={<IconInfo size={14} />}
-                  label="Languages"
-                  value={guide.languages.join(', ')}
-                />
-                <EssentialRow
-                  icon={<IconInfo size={14} />}
-                  label="Weather"
-                  value={guide.weatherSummary}
-                />
-                {guide.emergencyNumber && (
-                  <EssentialRow
-                    icon={<IconWarning size={14} />}
-                    label="Emergency"
-                    value={guide.emergencyNumber}
-                  />
+                <EssentialRow icon={<IconCoin size={14} />} label="Currency" value={brain?.destination?.currency || guide.currency} />
+                <EssentialRow icon={<IconClock size={14} />} label="Time zone" value={brain?.destination?.timeZone || guide.timeZone} />
+                <EssentialRow icon={<IconInfo size={14} />} label="Languages" value={brain?.destination?.languages || guide.languages.join(', ')} />
+                <EssentialRow icon={<IconInfo size={14} />} label="Weather" value={guide.weatherSummary} />
+                {(brain?.destination?.plugType || brain?.destination?.voltage) && (
+                  <EssentialRow icon={<IconInfo size={14} />} label="Power" value={[brain.destination.plugType, brain.destination.voltage].filter(Boolean).join(' · ')} />
+                )}
+                {brain?.destination?.tapWaterSafe && (
+                  <EssentialRow icon={<IconInfo size={14} />} label="Tap water" value={brain.destination.tapWaterSafe} />
+                )}
+                {brain?.destination?.drivingSide && (
+                  <EssentialRow icon={<IconInfo size={14} />} label="Driving" value={brain.destination.drivingSide} />
+                )}
+                {(brain?.destination?.emergencyNumber || guide.emergencyNumber) && (
+                  <EssentialRow icon={<IconWarning size={14} />} label="Emergency" value={brain?.destination?.emergencyNumber || guide.emergencyNumber!} />
                 )}
               </div>
+
+              <BrainSection title="Good to know" answers={essentialsQA} />
             </>
           )}
 
@@ -181,14 +266,16 @@ export default function DestinationGuidePage() {
                       Emergency number
                     </div>
                     <a
-                      href={`tel:${guide.emergencyNumber.replace(/[^\d+]/g, '')}`}
+                      href={`tel:${(brain?.destination?.emergencyNumber || guide.emergencyNumber).replace(/[^\d+]/g, '')}`}
                       className="text-base font-semibold text-ink"
                     >
-                      {guide.emergencyNumber}
+                      {brain?.destination?.emergencyNumber || guide.emergencyNumber}
                     </a>
                   </div>
                 </>
               )}
+
+              <BrainSection title="Verified answers" answers={visaQA} />
 
               <p className="text-[11px] text-ink-3 italic mt-4">
                 Always check the latest FCDO travel advice before you travel.
@@ -211,6 +298,151 @@ export default function DestinationGuidePage() {
       </main>
     </PageEnter>
   );
+}
+
+/** Pick the Brain Q&A whose category matches a tab. */
+function brainSectionFor(brain: BrainGuide | null, match: RegExp): BrainAnswer[] {
+  if (!brain?.byCategory) return [];
+  return brain.byCategory
+    .filter((g) => match.test(g.category))
+    .flatMap((g) => g.items);
+}
+
+function ForYourDates({
+  fyd,
+  fcdoStatus,
+}: {
+  fyd: NonNullable<BrainGuide['forYourDates']>;
+  fcdoStatus?: string;
+}) {
+  return (
+    <>
+      {fyd.travelLabel && (
+        <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-teal-dark dark:text-teal-light font-semibold mb-3">
+          <IconClock size={12} />
+          Travelling {fyd.travelLabel}
+        </div>
+      )}
+
+      {fyd.bestMonths && (
+        <InfoBlock title="Best time to visit" body={fyd.bestMonths} />
+      )}
+      {fyd.cheapestToFly && (
+        <InfoBlock title="When it's cheapest to fly" body={fyd.cheapestToFly} />
+      )}
+      {fcdoStatus && (
+        <InfoBlock title="FCDO travel advice" body={fcdoStatus} />
+      )}
+
+      {fyd.climate.length > 0 && (
+        <BrainSection title="Weather & seasons" answers={fyd.climate} />
+      )}
+
+      <BrainProvenanceFooter />
+    </>
+  );
+}
+
+function InfoBlock({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="mt-3 p-4 rounded-2xl bg-surface border border-line-light">
+      <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-3 mb-1">
+        {title}
+      </div>
+      <p className="text-sm text-ink-2 leading-relaxed whitespace-pre-line">{body}</p>
+    </div>
+  );
+}
+
+function BrainSection({ title, answers }: { title: string; answers: BrainAnswer[] }) {
+  if (!answers.length) return null;
+  return (
+    <div className="mt-6">
+      <h3 className="text-base font-semibold text-ink mb-2 inline-flex items-center gap-2">
+        {title}
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-teal-dark dark:text-teal-light bg-teal/10 px-1.5 py-0.5 rounded">
+          Luna Brain
+        </span>
+      </h3>
+      <div className="space-y-2">
+        {answers.map((a) => (
+          <BrainQA key={a.id} a={a} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BrainQA({ a }: { a: BrainAnswer }) {
+  return (
+    <details className="group p-3.5 rounded-2xl bg-surface border border-line-light">
+      <summary className="cursor-pointer list-none text-sm font-semibold text-ink flex items-start justify-between gap-3">
+        <span>{a.question}</span>
+        <span className="text-ink-3 transition-transform group-open:rotate-180 shrink-0 mt-0.5">⌄</span>
+      </summary>
+      <p className="text-sm text-ink-2 leading-relaxed whitespace-pre-line mt-2">{a.answer}</p>
+      {a.fcdoSensitive && (
+        <p className="text-[11px] text-ink-3 italic mt-2">
+          Entry/safety rules change — confirm against the latest FCDO advice before you travel.
+        </p>
+      )}
+      <Provenance source={a.source} lastVerified={a.lastVerified} confidence={a.confidence} />
+    </details>
+  );
+}
+
+function Provenance({
+  source,
+  lastVerified,
+  confidence,
+}: {
+  source?: string;
+  lastVerified?: string;
+  confidence?: string;
+}) {
+  if (!source && !lastVerified && !confidence) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-[10px] text-ink-3">
+      {confidence && <span className="uppercase tracking-wider font-semibold">{confidence}</span>}
+      {lastVerified && <span>· Verified {fmtDate(lastVerified)}</span>}
+      {source && (
+        <>
+          <span>·</span>
+          <a
+            href={source}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-teal-dark dark:text-teal-light underline underline-offset-2"
+          >
+            Source
+          </a>
+        </>
+      )}
+    </div>
+  );
+}
+
+function VerifiedChip({ lastVerified }: { lastVerified?: string }) {
+  return (
+    <p className="text-[10px] text-ink-3 mt-3">
+      Verified facts from Luna Brain{lastVerified ? ` · updated ${fmtDate(lastVerified)}` : ''}
+    </p>
+  );
+}
+
+function BrainProvenanceFooter() {
+  return (
+    <p className="text-[11px] text-ink-3 italic mt-4">
+      Sourced from Luna Brain — Travelgenix&rsquo;s verified destination knowledge. Live
+      weather and local events for your exact dates are coming soon.
+    </p>
+  );
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function Fact({

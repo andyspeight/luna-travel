@@ -36,15 +36,25 @@ const C = {
   infoSoft: '#EFF6FF',
 };
 
-const AGENCIES = [
-  { id: 'agc_7k2n', name: 'Coast & Crown Travel', tier: 'Ignite', status: 'live', travellers: 847, activeTrips: 124, lastSync: '2m ago', primary: '#0F4C5C', accent: '#E36414', appName: 'Coast & Crown', contact: 'sophie@coastandcrown.co.uk', city: 'Brighton', joined: 'Feb 2026', deviceInstalls: 612, last30dActives: 489 },
-  { id: 'agc_3p8m', name: 'Mercia Holidays', tier: 'Boost', status: 'live', travellers: 312, activeTrips: 47, lastSync: '14m ago', primary: '#1B2B5B', accent: '#00B4D8', appName: 'Mercia Trips', contact: 'bookings@merciaholidays.com', city: 'Worcester', joined: 'Mar 2026', deviceInstalls: 198, last30dActives: 156 },
-  { id: 'agc_9w1q', name: 'Elite Bespoke', tier: 'Ignite', status: 'live', travellers: 1247, activeTrips: 203, lastSync: '47s ago', primary: '#0A0A0A', accent: '#C9A961', appName: 'Elite', contact: 'concierge@elitebespoke.travel', city: 'Mayfair', joined: 'Jan 2026', deviceInstalls: 1024, last30dActives: 891 },
-  { id: 'agc_2v6r', name: 'Brackenwood Travel', tier: 'Boost', status: 'live', travellers: 234, activeTrips: 38, lastSync: '3m ago', primary: '#2D5016', accent: '#D4A574', appName: 'Brackenwood', contact: 'hello@brackenwoodtravel.co.uk', city: 'Kendal', joined: 'Apr 2026', deviceInstalls: 142, last30dActives: 98 },
-  { id: 'agc_5x4t', name: 'Halcyon Days Travel', tier: 'Spark', status: 'setup', travellers: 0, activeTrips: 0, lastSync: 'never', primary: '#1B2B5B', accent: '#00B4D8', appName: 'Luna Travel', contact: 'mike@halcyondaystravel.co.uk', city: 'Cheltenham', joined: 'May 2026', deviceInstalls: 0, last30dActives: 0 },
-  { id: 'agc_8h3y', name: 'Saltbreeze Travel', tier: 'Boost', status: 'paused', travellers: 178, activeTrips: 22, lastSync: '2d ago', primary: '#264653', accent: '#E9C46A', appName: 'Saltbreeze', contact: 'rachel@saltbreeze.travel', city: 'St Ives', joined: 'Mar 2026', deviceInstalls: 89, last30dActives: 0 },
-  { id: 'agc_4n7c', name: 'Northstar Journeys', tier: 'Ignite', status: 'live', travellers: 567, activeTrips: 88, lastSync: '1m ago', primary: '#1A1A2E', accent: '#F5A623', appName: 'Northstar', contact: 'team@northstar.travel', city: 'Edinburgh', joined: 'Feb 2026', deviceInstalls: 412, last30dActives: 367 },
-];
+/** Shape of an agency as rendered by the detail tabs. The page fetches the live
+ *  record from /api/admin/agencies?id= and maps it into this shape. */
+interface Agency {
+  id: string;
+  name: string;
+  tier: string;
+  status: string;
+  travellers: number;
+  activeTrips: number;
+  lastSync: string;
+  primary: string;
+  accent: string;
+  appName: string;
+  contact: string;
+  city: string;
+  joined: string;
+  deviceInstalls: number;
+  last30dActives: number;
+}
 
 const SYNC_EVENTS_BY_AGENCY: Record<string, { ref: string; status: 'success' | 'failed'; time: string; detail: string }[]> = {
   agc_7k2n: [
@@ -203,7 +213,7 @@ function FormField({ label, helper, children }: { label: string; helper?: string
 
 // ============ TAB CONTENT ============
 
-function OverviewTab({ agency }: { agency: typeof AGENCIES[0] }) {
+function OverviewTab({ agency }: { agency: Agency }) {
   const events = SYNC_EVENTS_BY_AGENCY[agency.id] ?? [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -257,7 +267,7 @@ function OverviewTab({ agency }: { agency: typeof AGENCIES[0] }) {
   );
 }
 
-function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
+function BrandingTab({ agency }: { agency: Agency }) {
   const [primary, setPrimary] = useState(agency.primary);
   const [accent, setAccent] = useState(agency.accent);
   const [appName, setAppName] = useState(agency.appName);
@@ -554,7 +564,7 @@ function BrandingTab({ agency }: { agency: typeof AGENCIES[0] }) {
   );
 }
 
-function CredentialsTab({ agency }: { agency: typeof AGENCIES[0] }) {
+function CredentialsTab({ agency }: { agency: Agency }) {
   const a = agency as unknown as {
     id: string;
     travelifyAppId?: string | number;
@@ -831,7 +841,7 @@ function suggestCategoryFromFilename(filename: string): AgencyDocument['category
   return 'other';
 }
 
-function DocumentsTab({ agency }: { agency: typeof AGENCIES[0] }) {
+function DocumentsTab({ agency }: { agency: Agency }) {
   const [travellers, setTravellers] = useState<AgencyTraveller[]>([]);
   const [travellersLoading, setTravellersLoading] = useState(true);
   const [travellersError, setTravellersError] = useState<string | null>(null);
@@ -1277,7 +1287,7 @@ export default function AgencyDetailPage() {
   // Agency is a Control client, fetched live via the Control-backed endpoint.
   // We shape it to the same fields the tabs already expect, defaulting the
   // Luna-Travel-derived bits (stats, city, joined) that Control doesn't hold.
-  const [agency, setAgency] = useState<(typeof AGENCIES)[0] | null>(null);
+  const [agency, setAgency] = useState<Agency | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -1321,7 +1331,7 @@ export default function AgencyDetailPage() {
           travelifySiteId: a.travelifySiteId != null ? String(a.travelifySiteId) : '',
           apiKeySet: !!a.apiKeySet,
           apiKeyLast4: a.apiKeyLast4 || '',
-        } as unknown as (typeof AGENCIES)[0];
+        } as unknown as Agency;
         setAgency(shaped);
         setLoading(false);
       } catch {

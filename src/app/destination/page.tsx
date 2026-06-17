@@ -55,6 +55,8 @@ interface BrainGuide {
     bestMonths?: string;
     cheapestToFly?: string;
     climate: BrainAnswer[];
+    events: BrainAnswer[];
+    thingsToDo: BrainAnswer[];
   } | null;
 }
 
@@ -337,6 +339,12 @@ function ForYourDates({
       {fyd.climate.length > 0 && (
         <BrainSection title="Weather & seasons" answers={fyd.climate} />
       )}
+      {fyd.events.length > 0 && (
+        <BrainSection title="What's on" answers={fyd.events} />
+      )}
+      {fyd.thingsToDo.length > 0 && (
+        <BrainSection title="Things to do" answers={fyd.thingsToDo} />
+      )}
 
       <BrainProvenanceFooter />
     </>
@@ -433,8 +441,8 @@ function VerifiedChip({ lastVerified }: { lastVerified?: string }) {
 function BrainProvenanceFooter() {
   return (
     <p className="text-[11px] text-ink-3 italic mt-4">
-      Sourced from Luna Brain — Travelgenix&rsquo;s verified destination knowledge. Live
-      weather and local events for your exact dates are coming soon.
+      Drawn live from Luna Brain — Travelgenix&rsquo;s verified destination knowledge,
+      refreshed daily. Live weather for your exact dates is coming soon.
     </p>
   );
 }

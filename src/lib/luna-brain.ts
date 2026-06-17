@@ -72,6 +72,8 @@ export interface BrainGuide {
     bestMonths?: string;
     cheapestToFly?: string;
     climate: BrainAnswer[];
+    events: BrainAnswer[];
+    thingsToDo: BrainAnswer[];
   } | null;
   generatedAt: string;
 }
@@ -96,10 +98,10 @@ async function brainGet(
   const url = `${AIRTABLE_V0}/${BRAIN_BASE}/${table}?${usp.toString()}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${key}` },
-    // Destination knowledge changes rarely (Last Verified is ~monthly), so we
-    // let Next cache the upstream call for a day rather than hit Airtable on
-    // every request.
-    next: { revalidate: 86400 },
+    // Cache the upstream call briefly so we don't hit Airtable on every request,
+    // but stay fresh enough that newly-promoted Luna Brain content (the daily
+    // crawl → review → promote loop) surfaces within minutes, not a day.
+    next: { revalidate: 900 },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -253,18 +255,34 @@ export async function getGuide(opts: {
 
   const byCategory = groupByCategory(knowledge);
 
-  // "For your dates" pulls the genuinely time-relevant material: the verified
-  // best-months / cheapest-to-fly guidance plus any climate or seasonal Q&A.
+  // "For your dates" pulls the genuinely trip-relevant material: the verified
+  // best-months / cheapest-to-fly guidance and climate/seasonal Q&A, plus the
+  // crawler-sourced What's-on (events) and Things-to-do — these light up
+  // automatically once Luna Chat promotes them into the live Knowledge table.
+  const isEvent = (a: BrainAnswer) => /event/i.test(a.category);
+  const isThingsToDo = (a: BrainAnswer) =>
+    /things to do|activities|attractions|see (and|&) do/i.test(a.category);
   const climate = knowledge.filter(
-    (a) => /climate|when to go/i.test(a.category) || a.seasonal,
+    (a) =>
+      (/climate|when to go/i.test(a.category) || a.seasonal) &&
+      !isEvent(a) &&
+      !isThingsToDo(a),
   );
+  const events = knowledge.filter(isEvent);
+  const thingsToDo = knowledge.filter(isThingsToDo);
   const forYourDates =
-    destination?.bestMonths || destination?.cheapestToFly || climate.length
+    destination?.bestMonths ||
+    destination?.cheapestToFly ||
+    climate.length ||
+    events.length ||
+    thingsToDo.length
       ? {
           travelLabel: travelWindowLabel(opts.from, opts.to),
           bestMonths: destination?.bestMonths,
           cheapestToFly: destination?.cheapestToFly,
           climate,
+          events,
+          thingsToDo,
         }
       : null;
 

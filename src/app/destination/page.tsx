@@ -60,6 +60,32 @@ interface BrainGuide {
   } | null;
 }
 
+// ───────── Live conditions shapes (mirror weather.ts / holidays.ts) ─────────
+
+interface CondWeather {
+  mode: 'forecast' | 'normals';
+  summary: string;
+  maxC: number | null;
+  minC: number | null;
+  seaTempC?: number | null;
+  days?: { date: string; maxC: number | null; minC: number | null; precipProb?: number | null }[];
+  monthLabel?: string;
+  sources: string[];
+  asOf: string;
+  note?: string;
+}
+interface CondHoliday { date: string; name: string; kind: 'public' | 'observance'; sources: string[] }
+interface CondHolidays { holidays: CondHoliday[]; sourceCount: number; asOf: string }
+interface CondSegment {
+  label: string;
+  countryCode: string;
+  from: string;
+  to: string;
+  weather: CondWeather | null;
+  holidays: CondHolidays | null;
+}
+interface Conditions { configured: boolean; segments: CondSegment[] }
+
 const STATIC_TABS = ['Overview', 'Essentials', 'Visa & safety', 'Insider tips'] as const;
 
 export default function DestinationGuidePage() {
@@ -67,6 +93,7 @@ export default function DestinationGuidePage() {
   const guide = getDestinationGuide(booking.primaryCountryCode);
   const hero = destinationHero(booking.primaryCountryCode);
   const [brain, setBrain] = useState<BrainGuide | null>(null);
+  const [conditions, setConditions] = useState<Conditions | null>(null);
   const [tab, setTab] = useState<string>('Overview');
 
   // Pull the verified Luna Brain layer for this booking's destination + dates.
@@ -105,14 +132,41 @@ export default function DestinationGuidePage() {
     };
   }, [booking.primaryCountryCode, booking.destinationLabel, booking.tripStart, booking.tripEnd, booking.hotels]);
 
-  const hasDates = !!brain?.forYourDates;
+  // Pull the live weather + holidays layer, one segment per stay location
+  // (consecutive stays in the same place are merged). Additive + graceful.
+  useEffect(() => {
+    let alive = true;
+    const segments = buildSegments(booking.hotels);
+    if (!segments.length) return;
+    const qs = new URLSearchParams();
+    for (const s of segments) {
+      qs.append('loc', `${s.lat},${s.lng},${s.countryCode},${s.from},${s.to},${s.label}`);
+    }
+    fetch(`/api/traveller/conditions?${qs.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Conditions | null) => {
+        if (alive && data && data.configured) setConditions(data);
+      })
+      .catch(() => {
+        /* ignore — section just won't show */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booking.reference, booking.hotels]);
+
+  const hasConditions = !!conditions?.segments?.some(
+    (s) => s.weather || (s.holidays && s.holidays.holidays.length > 0),
+  );
+  const hasForYourDates = !!brain?.forYourDates || hasConditions;
   const tabs = useMemo<string[]>(() => {
-    if (!hasDates) return [...STATIC_TABS];
+    if (!hasForYourDates) return [...STATIC_TABS];
     return ['Overview', 'For your dates', 'Essentials', 'Visa & safety', 'Insider tips'];
-  }, [hasDates]);
+  }, [hasForYourDates]);
 
   const essentialsQA = brainSectionFor(brain, /money|getting (around|there)|culture|practical/i);
   const visaQA = brainSectionFor(brain, /entry|visa|health|safety/i);
+  const travelLabel = brain?.forYourDates?.travelLabel || travelWindowLabel(booking.tripStart, booking.tripEnd);
 
   if (!guide) {
     return (
@@ -215,8 +269,13 @@ export default function DestinationGuidePage() {
             </>
           )}
 
-          {tab === 'For your dates' && brain?.forYourDates && (
-            <ForYourDates fyd={brain.forYourDates} fcdoStatus={brain.destination?.fcdoStatus} />
+          {tab === 'For your dates' && (
+            <ForYourDates
+              fyd={brain?.forYourDates ?? null}
+              fcdoStatus={brain?.destination?.fcdoStatus}
+              conditions={conditions}
+              travelLabel={travelLabel}
+            />
           )}
 
           {tab === 'Essentials' && (
@@ -302,6 +361,46 @@ export default function DestinationGuidePage() {
   );
 }
 
+/** Build one conditions segment per stay location, merging consecutive stays in
+ *  the same place. Only hotels with real coordinates are used (never guessed). */
+function buildSegments(
+  hotels: { lat?: number; lng?: number; city?: string; resort?: string; country?: string; countryCode?: string; checkIn: string; checkOut: string }[],
+): { lat: number; lng: number; countryCode: string; from: string; to: string; label: string }[] {
+  const located = hotels
+    .filter((h) => typeof h.lat === 'number' && typeof h.lng === 'number' && h.countryCode)
+    .sort((a, b) => new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime());
+
+  const segs: { lat: number; lng: number; countryCode: string; from: string; to: string; label: string }[] = [];
+  for (const h of located) {
+    const label = (h.city || h.resort || h.country || h.countryCode!).trim();
+    const from = h.checkIn.slice(0, 10);
+    const to = h.checkOut.slice(0, 10);
+    const last = segs[segs.length - 1];
+    if (last && last.label === label && last.countryCode === h.countryCode) {
+      if (to > last.to) last.to = to; // extend the merged stay
+    } else {
+      segs.push({ lat: h.lat!, lng: h.lng!, countryCode: h.countryCode!, from, to, label });
+    }
+  }
+  return segs;
+}
+
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function travelWindowLabel(fromIso?: string, toIso?: string): string {
+  const from = fromIso ? new Date(fromIso) : null;
+  if (!from || Number.isNaN(from.getTime())) return '';
+  const to = toIso ? new Date(toIso) : null;
+  const a = `${MONTHS_LONG[from.getUTCMonth()]} ${from.getUTCFullYear()}`;
+  if (!to || Number.isNaN(to.getTime())) return a;
+  if (to.getUTCMonth() === from.getUTCMonth() && to.getUTCFullYear() === from.getUTCFullYear()) return a;
+  const sameYear = to.getUTCFullYear() === from.getUTCFullYear();
+  return `${sameYear ? MONTHS_LONG[from.getUTCMonth()] : a} – ${MONTHS_LONG[to.getUTCMonth()]} ${to.getUTCFullYear()}`;
+}
+
 /** Pick the Brain Q&A whose category matches a tab. */
 function brainSectionFor(brain: BrainGuide | null, match: RegExp): BrainAnswer[] {
   if (!brain?.byCategory) return [];
@@ -313,41 +412,129 @@ function brainSectionFor(brain: BrainGuide | null, match: RegExp): BrainAnswer[]
 function ForYourDates({
   fyd,
   fcdoStatus,
+  conditions,
+  travelLabel,
 }: {
-  fyd: NonNullable<BrainGuide['forYourDates']>;
+  fyd: BrainGuide['forYourDates'];
   fcdoStatus?: string;
+  conditions: Conditions | null;
+  travelLabel: string;
 }) {
+  const segments = conditions?.segments?.filter(
+    (s) => s.weather || (s.holidays && s.holidays.holidays.length > 0),
+  ) ?? [];
+  const multi = segments.length > 1;
+
   return (
     <>
-      {fyd.travelLabel && (
+      {travelLabel && (
         <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-teal-dark dark:text-teal-light font-semibold mb-3">
           <IconClock size={12} />
-          Travelling {fyd.travelLabel}
+          Travelling {travelLabel}
         </div>
       )}
 
-      {fyd.bestMonths && (
-        <InfoBlock title="Best time to visit" body={fyd.bestMonths} />
-      )}
-      {fyd.cheapestToFly && (
-        <InfoBlock title="When it's cheapest to fly" body={fyd.cheapestToFly} />
-      )}
-      {fcdoStatus && (
-        <InfoBlock title="FCDO travel advice" body={fcdoStatus} />
-      )}
+      {/* Live weather + holidays, per stay location */}
+      {segments.map((seg) => (
+        <StaySegment key={`${seg.label}-${seg.from}`} seg={seg} showHeading={multi} />
+      ))}
 
-      {fyd.climate.length > 0 && (
-        <BrainSection title="Weather & seasons" answers={fyd.climate} />
-      )}
-      {fyd.events.length > 0 && (
-        <BrainSection title="What's on" answers={fyd.events} />
-      )}
-      {fyd.thingsToDo.length > 0 && (
-        <BrainSection title="Things to do" answers={fyd.thingsToDo} />
-      )}
+      {/* Verified Luna Brain seasonal guidance */}
+      {fyd?.bestMonths && <InfoBlock title="Best time to visit" body={fyd.bestMonths} />}
+      {fyd?.cheapestToFly && <InfoBlock title="When it's cheapest to fly" body={fyd.cheapestToFly} />}
+      {fcdoStatus && <InfoBlock title="FCDO travel advice" body={fcdoStatus} />}
+      {fyd && fyd.climate.length > 0 && <BrainSection title="Weather & seasons" answers={fyd.climate} />}
+      {fyd && fyd.events.length > 0 && <BrainSection title="What's on" answers={fyd.events} />}
+      {fyd && fyd.thingsToDo.length > 0 && <BrainSection title="Things to do" answers={fyd.thingsToDo} />}
 
-      <BrainProvenanceFooter />
+      <p className="text-[11px] text-ink-3 italic mt-4">
+        Weather and public holidays are drawn live and cross-checked across two
+        independent sources; destination knowledge comes from Luna Brain, refreshed
+        daily.
+      </p>
     </>
+  );
+}
+
+function StaySegment({ seg, showHeading }: { seg: CondSegment; showHeading: boolean }) {
+  return (
+    <div className="mt-3">
+      {showHeading && (
+        <div className="text-sm font-semibold text-ink mb-2 inline-flex items-center gap-1.5">
+          <IconPin size={13} />
+          {seg.label} · {fmtRange(seg.from, seg.to)}
+        </div>
+      )}
+      {seg.weather && <WeatherBlock w={seg.weather} />}
+      {seg.holidays && seg.holidays.holidays.length > 0 && <HolidaysBlock h={seg.holidays} />}
+    </div>
+  );
+}
+
+function WeatherBlock({ w }: { w: CondWeather }) {
+  return (
+    <div className="p-4 rounded-2xl bg-surface border border-line-light">
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">Weather</div>
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-teal-dark dark:text-teal-light bg-teal/10 px-1.5 py-0.5 rounded">
+          {w.mode === 'forecast' ? 'Forecast' : 'Typical'}
+        </span>
+      </div>
+      <p className="text-sm font-medium text-ink">{w.summary}</p>
+      {typeof w.seaTempC === 'number' && (
+        <p className="text-sm text-ink-2 mt-0.5">Sea around {w.seaTempC}°C</p>
+      )}
+
+      {w.mode === 'forecast' && w.days && w.days.length > 0 && (
+        <div className="flex gap-1.5 mt-3 overflow-x-auto scrollbar-none">
+          {w.days.map((d) => (
+            <div key={d.date} className="flex-shrink-0 w-14 text-center p-2 rounded-xl bg-surface-3">
+              <div className="text-[10px] text-ink-3">{fmtDay(d.date)}</div>
+              <div className="text-[13px] font-semibold text-ink mt-1">{d.maxC ?? '–'}°</div>
+              <div className="text-[11px] text-ink-3">{d.minC ?? '–'}°</div>
+              {typeof d.precipProb === 'number' && d.precipProb > 0 && (
+                <div className="text-[10px] text-teal-dark dark:text-teal-light mt-0.5">{d.precipProb}%</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {w.note && <p className="text-[11px] text-ink-3 italic mt-2">{w.note}</p>}
+      <div className="text-[10px] text-ink-3 mt-2">
+        {w.sources.join(' + ')} · as of {fmtDate(w.asOf)}
+      </div>
+    </div>
+  );
+}
+
+function HolidaysBlock({ h }: { h: CondHolidays }) {
+  return (
+    <div className="mt-2 p-4 rounded-2xl bg-surface border border-line-light">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">
+          Holidays during your stay
+        </div>
+        {h.sourceCount >= 2 && (
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-teal-dark dark:text-teal-light bg-teal/10 px-1.5 py-0.5 rounded">
+            Verified ×2
+          </span>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {h.holidays.map((hol) => (
+          <div key={`${hol.date}-${hol.name}`} className="flex items-baseline gap-2">
+            <span className="text-[11px] font-semibold text-ink w-12 flex-shrink-0">{fmtDayMonth(hol.date)}</span>
+            <span className="text-sm text-ink-2">
+              {hol.name}
+              {hol.kind === 'observance' && (
+                <span className="text-[10px] uppercase tracking-wider text-ink-3 ml-1.5">observance</span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -438,19 +625,32 @@ function VerifiedChip({ lastVerified }: { lastVerified?: string }) {
   );
 }
 
-function BrainProvenanceFooter() {
-  return (
-    <p className="text-[11px] text-ink-3 italic mt-4">
-      Drawn live from Luna Brain — Travelgenix&rsquo;s verified destination knowledge,
-      refreshed daily. Live weather for your exact dates is coming soon.
-    </p>
-  );
-}
-
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fmtDayMonth(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function fmtDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', { weekday: 'short' });
+}
+
+function fmtRange(from: string, to: string): string {
+  const a = new Date(from);
+  const b = new Date(to);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return '';
+  const sameMonth = a.getUTCMonth() === b.getUTCMonth();
+  const aStr = a.toLocaleDateString('en-GB', { day: 'numeric', month: sameMonth ? undefined : 'short' });
+  const bStr = b.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return `${aStr}–${bStr}`;
 }
 
 function Fact({

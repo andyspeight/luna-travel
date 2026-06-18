@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Plane, BedDouble, Compass, Image as ImageIcon, CheckCircle2, Copy, ExternalLink, X } from 'lucide-react';
+import { Plus, Trash2, Plane, BedDouble, Compass, Image as ImageIcon, CheckCircle2, Copy, ExternalLink, X, FileUp, Sparkles, AlertTriangle } from 'lucide-react';
 import QRCode from 'qrcode';
 
 const C = {
@@ -14,6 +14,16 @@ interface Agency { id: string; name: string; contact?: string }
 interface FlightRow { carrierCode: string; flightNumber: string; fromIata: string; toIata: string; departAt: string; arriveAt: string; cabin: string }
 interface HotelRow { name: string; city: string; country: string; checkIn: string; checkOut: string; board: string; photos: string[] }
 interface ExpRow { kind: string; title: string; supplier: string; location: string; startAt: string; endAt: string; notes: string; photos: string[] }
+
+// Form-ready draft returned by /api/admin/import-pdf (photos are added by the admin).
+interface ImportedDraft {
+  leadFirstName: string; leadLastName: string; leadEmail: string;
+  destinationLabel: string; countryCode: string; reference: string;
+  flights: FlightRow[];
+  hotels: Omit<HotelRow, 'photos'>[];
+  experiences: Omit<ExpRow, 'photos'>[];
+  warnings: string[];
+}
 
 const BOARDS = [
   { v: '', label: 'Board (optional)' }, { v: 'RO', label: 'Room only' }, { v: 'BB', label: 'Bed & breakfast' },
@@ -60,6 +70,21 @@ export default function NewBookingPage() {
   }, []);
 
   const installUrl = result?.inviteId && typeof window !== 'undefined' ? `${window.location.origin}/install?invite=${result.inviteId}` : '';
+
+  // Pre-fill from a PDF import. Only overwrite a field when the draft has a
+  // value, and only replace a section's rows when the draft actually has rows —
+  // so a flights-only confirmation never wipes a hotel the admin already typed.
+  const applyDraft = (d: ImportedDraft) => {
+    if (d.leadFirstName) setLeadFirstName(d.leadFirstName);
+    if (d.leadLastName) setLeadLastName(d.leadLastName);
+    if (d.leadEmail) setLeadEmail(d.leadEmail);
+    if (d.destinationLabel) setDestinationLabel(d.destinationLabel);
+    if (d.countryCode) setCountryCode(d.countryCode);
+    if (d.reference) setReference(d.reference);
+    if (d.flights?.length) setFlights(d.flights.map((f) => ({ ...emptyFlight(), ...f })));
+    if (d.hotels?.length) setHotels(d.hotels.map((h) => ({ ...emptyHotel(), ...h, photos: [] })));
+    if (d.experiences?.length) setExperiences(d.experiences.map((e) => ({ ...emptyExp(), ...e, photos: [] })));
+  };
 
   const submit = async () => {
     setError(null);
@@ -140,6 +165,8 @@ export default function NewBookingPage() {
           Watch it build in the preview, then onboard the traveller with a QR.
         </p>
       </div>
+
+      <PdfImport onApply={applyDraft} />
 
       {error && <div style={{ padding: '12px 16px', borderRadius: 10, marginBottom: 16, backgroundColor: '#FEF2F2', border: `1px solid ${C.error}`, color: C.error, fontSize: 13 }}>{error}</div>}
 
@@ -344,6 +371,89 @@ function PhotoUploader({ agencyId, photos, onChange }: { agencyId: string; photo
         </label>
       </div>
       {!agencyId && <div style={{ fontSize: 11, color: C.textTertiary, marginTop: 4 }}>Choose an agency first to upload photos.</div>}
+    </div>
+  );
+}
+
+// ───────── PDF import ─────────
+
+function PdfImport({ onApply }: { onApply: (d: ImportedDraft) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'warn' | 'error'; title: string; lines: string[] } | null>(null);
+
+  const onFile = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setBusy(true); setMsg(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/admin/import-pdf', { method: 'POST', credentials: 'include', body: fd });
+      const data = await res.json();
+      if (res.ok && data.ok && data.draft) {
+        const d = data.draft as ImportedDraft;
+        onApply(d);
+        const counts = [
+          `${d.flights.length} flight${d.flights.length === 1 ? '' : 's'}`,
+          `${d.hotels.length} hotel${d.hotels.length === 1 ? '' : 's'}`,
+          ...(d.experiences.length ? [`${d.experiences.length} experience${d.experiences.length === 1 ? '' : 's'}`] : []),
+        ].join(' · ');
+        setMsg({
+          kind: d.warnings?.length ? 'warn' : 'ok',
+          title: `Imported ${file.name} — ${counts}. Review and edit below, then create.`,
+          lines: d.warnings || [],
+        });
+      } else {
+        setMsg({ kind: 'error', title: data?.error || data?.message || 'Could not read this PDF.', lines: [] });
+      }
+    } catch {
+      setMsg({ kind: 'error', title: 'Network error reading the PDF — please try again.', lines: [] });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tone = msg?.kind === 'error'
+    ? { bg: '#FEF2F2', border: C.error, text: C.error }
+    : msg?.kind === 'warn'
+      ? { bg: '#FFFBEB', border: '#F59E0B', text: '#B45309' }
+      : { bg: '#ECFDF5', border: C.success, text: '#047857' };
+
+  return (
+    <div style={{ borderRadius: 12, backgroundColor: C.bgElevated, border: `1px dashed ${C.accent}`, padding: 18, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ height: 40, width: 40, borderRadius: 10, backgroundColor: '#E0F7FC', color: C.accentDark, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Sparkles style={{ height: 20, width: 20 }} strokeWidth={1.75} />
+        </div>
+        <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>Import from PDF</div>
+          <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 2 }}>
+            Upload a supplier confirmation, e-ticket or itinerary — Luna reads it and fills in the booking for you to check.
+          </div>
+        </div>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px', borderRadius: 8, backgroundColor: busy ? C.bgTertiary : C.primary, color: busy ? C.textSecondary : '#fff', fontSize: 13, fontWeight: 500, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }}>
+          <FileUp style={{ height: 15, width: 15 }} strokeWidth={1.75} />
+          {busy ? 'Reading…' : 'Choose PDF'}
+          <input type="file" accept=".pdf,application/pdf" disabled={busy} onChange={(e) => { onFile(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
+        </label>
+      </div>
+      {msg && (
+        <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 10, backgroundColor: tone.bg, border: `1px solid ${tone.border}`, color: tone.text, fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            {msg.kind === 'error' || msg.kind === 'warn'
+              ? <AlertTriangle style={{ height: 15, width: 15, flexShrink: 0, marginTop: 1 }} strokeWidth={1.75} />
+              : <CheckCircle2 style={{ height: 15, width: 15, flexShrink: 0, marginTop: 1 }} strokeWidth={1.75} />}
+            <div>
+              <div style={{ fontWeight: 500 }}>{msg.title}</div>
+              {msg.lines.length > 0 && (
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                  {msg.lines.map((l, i) => <li key={i} style={{ marginTop: 2 }}>{l}</li>)}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

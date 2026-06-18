@@ -172,8 +172,11 @@ or toggle theme. Hidden from production unless invoked.
 | `AERODATABOX_API_KEY` | AeroDataBox (API.Market) flight-status lookups |
 | `AERODATABOX_WEBHOOK_TOKEN` | Shared secret in the inbound webhook `?t=` query (constant-time checked) |
 | `LUNA_TRAVEL_PUBLIC_URL` | Public base URL used to build the webhook callback target |
-| `TG_INTERNAL_KEY` | Internal service-to-service auth for flight subscribe + booking fetch |
+| `TG_INTERNAL_KEY` | Internal service-to-service auth for flight subscribe + booking fetch + Luna Chat PDF extraction |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for logo + message-image uploads |
+| `LUNA_CHAT_EXTRACT_URL` | Luna Chat PDF-extraction endpoint (preferred PDF-import backend); see `docs/pdf-import.md` |
+| `ANTHROPIC_API_KEY` | Direct Anthropic fallback for PDF import when `LUNA_CHAT_EXTRACT_URL` is unset |
+| `ANTHROPIC_MODEL` | Optional model override for PDF import (default `claude-sonnet-4-6`) |
 
 Missing env vars do not crash the build (clients are lazy) — routes that need
 them return a controlled error and log it.

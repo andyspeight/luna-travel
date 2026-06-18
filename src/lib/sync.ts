@@ -16,6 +16,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { lookupBooking } from '@/lib/travelify';
+import { controlInternalConfigured, retrieveOrderByClient } from '@/lib/control-order';
 
 export type SyncStatus = 'success' | 'partial' | 'failed';
 export type SyncSource = 'cron' | 'manual' | 'redeem';
@@ -67,23 +68,44 @@ export async function syncBooking(input: SyncBookingInput, source: SyncSource): 
   let errorCode: string | null = null;
 
   try {
-    const res = await lookupBooking({
-      bookingRef: input.bookingRef,
-      email: input.email,
-      departureDate: (input.departureDate || '').slice(0, 10),
-    });
-    if (res.ok) {
-      status = 'success';
-      // The booking still has flights when sold with them; a hotel-only or
-      // empty payload is a successful-but-thin refresh worth flagging.
-      const b = res.booking;
-      const thin = !b.destination && !b.departureDate;
-      status = thin ? 'partial' : 'success';
-      detail = thin ? 'Booking refreshed — limited data returned' : 'Booking refreshed from Travelify';
+    if (controlInternalConfigured()) {
+      // Per-agency: Control resolves THIS agency's own Travelify credentials.
+      const r = await retrieveOrderByClient({
+        recordId: input.agencyId,
+        orderRef: input.bookingRef,
+        email: input.email,
+        departDate: input.departureDate || '',
+      });
+      if (r.ok) {
+        status = 'success';
+        detail = 'Booking refreshed (agency credentials)';
+      } else if (r.status === 404) {
+        detail = 'Booking not found in Travelify';
+        errorCode = '404';
+      } else if (r.status === 0) {
+        detail = 'Agency has no usable Travelify credentials';
+        errorCode = 'CONFIG';
+      } else {
+        detail = 'Travelify / Control upstream error';
+        errorCode = String(r.status);
+      }
     } else {
-      const c = classifyFailure(res.reason);
-      detail = c.detail;
-      errorCode = c.errorCode;
+      // Demo integration fallback (no per-agency internal key configured).
+      const res = await lookupBooking({
+        bookingRef: input.bookingRef,
+        email: input.email,
+        departureDate: (input.departureDate || '').slice(0, 10),
+      });
+      if (res.ok) {
+        const b = res.booking;
+        const thin = !b.destination && !b.departureDate;
+        status = thin ? 'partial' : 'success';
+        detail = thin ? 'Booking refreshed — limited data (demo)' : 'Booking refreshed (demo integration)';
+      } else {
+        const c = classifyFailure(res.reason);
+        detail = c.detail;
+        errorCode = c.errorCode;
+      }
     }
   } catch (e) {
     detail = `Sync error: ${(e as Error).message.slice(0, 120)}`;

@@ -10,7 +10,7 @@
  *   1. Validate inputs (email regex, YYYY-MM-DD date, alphanumeric ref)
  *   2. Fetch invite from Supabase
  *   3. Check invite is pending and not expired
- *   4. Call Travelify (via lookupBooking)
+ *   4. Validate the booking against the agency's own Travelify creds (via Control)
  *   5. Atomic invite update: pending → redeemed (so concurrent calls can't double-spend)
  *   6. Insert traveller row (or return existing on idempotent re-redeem)
  *   7. Sign JWT, set HttpOnly cookie, return token + trip teaser in body
@@ -27,7 +27,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { lookupBooking } from '@/lib/travelify';
+import { validateAgencyBooking } from '@/lib/control-order';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -177,13 +177,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return notFound();
   }
 
-  // 4. Call Travelify (uses demo integration for v1)
-  const lookup = await lookupBooking({ bookingRef, email, departureDate });
-  if (!lookup.ok) {
-    console.warn('[redeem] travelify lookup failed:', inviteId, lookup.reason);
+  // 4. Validate the booking against the AGENCY's own Travelify credentials,
+  //    via Control's internal endpoint. Falls back to the demo integration only
+  //    when the per-agency internal path isn't configured.
+  const validation = await validateAgencyBooking({
+    agencyId: invite.agency_id as string,
+    bookingRef,
+    email,
+    departureDate,
+  });
+  if (!validation.ok) {
+    console.warn('[redeem] booking validation failed:', inviteId);
     return notFound();
   }
-  const booking = lookup.booking;
+  const validated = validation.booking;
 
   // 5. Atomic invite update: only proceeds if status is still 'pending'.
   //    If two concurrent redemptions race, only one wins; the other sees
@@ -196,10 +203,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   //    after an earlier one would hit the constraint. We treat unique-violation
   //    here as "this booking is already onboarded, surface the existing row"
   //    rather than failing.
-  const leadName = [booking.customerFirstname, booking.customerSurname]
-    .filter(Boolean)
-    .join(' ')
-    .trim() || null;
+  const leadName = validated.leadName;
 
   const { data: traveller, error: insertErr } = await supabase
     .from('travellers')
@@ -208,9 +212,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       booking_ref: bookingRef,
       email,
       lead_passenger_name: leadName,
-      departure_date: booking.departureDate || departureDate,
-      return_date: booking.returnDate,
-      destination: booking.destination,
+      departure_date: validated.departureDate || departureDate,
+      return_date: validated.returnDate,
+      destination: validated.destination,
       created_at: now,
     })
     .select('id')
@@ -319,9 +323,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   // Teaser comes straight from the Travelify booking we just validated.
   const trip: TripTeaser = {
-    destination: booking.destination ?? null,
-    departureDate: booking.departureDate || departureDate,
-    returnDate: booking.returnDate ?? null,
+    destination: validated.destination ?? null,
+    departureDate: validated.departureDate || departureDate,
+    returnDate: validated.returnDate ?? null,
     leadName,
   };
 

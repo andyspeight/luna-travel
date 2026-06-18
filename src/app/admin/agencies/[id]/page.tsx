@@ -56,19 +56,7 @@ interface Agency {
   last30dActives: number;
 }
 
-const SYNC_EVENTS_BY_AGENCY: Record<string, { ref: string; status: 'success' | 'failed'; time: string; detail: string }[]> = {
-  agc_7k2n: [
-    { ref: 'TG-491203', status: 'success', time: '14:32:08', detail: 'Booking updated · 2 documents added' },
-    { ref: 'TG-491172', status: 'success', time: '14:25:19', detail: 'Booking updated' },
-    { ref: 'TG-491098', status: 'success', time: '13:58:42', detail: 'New booking ingested · 4 documents' },
-    { ref: 'TG-491041', status: 'success', time: '13:32:11', detail: 'Booking updated · flight time changed' },
-  ],
-  agc_2v6r: [
-    { ref: 'TG-491187', status: 'failed', time: '14:29:11', detail: 'Travelify 401 — credentials need refresh' },
-    { ref: 'TG-491168', status: 'failed', time: '14:23:02', detail: 'Travelify 401 — credentials need refresh' },
-    { ref: 'TG-491022', status: 'success', time: '13:15:33', detail: 'Booking updated' },
-  ],
-};
+// Recent sync activity is read live from /api/admin/sync-events (see OverviewTab).
 
 // ============ SHARED PRIMITIVES ============
 
@@ -214,7 +202,27 @@ function FormField({ label, helper, children }: { label: string; helper?: string
 // ============ TAB CONTENT ============
 
 function OverviewTab({ agency }: { agency: Agency }) {
-  const events = SYNC_EVENTS_BY_AGENCY[agency.id] ?? [];
+  const [events, setEvents] = useState<{ ref: string; status: string; detail: string; time: string }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/admin/sync-events?agencyId=${encodeURIComponent(agency.id)}&limit=8`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { events?: Array<{ bookingRef: string; status: string; detail: string; syncedAt: string }> } | null) => {
+        if (!alive || !data?.events) return;
+        setEvents(
+          data.events.map((e) => ({
+            ref: e.bookingRef,
+            status: e.status,
+            detail: e.detail,
+            time: new Date(e.syncedAt).toLocaleTimeString('en-GB', { hour12: false }),
+          })),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [agency.id]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* KPIs */}
@@ -236,12 +244,12 @@ function OverviewTab({ agency }: { agency: Agency }) {
 
       {/* Sync activity */}
       <Card>
-        <CardHeader title="Recent sync activity" subtitle="Last 24 hours" />
+        <CardHeader title="Recent sync activity" subtitle="Latest Travelify syncs" />
         <div>
           {events.length === 0 ? (
             <div style={{ padding: '48px 24px', textAlign: 'center' }}>
               <div style={{ fontSize: 14, color: C.textTertiary }}>
-                No sync activity yet. First Travelify pull happens when the agency is moved out of Setup.
+                No sync activity recorded for this agency yet.
               </div>
             </div>
           ) : (

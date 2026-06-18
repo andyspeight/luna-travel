@@ -20,6 +20,8 @@
  * tell the admin to enter the booking manually.
  */
 
+import type { ExtractionProfile } from '@/lib/pdf-profile';
+
 // ───────── form-ready output shape (mirrors src/app/admin/bookings/new) ─────────
 
 export interface FormFlight {
@@ -59,6 +61,7 @@ export interface FormDraft {
   hotels: FormHotel[];
   experiences: FormExperience[];
   warnings: string[];
+  source: string; // detected layout/issuer label, '' if unclear — drives the learned profile
 }
 
 export type ExtractResult =
@@ -80,6 +83,7 @@ export async function extractBookingFromPdf(
   bytes: Buffer,
   filename: string,
   mediaType = 'application/pdf',
+  profile?: ExtractionProfile | null,
 ): Promise<ExtractResult> {
   const dataBase64 = bytes.toString('base64');
   const lunaUrl = process.env.LUNA_CHAT_EXTRACT_URL;
@@ -89,7 +93,7 @@ export async function extractBookingFromPdf(
   // 1) Preferred: Luna Chat internal AI service.
   if (lunaUrl && internalKey) {
     try {
-      const raw = await extractViaLunaChat(lunaUrl, internalKey, { filename, mediaType, dataBase64 });
+      const raw = await extractViaLunaChat(lunaUrl, internalKey, { filename, mediaType, dataBase64, profile: profile ?? undefined });
       return { ok: true, source: 'luna-chat', draft: toFormDraft(raw) };
     } catch (err) {
       console.error('[booking-extract] luna-chat failed:', err instanceof Error ? err.message : err);
@@ -103,7 +107,7 @@ export async function extractBookingFromPdf(
   // 2) Fallback: direct Anthropic Messages call.
   if (anthropicKey) {
     try {
-      const raw = await extractViaAnthropic(anthropicKey, { mediaType, dataBase64 });
+      const raw = await extractViaAnthropic(anthropicKey, { mediaType, dataBase64, profile: profile ?? undefined });
       return { ok: true, source: 'anthropic', draft: toFormDraft(raw) };
     } catch (err) {
       console.error('[booking-extract] anthropic failed:', err instanceof Error ? err.message : err);
@@ -123,7 +127,7 @@ export async function extractBookingFromPdf(
 async function extractViaLunaChat(
   url: string,
   key: string,
-  payload: { filename: string; mediaType: string; dataBase64: string },
+  payload: { filename: string; mediaType: string; dataBase64: string; profile?: ExtractionProfile },
 ): Promise<RawExtraction> {
   const res = await fetch(url, {
     method: 'POST',
@@ -152,6 +156,7 @@ const EXTRACT_TOOL = {
       destinationLabel: { type: 'string', description: 'Short human label for the destination, e.g. "Mallorca", "Maldives", "New York"' },
       countryCode: { type: 'string', description: 'ISO 3166-1 alpha-2 code of the destination country, uppercase, e.g. ES, MV, US' },
       reference: { type: 'string', description: 'Booking / order reference if printed, else empty' },
+      source: { type: 'string', description: 'The brand/issuer/template this document appears to come from, e.g. "Travel Counsellors confirmation", "Jet2holidays itinerary". Empty if unclear.' },
       flights: {
         type: 'array',
         description: 'One entry per flight segment (split multi-leg journeys).',
@@ -215,9 +220,24 @@ const EXTRACT_PROMPT = [
   '- Classify car hire, airport transfers/shuttles, excursions/tours and tickets/activities into experiences[].',
 ].join('\n');
 
+/** Compose the extraction prompt, layering in a client's learned profile when present. */
+function buildPrompt(profile?: ExtractionProfile): string {
+  let p = EXTRACT_PROMPT;
+  if (profile?.hints) {
+    p += `\n\nClient-specific guidance for this client's documents (follow it):\n${profile.hints}`;
+  }
+  if (profile?.examples?.length) {
+    const ex = profile.examples
+      .map((e, i) => `Example ${i + 1}${e.source ? ` — ${e.source}` : ''}:\n${JSON.stringify(e.corrected)}`)
+      .join('\n\n');
+    p += `\n\nThe following are bookings from THIS SAME client that were previously confirmed correct. Use them only to match this client's conventions — field naming, date formats, board codes, how flights/experiences are described. Do NOT copy their values; extract everything from the attached document:\n${ex}`;
+  }
+  return p;
+}
+
 async function extractViaAnthropic(
   apiKey: string,
-  payload: { mediaType: string; dataBase64: string },
+  payload: { mediaType: string; dataBase64: string; profile?: ExtractionProfile },
 ): Promise<RawExtraction> {
   const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -237,7 +257,7 @@ async function extractViaAnthropic(
           role: 'user',
           content: [
             { type: 'document', source: { type: 'base64', media_type: payload.mediaType, data: payload.dataBase64 } },
-            { type: 'text', text: EXTRACT_PROMPT },
+            { type: 'text', text: buildPrompt(payload.profile) },
           ],
         },
       ],
@@ -279,6 +299,7 @@ function toFormDraft(raw: RawExtraction): FormDraft {
     hotels,
     experiences,
     warnings: [],
+    source: str(raw.source),
   };
 
   // Helpful, non-blocking guidance for the admin reviewing the pre-fill.

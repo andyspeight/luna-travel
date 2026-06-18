@@ -23,6 +23,16 @@ interface ImportedDraft {
   hotels: Omit<HotelRow, 'photos'>[];
   experiences: Omit<ExpRow, 'photos'>[];
   warnings: string[];
+  source: string;
+}
+
+// What we send back at save time so the agency's profile learns from the review.
+interface ProfileDraft {
+  leadFirstName: string; leadLastName: string; leadEmail: string;
+  destinationLabel: string; countryCode: string; reference: string;
+  flights: FlightRow[];
+  hotels: Omit<HotelRow, 'photos'>[];
+  experiences: Omit<ExpRow, 'photos'>[];
 }
 
 const BOARDS = [
@@ -56,6 +66,11 @@ export default function NewBookingPage() {
   const [hotels, setHotels] = useState<HotelRow[]>([emptyHotel()]);
   const [experiences, setExperiences] = useState<ExpRow[]>([]);
 
+  // The raw draft from the last PDF import (if any) — sent back at save so the
+  // agency's profile can learn from whatever the admin corrected.
+  const [importedDraft, setImportedDraft] = useState<ImportedDraft | null>(null);
+  const [detectedSource, setDetectedSource] = useState('');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -84,7 +99,17 @@ export default function NewBookingPage() {
     if (d.flights?.length) setFlights(d.flights.map((f) => ({ ...emptyFlight(), ...f })));
     if (d.hotels?.length) setHotels(d.hotels.map((h) => ({ ...emptyHotel(), ...h, photos: [] })));
     if (d.experiences?.length) setExperiences(d.experiences.map((e) => ({ ...emptyExp(), ...e, photos: [] })));
+    setImportedDraft(d);
+    setDetectedSource(d.source || '');
   };
+
+  // Current form rows as a profile-comparable draft (no photos), for the learn step.
+  const buildFinalDraft = (): ProfileDraft => ({
+    leadFirstName, leadLastName, leadEmail, destinationLabel, countryCode, reference,
+    flights: flights.filter((f) => f.carrierCode || f.flightNumber || f.fromIata || f.toIata),
+    hotels: hotels.filter((h) => h.name || h.city).map((h) => ({ name: h.name, city: h.city, country: h.country, checkIn: h.checkIn, checkOut: h.checkOut, board: h.board })),
+    experiences: experiences.filter((e) => e.title).map((e) => ({ kind: e.kind, title: e.title, supplier: e.supplier, location: e.location, startAt: e.startAt, endAt: e.endAt, notes: e.notes })),
+  });
 
   const submit = async () => {
     setError(null);
@@ -104,6 +129,17 @@ export default function NewBookingPage() {
     if (!cleanFlights.length && !cleanHotels.length) return setError('Add at least one complete flight or hotel.');
 
     const agency = agencies.find((a) => a.id === agencyId);
+    const learn = importedDraft
+      ? {
+          imported: {
+            leadFirstName: importedDraft.leadFirstName, leadLastName: importedDraft.leadLastName, leadEmail: importedDraft.leadEmail,
+            destinationLabel: importedDraft.destinationLabel, countryCode: importedDraft.countryCode, reference: importedDraft.reference,
+            flights: importedDraft.flights, hotels: importedDraft.hotels, experiences: importedDraft.experiences,
+          },
+          final: buildFinalDraft(),
+          source: detectedSource,
+        }
+      : undefined;
     setSubmitting(true);
     try {
       const res = await fetch(`/api/admin/agencies/${agencyId}/bookings`, {
@@ -112,6 +148,7 @@ export default function NewBookingPage() {
           reference: reference || undefined, agencyName: agency?.name, agencyEmail: agency?.contact,
           leadFirstName, leadLastName, leadEmail, destinationLabel, countryCode,
           flights: cleanFlights, hotels: cleanHotels, experiences: cleanExps,
+          learn,
         }),
       });
       const data = await res.json();
@@ -166,20 +203,23 @@ export default function NewBookingPage() {
         </p>
       </div>
 
-      <PdfImport onApply={applyDraft} />
+      <Card title="Client">
+        <Field label="Agency" helper="Pick the client first — it applies and improves that client&rsquo;s learned PDF profile.">
+          <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)} style={selectStyle}>
+            <option value="">Select an agency…</option>
+            {agencies.map((a) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+          </select>
+        </Field>
+      </Card>
+
+      <PdfImport agencyId={agencyId} onApply={applyDraft} />
 
       {error && <div style={{ padding: '12px 16px', borderRadius: 10, marginBottom: 16, backgroundColor: '#FEF2F2', border: `1px solid ${C.error}`, color: C.error, fontSize: 13 }}>{error}</div>}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'flex-start' }}>
         {/* ── Form ── */}
         <div style={{ flex: '1 1 520px', minWidth: 0 }}>
-          <Card title="Agency & traveller">
-            <Field label="Agency">
-              <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)} style={selectStyle}>
-                <option value="">Select an agency…</option>
-                {agencies.map((a) => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
-              </select>
-            </Field>
+          <Card title="Lead traveller">
             <Grid>
               <Field label="Lead first name"><Input value={leadFirstName} onChange={setLeadFirstName} /></Field>
               <Field label="Lead last name"><Input value={leadLastName} onChange={setLeadLastName} /></Field>
@@ -377,9 +417,41 @@ function PhotoUploader({ agencyId, photos, onChange }: { agencyId: string; photo
 
 // ───────── PDF import ─────────
 
-function PdfImport({ onApply }: { onApply: (d: ImportedDraft) => void }) {
+interface ProfileSummary { hints: string; bookingsLearned: number; exampleCount: number; lastLearnedAt: string | null; sources: string[] }
+
+function PdfImport({ agencyId, onApply }: { agencyId: string; onApply: (d: ImportedDraft) => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'warn' | 'error'; title: string; lines: string[] } | null>(null);
+  const [profile, setProfile] = useState<ProfileSummary | null>(null);
+  const [hints, setHints] = useState('');
+  const [showHints, setShowHints] = useState(false);
+  const [savingHints, setSavingHints] = useState(false);
+  const [hintsSaved, setHintsSaved] = useState(false);
+
+  // Load the agency's learned profile whenever the selected client changes.
+  useEffect(() => {
+    setProfile(null); setShowHints(false); setHintsSaved(false);
+    if (!agencyId) return;
+    let live = true;
+    fetch(`/api/admin/agencies/${agencyId}/extraction-profile`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: ProfileSummary | null) => { if (live && data) { setProfile(data); setHints(data.hints || ''); } })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [agencyId]);
+
+  const saveHints = async () => {
+    if (!agencyId) return;
+    setSavingHints(true); setHintsSaved(false);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agencyId}/extraction-profile`, {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hints }),
+      });
+      const data = await res.json();
+      if (res.ok && data.summary) { setProfile(data.summary); setHintsSaved(true); setTimeout(() => setHintsSaved(false), 1500); }
+    } catch { /* ignore */ } finally { setSavingHints(false); }
+  };
 
   const onFile = async (files: FileList | null) => {
     const file = files?.[0];
@@ -387,6 +459,7 @@ function PdfImport({ onApply }: { onApply: (d: ImportedDraft) => void }) {
     setBusy(true); setMsg(null);
     const fd = new FormData();
     fd.append('file', file);
+    if (agencyId) fd.append('agencyId', agencyId);
     try {
       const res = await fetch('/api/admin/import-pdf', { method: 'POST', credentials: 'include', body: fd });
       const data = await res.json();
@@ -398,9 +471,10 @@ function PdfImport({ onApply }: { onApply: (d: ImportedDraft) => void }) {
           `${d.hotels.length} hotel${d.hotels.length === 1 ? '' : 's'}`,
           ...(d.experiences.length ? [`${d.experiences.length} experience${d.experiences.length === 1 ? '' : 's'}`] : []),
         ].join(' · ');
+        const src = d.source ? ` Detected: ${d.source}.` : '';
         setMsg({
           kind: d.warnings?.length ? 'warn' : 'ok',
-          title: `Imported ${file.name} — ${counts}. Review and edit below, then create.`,
+          title: `Imported ${file.name} — ${counts}.${src} Review and edit below, then create.`,
           lines: d.warnings || [],
         });
       } else {
@@ -437,6 +511,39 @@ function PdfImport({ onApply }: { onApply: (d: ImportedDraft) => void }) {
           <input type="file" accept=".pdf,application/pdf" disabled={busy} onChange={(e) => { onFile(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
         </label>
       </div>
+
+      {/* learned-profile status + notes */}
+      {!agencyId && (
+        <div style={{ marginTop: 12, fontSize: 12, color: C.textTertiary }}>Choose the client above to apply and improve its learned profile.</div>
+      )}
+      {agencyId && !profile && (
+        <div style={{ marginTop: 12, fontSize: 12, color: C.textTertiary }}>Loading this client&rsquo;s profile…</div>
+      )}
+      {agencyId && profile && (
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.textSecondary }}>
+          <Sparkles style={{ height: 14, width: 14, color: C.accentDark, flexShrink: 0 }} strokeWidth={1.75} />
+          {profile.bookingsLearned > 0 ? (
+            <span>Luna has learned this client&rsquo;s layout from <strong>{profile.bookingsLearned}</strong> reviewed booking{profile.bookingsLearned === 1 ? '' : 's'}{profile.sources.length ? ` · ${profile.sources.join(', ')}` : ''}.</span>
+          ) : (
+            <span>No layout learned for this client yet — the first reviewed import starts the profile.</span>
+          )}
+          <button onClick={() => setShowHints((s) => !s)} style={{ border: 'none', background: 'none', padding: 0, color: C.accentDark, fontSize: 12, fontWeight: 500, cursor: 'pointer', textDecoration: 'underline' }}>
+            {showHints ? 'Hide notes' : 'Extraction notes'}
+          </button>
+        </div>
+      )}
+      {agencyId && showHints && (
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', fontSize: 12, color: C.textSecondary, marginBottom: 6 }}>
+            Layout notes for Luna — e.g. &ldquo;dates are DD/MM/YYYY&rdquo;, &ldquo;lead is labelled &lsquo;Lead Pax&rsquo;&rdquo;, &ldquo;board shows as &lsquo;Meal Plan&rsquo;&rdquo;. Applied to every import for this client.
+          </label>
+          <textarea value={hints} onChange={(e) => setHints(e.target.value)} rows={4} placeholder="No notes yet." style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', color: C.text, outline: 'none', boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button onClick={saveHints} disabled={savingHints} style={{ ...btnPrimary, height: 32, opacity: savingHints ? 0.6 : 1, cursor: savingHints ? 'not-allowed' : 'pointer' }}>{savingHints ? 'Saving…' : hintsSaved ? 'Saved' : 'Save notes'}</button>
+          </div>
+        </div>
+      )}
+
       {msg && (
         <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 10, backgroundColor: tone.bg, border: `1px solid ${tone.border}`, color: tone.text, fontSize: 13 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>

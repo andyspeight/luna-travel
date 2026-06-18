@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/admin-session';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
 import type { ControlAgency } from '@/lib/order-to-booking';
+import { recordImportCorrection, type ProfileDraft } from '@/lib/pdf-profile';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -163,6 +164,23 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (inviteErr) {
     // The booking is saved; surface a soft warning rather than failing the whole op.
     console.error('[bookings.POST] invite insert failed:', inviteErr.message);
+  }
+
+  // If this booking came from a PDF import, fold the admin-reviewed result into
+  // the agency's learned profile (stores the final + the diff vs the raw
+  // extraction). Best-effort — never let it break the save.
+  const learn = body.learn as { imported?: unknown; final?: unknown; source?: unknown } | undefined;
+  if (learn && learn.imported && learn.final && typeof learn.imported === 'object' && typeof learn.final === 'object') {
+    try {
+      await recordImportCorrection(
+        agencyId,
+        learn.imported as ProfileDraft,
+        learn.final as ProfileDraft,
+        { reference, source: typeof learn.source === 'string' ? learn.source : '' },
+      );
+    } catch (e) {
+      console.error('[bookings.POST] profile learn failed:', e instanceof Error ? e.message : e);
+    }
   }
 
   return NextResponse.json({

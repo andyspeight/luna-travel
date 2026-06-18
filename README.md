@@ -155,6 +155,8 @@ or toggle theme. Hidden from production unless invoked.
 | `trip_flights` | Live flight rows (status, gate, terminal, belt, est times, AeroDataBox subscription id) |
 | `app_opens` | Engagement pings for stats |
 | `audit_events` | Admin action audit log |
+| `bookings` | Off-platform bookings (manual / PDF import) not held in Travelify; JSONB `payload` is the rendered Booking |
+| `pdf_extraction_profiles` | Per-agency PDF-import training — admin hints + confirmed-correct examples fed back into extraction |
 
 ---
 

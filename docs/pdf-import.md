@@ -57,10 +57,21 @@ takes precedence automatically.
 Request headers: `Content-Type: application/json`, `X-TG-Internal-Key: <key>`
 (validate this equals the shared internal key before doing any work).
 
-Request body:
+Request body (the `profile` block is the per-client training; see below — it may
+be absent):
 
 ```json
-{ "filename": "confirmation.pdf", "mediaType": "application/pdf", "dataBase64": "<base64 of the PDF bytes>" }
+{
+  "filename": "confirmation.pdf",
+  "mediaType": "application/pdf",
+  "dataBase64": "<base64 of the PDF bytes>",
+  "profile": {
+    "hints": "Dates are DD/MM/YYYY. Lead is labelled 'Lead Pax'. Board shows as 'Meal Plan'.",
+    "examples": [
+      { "source": "Travel Counsellors confirmation", "corrected": { "...": "a previously-confirmed booking in the shape below" } }
+    ]
+  }
+}
 ```
 
 Success response (`200`):
@@ -70,7 +81,7 @@ Success response (`200`):
   "ok": true,
   "booking": {
     "leadFirstName": "", "leadLastName": "", "leadEmail": "",
-    "destinationLabel": "", "countryCode": "", "reference": "",
+    "destinationLabel": "", "countryCode": "", "reference": "", "source": "",
     "flights": [
       { "carrierCode": "", "flightNumber": "", "fromIata": "", "toIata": "",
         "departAt": "YYYY-MM-DDTHH:MM", "arriveAt": "YYYY-MM-DDTHH:MM", "cabin": "Economy" }
@@ -100,9 +111,14 @@ Failure response: any non-200, or `{ "ok": false, "error": "…" }`.
 - `cabin`: one of `Economy`, `PremiumEconomy`, `Business`, `First`.
 - `board`: one of `RO`, `BB`, `HB`, `FB`, `AI`, or empty.
 - `kind`: one of `excursion`, `car-hire`, `transfer`, `activity`, `other`.
+- `source`: a short label for the brand/issuer/template the document appears to
+  come from (e.g. "Travel Counsellors confirmation"), or empty. Used to key the
+  learned profile; never shown to travellers.
 - Split multi-leg journeys into one `flights[]` entry per segment.
 - Never invent values — leave anything not present empty. Photos are never
-  extracted; the admin adds them.
+  extracted; the admin adds them. When a `profile` is supplied, use its `hints`
+  and `examples` only to match the client's conventions — **do not copy example
+  values into the output**; extract everything from the attached document.
 
 The luna-travel side (`toFormDraft` in `src/lib/booking-extract.ts`) coerces,
 upper-cases, clamps and re-formats everything above, so a slightly loose
@@ -110,7 +126,44 @@ response is still usable — but matching the contract gives the cleanest pre-fi
 The direct-Anthropic fallback uses exactly this shape as its tool `input_schema`,
 so it doubles as the reference implementation.
 
+## Training: per-client profiles (getting a repeat layout to ~100%)
+
+A client who always sends the same layout is a far easier problem than the
+general case, so we lock in what works **per agency** rather than re-deriving it
+every time. State lives in `luna_travel.pdf_extraction_profiles` (one row per
+agency; `src/lib/pdf-profile.ts`), and the loop is:
+
+1. **Hints** — an admin edits free-text, layout-specific guidance on the
+   Add-booking form ("dates are DD/MM/YYYY", "lead is labelled 'Lead Pax'",
+   "ignore the 'Agent copy' banner"). Cheap and high-leverage.
+2. **Examples** — when an admin reviews and **saves** an imported booking, the
+   final (corrected) result is stored as a confirmed-correct example, along with
+   the diff of what they changed vs the raw extraction (`editedFields`) and the
+   detected `source`. The booking save carries a `learn: { imported, final,
+   source }` block for this; capture is best-effort and never blocks the save.
+3. **Injection** — on the next import for that agency, `getExtractionProfile`
+   loads the hints + the most recent examples and `booking-extract` injects them
+   into the call (for the Anthropic path, into the prompt; for Luna Chat, via the
+   `profile` block above). Examples steer conventions only — the model is told
+   not to copy their values.
+
+The result: the first import of a new layout is generic best-effort; after a few
+reviewed bookings the profile converges and edits drop toward zero — without any
+model fine-tuning. An **unseen** layout (no/empty profile) still gets the plain
+generic path, unchanged.
+
+The admin endpoints are `GET`/`PUT /api/admin/agencies/[id]/extraction-profile`
+(summary + hints). Selecting the client on the Add-booking form is what scopes
+both the import and the learning to that agency's profile.
+
+Future extensions (not built yet): fingerprint the PDF to sub-key profiles
+per-template within an agency; deterministic field templates for the highest-
+volume layouts (true 100%, no model call); schema validation (real IATA codes,
+check-out after check-in) as a backstop.
+
 ## Limits
 
 - PDF only, 16 MB max (base64 stays under Anthropic's 32 MB request ceiling).
 - Route `maxDuration` is 60s to allow for document reasoning.
+- Up to 10 examples are retained per agency; the 2 most recent are injected per
+  import (keeps prompt size and latency in check).

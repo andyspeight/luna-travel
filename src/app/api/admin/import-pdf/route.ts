@@ -16,12 +16,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-session';
 import { extractBookingFromPdf } from '@/lib/booking-extract';
+import { getExtractionProfile } from '@/lib/pdf-profile';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 60; // PDF reasoning can take a while
 
 const MAX_BYTES = 16 * 1024 * 1024; // 16 MB (base64 ~21 MB, under Anthropic's 32 MB)
+const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
 export async function POST(req: NextRequest) {
   const claims = await requireAdmin(req as unknown as Request);
@@ -49,7 +51,12 @@ export async function POST(req: NextRequest) {
   const filename = (file instanceof File ? file.name : '') || 'booking.pdf';
   const bytes = Buffer.from(await file.arrayBuffer());
 
-  const result = await extractBookingFromPdf(bytes, filename, mime);
+  // When an agency is selected, apply its learned extraction profile (hints +
+  // confirmed-correct examples) so a repeat client's layout reads consistently.
+  const agencyId = typeof form.get('agencyId') === 'string' ? (form.get('agencyId') as string).trim() : '';
+  const profile = REC_ID_RE.test(agencyId) ? await getExtractionProfile(agencyId) : null;
+
+  const result = await extractBookingFromPdf(bytes, filename, mime, profile);
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, configured: result.configured, error: result.error },

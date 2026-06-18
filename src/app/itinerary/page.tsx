@@ -13,6 +13,7 @@ import {
   IconLounge,
   IconCar,
   IconFastTrack,
+  IconCompass,
   IconPin,
   IconChevR,
   IconList,
@@ -215,6 +216,12 @@ function kindIcon(k: TimelineEvent['kind']) {
       return <IconCar size={14} />;
     case 'fast-track':
       return <IconFastTrack size={14} />;
+    case 'car-hire':
+    case 'transfer':
+      return <IconCar size={14} />;
+    case 'excursion':
+    case 'activity':
+      return <IconCompass size={14} />;
     default:
       return <IconPin size={14} />;
   }
@@ -234,6 +241,14 @@ function kindLabel(k: TimelineEvent['kind']): string {
       return 'Parking';
     case 'fast-track':
       return 'Fast track';
+    case 'car-hire':
+      return 'Car hire';
+    case 'transfer':
+      return 'Transfer';
+    case 'excursion':
+      return 'Excursion';
+    case 'activity':
+      return 'Activity';
     default:
       return 'Event';
   }

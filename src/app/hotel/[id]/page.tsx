@@ -18,6 +18,7 @@ import {
   IconCheck,
 } from '@/components/icons';
 import { findHotel } from '@/lib/booking-helpers';
+import { PhotoGallery } from '@/components/photo-gallery';
 import { formatBoard, formatDate, formatTime } from '@/lib/format';
 import { destinationHero } from '@/lib/hero';
 import type { Hotel } from '@/types/booking';
@@ -89,6 +90,9 @@ export default function HotelDetailPage() {
       </section>
 
       <div className="px-5 -mt-2">
+        {hotel.photos && hotel.photos.length > 0 && (
+          <PhotoGallery photos={hotel.photos} className="mb-3 pt-1" />
+        )}
         {/* Stars */}
         {hotel.stars && hotel.stars > 0 && (
           <div className="flex items-center gap-0.5 text-gold mb-1">

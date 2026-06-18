@@ -11,7 +11,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
-import type { Booking } from '@/types/booking';
+import type { Booking, ExperienceKind } from '@/types/booking';
 
 export interface ManualFlightInput {
   carrierCode: string;
@@ -29,6 +29,18 @@ export interface ManualHotelInput {
   checkIn: string; // YYYY-MM-DD
   checkOut: string; // YYYY-MM-DD
   board?: string; // e.g. BB, HB, AI
+  photos?: string[];
+}
+export interface ManualExperienceInput {
+  kind: ExperienceKind;
+  title: string;
+  supplier?: string;
+  location?: string;
+  startDate: string; // ISO
+  endDate?: string; // ISO
+  notes?: string;
+  reference?: string;
+  photos?: string[];
 }
 export interface ManualTravellerInput {
   firstName: string;
@@ -44,6 +56,7 @@ export interface ManualBookingInput {
   additionalTravellers?: ManualTravellerInput[];
   flights: ManualFlightInput[];
   hotels: ManualHotelInput[];
+  experiences?: ManualExperienceInput[];
 }
 
 function durationMins(from: string, to: string): number {
@@ -138,6 +151,41 @@ export function buildManualBooking(
   if (input.destinationLabel) booking.destinationLabel = input.destinationLabel;
   booking.leadEmail = input.leadEmail;
   booking.travelifyOrderId = undefined; // not a Travelify order
+
+  // Hotel photos (match by input order — orderToBooking keeps item order).
+  input.hotels.forEach((h, i) => {
+    if (h.photos?.length && booking.hotels[i]) booking.hotels[i].photos = h.photos;
+  });
+
+  // Experiences (excursions, car hire, transfers…) — not part of a Travelify
+  // order, so attach them directly.
+  const exps = input.experiences ?? [];
+  booking.experiences = exps.map((e, i) => ({
+    id: `exp-${i}`,
+    kind: e.kind,
+    title: e.title,
+    supplier: e.supplier || undefined,
+    location: e.location || undefined,
+    startDate: e.startDate,
+    endDate: e.endDate || undefined,
+    notes: e.notes || undefined,
+    reference: e.reference || undefined,
+    photos: e.photos?.length ? e.photos : undefined,
+  }));
+
+  // Extend the trip window to cover experience dates.
+  const expDates = exps
+    .flatMap((e) => [e.startDate, e.endDate])
+    .filter((d): d is string => !!d)
+    .map((d) => d.slice(0, 10))
+    .sort();
+  if (expDates.length) {
+    const curStart = (booking.tripStart || '').slice(0, 10);
+    const curEnd = (booking.tripEnd || '').slice(0, 10);
+    if (!curStart || expDates[0] < curStart) booking.tripStart = expDates[0];
+    const maxExp = expDates[expDates.length - 1];
+    if (!curEnd || maxExp > curEnd) booking.tripEnd = maxExp;
+  }
 
   return booking;
 }

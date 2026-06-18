@@ -10,6 +10,7 @@ import type {
   FlightLeg,
   Hotel,
   AirportExtra,
+  Experience,
   Traveller,
 } from '@/types/booking';
 
@@ -21,6 +22,9 @@ export type EventKind =
   | 'parking'
   | 'fast-track'
   | 'transfer'
+  | 'excursion'
+  | 'car-hire'
+  | 'activity'
   | 'other';
 
 export interface TimelineEvent {
@@ -95,8 +99,51 @@ export function buildTimeline(booking: Booking): TimelineEvent[] {
     });
   }
 
+  for (const x of booking.experiences ?? []) {
+    events.push({
+      id: `experience-${x.id}`,
+      kind: experienceEventKind(x.kind),
+      date: x.startDate,
+      endDate: x.endDate,
+      title: x.title,
+      subtitle: experienceSubtitle(x),
+      meta: x.location || x.supplier || '',
+      href: `/experience/${x.id}`,
+      past: isPast(x.endDate || x.startDate),
+    });
+  }
+
   events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   return events;
+}
+
+function experienceEventKind(k: Experience['kind']): EventKind {
+  switch (k) {
+    case 'excursion': return 'excursion';
+    case 'car-hire': return 'car-hire';
+    case 'transfer': return 'transfer';
+    case 'activity': return 'activity';
+    case 'lounge': return 'lounge';
+    case 'parking': return 'parking';
+    case 'fast-track': return 'fast-track';
+    default: return 'other';
+  }
+}
+
+const EXPERIENCE_LABELS: Record<Experience['kind'], string> = {
+  excursion: 'Excursion',
+  'car-hire': 'Car hire',
+  transfer: 'Transfer',
+  activity: 'Activity',
+  lounge: 'Airport lounge',
+  parking: 'Airport parking',
+  'fast-track': 'Security fast track',
+  other: 'Experience',
+};
+
+function experienceSubtitle(x: Experience): string {
+  const label = EXPERIENCE_LABELS[x.kind];
+  return x.supplier ? `${label} · ${x.supplier}` : label;
 }
 
 function extraSubtitle(x: AirportExtra): string {
@@ -148,6 +195,12 @@ export function findHotel(booking: Booking, id: string): Hotel | undefined {
 export function findExtra(booking: Booking, id: string): AirportExtra | undefined {
   return booking.airportExtras.find((x) => x.id === id);
 }
+
+export function findExperience(booking: Booking, id: string): Experience | undefined {
+  return (booking.experiences ?? []).find((x) => x.id === id);
+}
+
+export { EXPERIENCE_LABELS };
 
 export function leadTraveller(booking: Booking): Traveller {
   return booking.travellers.find((t) => t.isLead) ?? booking.travellers[0];

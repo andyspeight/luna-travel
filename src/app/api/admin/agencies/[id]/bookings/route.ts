@@ -87,6 +87,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       : [],
     flights,
     hotels,
+    experiences: Array.isArray(body.experiences)
+      ? (body.experiences as ManualBookingInput['experiences'])
+      : [],
   };
 
   const agency: ControlAgency = { name: str(body.agencyName), email: str(body.agencyEmail) };

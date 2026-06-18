@@ -82,6 +82,7 @@ export interface Hotel {
   boardBasis?: BoardBasis;
   hotelReference?: string;
   specialRequests?: string;
+  photos?: string[]; // public image URLs (off-platform bookings)
 }
 
 export interface AirportExtra {
@@ -93,6 +94,36 @@ export interface AirportExtra {
   time?: string;
   guests?: number;
   notes?: string;
+  photos?: string[];
+}
+
+export type ExperienceKind =
+  | 'excursion'
+  | 'car-hire'
+  | 'transfer'
+  | 'activity'
+  | 'lounge'
+  | 'parking'
+  | 'fast-track'
+  | 'other';
+
+/**
+ * A non-flight, non-hotel booking component: excursions, car hire, transfers,
+ * activities and the like. Primarily used by off-platform (manually-loaded)
+ * bookings; rendered on the itinerary and an experience detail page.
+ */
+export interface Experience {
+  id: string;
+  kind: ExperienceKind;
+  title: string;
+  supplier?: string;
+  location?: string;
+  startDate: string; // ISO
+  endDate?: string; // ISO
+  time?: string;
+  notes?: string;
+  reference?: string;
+  photos?: string[];
 }
 
 export interface Document {
@@ -142,6 +173,7 @@ export interface Booking {
   flights: FlightLeg[];
   hotels: Hotel[];
   airportExtras: AirportExtra[];
+  experiences?: Experience[]; // excursions, car hire, transfers… (off-platform)
   documents: Document[];
 
   // Money

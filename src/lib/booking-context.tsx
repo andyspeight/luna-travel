@@ -34,10 +34,22 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [liveLoading, setLiveLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
 
-  // 1. Restore mock selection from localStorage on mount (unchanged behaviour).
+  // 1. Restore mock selection on mount. A /?demo=<ref> deep-link (used by the
+  //    admin Demo launchpad QRs) selects a sample trip directly and takes
+  //    precedence over the saved selection; otherwise behaviour is unchanged.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
+      const demoRef = new URLSearchParams(window.location.search).get('demo');
+      if (demoRef) {
+        const dm = BOOKINGS.find((b) => b.reference.toUpperCase() === demoRef.toUpperCase());
+        if (dm) {
+          setBooking(dm);
+          try { window.localStorage.setItem(STORAGE_KEY, dm.reference); } catch { /* ignore */ }
+          setHydrated(true);
+          return;
+        }
+      }
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const found = BOOKINGS.find((b) => b.reference === saved);

@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { validateAgencyBooking } from '@/lib/control-order';
+import { getStoredBooking } from '@/lib/stored-booking';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -177,20 +178,35 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return notFound();
   }
 
-  // 4. Validate the booking against the AGENCY's own Travelify credentials,
-  //    via Control's internal endpoint. Falls back to the demo integration only
-  //    when the per-agency internal path isn't configured.
-  const validation = await validateAgencyBooking({
-    agencyId: invite.agency_id as string,
-    bookingRef,
-    email,
-    departureDate,
-  });
-  if (!validation.ok) {
-    console.warn('[redeem] booking validation failed:', inviteId);
-    return notFound();
+  // 4. Validate the booking. An off-platform booking (stored, not in Travelify)
+  //    is confirmed by matching its lead email; otherwise validate against the
+  //    agency's own Travelify credentials via Control.
+  let validated: { leadName: string | null; departureDate: string | null; returnDate: string | null; destination: string | null };
+  const stored = await getStoredBooking(invite.agency_id as string, bookingRef);
+  if (stored) {
+    if (!stored.leadEmail || stored.leadEmail.toLowerCase() !== email) {
+      console.warn('[redeem] off-platform email mismatch:', inviteId);
+      return notFound();
+    }
+    validated = {
+      leadName: stored.leadName,
+      departureDate: stored.departureDate,
+      returnDate: stored.returnDate,
+      destination: stored.destination,
+    };
+  } else {
+    const validation = await validateAgencyBooking({
+      agencyId: invite.agency_id as string,
+      bookingRef,
+      email,
+      departureDate,
+    });
+    if (!validation.ok) {
+      console.warn('[redeem] booking validation failed:', inviteId);
+      return notFound();
+    }
+    validated = validation.booking;
   }
-  const validated = validation.booking;
 
   // 5. Atomic invite update: only proceeds if status is still 'pending'.
   //    If two concurrent redemptions race, only one wins; the other sees

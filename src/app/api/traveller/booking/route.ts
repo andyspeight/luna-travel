@@ -32,6 +32,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
+import { getStoredBooking } from '@/lib/stored-booking';
 import type { Booking } from '@/types/booking';
 
 export const dynamic = 'force-dynamic';
@@ -82,10 +83,6 @@ export async function GET(req: NextRequest) {
   }
 
   const internalKey = process.env.TG_INTERNAL_KEY;
-  if (!internalKey) {
-    console.error('[traveller.booking] TG_INTERNAL_KEY not set');
-    return NextResponse.json({ error: 'config' }, { status: 500 });
-  }
 
   // 1. Read the traveller row for the lookup fields.
   let supabase;
@@ -120,6 +117,21 @@ export async function GET(req: NextRequest) {
       hasDate: !!departDate,
     });
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+
+  // 1b. Off-platform booking? Return the stored payload directly — there is no
+  //     Travelify order to fetch. Still kicks off flight auto-subscribe so live
+  //     flight tracking works for manually-added bookings too.
+  const stored = await getStoredBooking(recordId, orderRef);
+  if (stored?.payload) {
+    triggerAutoSubscribe(stored.payload, recordId, orderRef);
+    return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
+  }
+
+  // On-platform: the live Travelify lookup needs the internal key.
+  if (!internalKey) {
+    console.error('[traveller.booking] TG_INTERNAL_KEY not set');
+    return NextResponse.json({ error: 'config' }, { status: 500 });
   }
 
   // 2. Ask Control for the order + branding (server-to-server, key in env).

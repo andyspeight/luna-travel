@@ -196,18 +196,19 @@ That makes an explicit production env audit essential — a silent fallback is w
 ## 8. Prioritised go-live checklist
 
 **Must, before launch**
-- [ ] Replace the no-session demo default with a real onboarding/empty state (§4.1)
-- [ ] Wire `/welcome` to the real booking lookup; remove the demo-mode hint + demo mailto (§4.2)
-- [ ] Wire or remove post-trip reviews (§4.3)
-- [ ] Remove the vestigial admin sign-in page + audit mapping (§4.4)
-- [ ] Remove/redirect the mock "Create agency" wizard; drop the App-250 default (§4.5)
-- [ ] Gate the Demo tab (and `/?demo=`) out of production (§4.6)
-- [ ] Bump `APP_VERSION` + `version.json` so the update path works (§4.7)
+- [ ] Replace the no-session demo default with a real onboarding/empty state (§4.1) — *deferred by owner*
+- [ ] Wire `/welcome` to the real booking lookup; remove the demo-mode hint + demo mailto (§4.2) — *deferred by owner*
+- [x] Wire or remove post-trip reviews (§4.3) — **wired** (`luna_travel.reviews` + `/api/traveller/review`)
+- [x] Remove the vestigial admin sign-in page (§4.4) — **done** (now an honest SSO "signed out" screen; the `admin.signin*` audit *types* were kept for historical rows)
+- [x] Remove/redirect the mock "Create agency" wizard; drop the App-250 default (§4.5) — **done** (Control explainer)
+- [x] Gate the Demo tab out of production (§4.6) — **done** (nav hidden in prod unless `NEXT_PUBLIC_LUNA_DEMO=1`; route still reachable by URL; the `/?demo=` deep-link left in place since the demo default stays for now)
+- [x] Bump `APP_VERSION` + `version.json` so the update path works (§4.7) — **done** (0.15.0)
 - [ ] **Confirm the production env vars** — `TG_INTERNAL_KEY`, `CRON_SECRET`, the AI backend +
-      `ANTHROPIC_MODEL`, and the core secrets (§5)
+      `ANTHROPIC_MODEL`, and the core secrets (§5) — *owner action (cannot be set from code)*
 
 **Should, at/near launch**
-- [ ] `requireAdmin()` on `messages` GET; add CSP + HSTS; decide role enforcement (§6)
+- [x] `requireAdmin()` on `messages` GET; add CSP + HSTS (§6) — **done** *(validate the CSP on the preview deploy — see note)*
+- [ ] Decide role enforcement (owner vs admin) (§6) — *decision pending*
 - [ ] Surface off-platform invite-creation failures (§6)
 - [ ] Fix "sync" wording / document-count honesty (§6)
 - [ ] Decide + label the push-notifications and Luna-concierge v1 limitations (§6)
@@ -216,4 +217,34 @@ That makes an explicit production env audit essential — a silent fallback is w
 **Nice-to-have / track**
 - [ ] `source:'pdf'` labelling; timing-safe compares; sync-sweep batching; JWT revocation
 - [ ] Harden `luna_travel.set_updated_at` search_path (§2)
+
+---
+
+## Addendum — closed on branch `claude/go-live-readiness-review-74ho1c` (9 Jul 2026)
+
+Delivered in three commits on top of this review (all gates green — type-check,
+lint, `next build`):
+
+1. **Security hardening** — CSP + HSTS added to `vercel.json`; `requireAdmin()`
+   added in-handler to `GET /api/admin/agencies/[id]/messages`.
+2. **Retired demo-grade admin surfaces** — honest SSO sign-out page; the mock
+   agency wizard replaced by a Control onboarding explainer (App-250 default
+   gone); Demo tab gated out of the production nav; version bumped to 0.15.0.
+3. **Post-trip reviews wired** — new `luna_travel.reviews` table (applied to
+   prod), `POST /api/traveller/review` (session-scoped), and the review screen
+   now persists for real / surfaces genuine errors instead of always claiming
+   "sent".
+
+**Deferred by owner decision:** the onboarding no-session default and the
+`/welcome` live-Travelify lookup + demo-hint removal (§4.1–4.2) were left for a
+later pass. **Owner action outstanding:** the production env-var confirmation
+(§5) — a code review cannot read or set Vercel env vars.
+
+**One thing to validate on the preview deploy before merging to `main`:** load
+the installed PWA on the branch's Vercel preview and confirm the new CSP doesn't
+block anything at runtime — the map iframes render, Google Fonts load, and hero
+/ blob / signed-document images all appear, with no CSP violations in the
+browser console. The policy was written to be compatible, but `vercel.json`
+headers only apply on Vercel (not `next start`), so this is the first place it
+can be exercised end-to-end.
 </content>

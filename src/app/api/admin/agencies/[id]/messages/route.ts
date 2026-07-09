@@ -13,8 +13,8 @@
  * GET    — list messages sent to a traveller: ?travellerId=...
  *         Returns each message with its read/delivered state for that traveller.
  *         With no travellerId, returns the agency's recent messages (used later
- *         by the Messages tab). Admin-gated by middleware, like the travellers
- *         endpoint alongside it.
+ *         by the Messages tab). Gated by requireAdmin in-handler (defence in
+ *         depth) as well as the edge middleware, like the write path above.
  *
  * Built on the pre-existing luna_travel.messages + message_recipients schema.
  * Two-query + in-JS join rather than PostgREST embedding, for predictability in
@@ -207,6 +207,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
   const agencyId = (params?.id || '').trim();
   if (!agencyId) {
     return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });

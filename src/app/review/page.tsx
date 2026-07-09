@@ -22,11 +22,35 @@ export default function ReviewPage() {
   const lead = leadTraveller(booking);
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
+  const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = () => {
-    // In production: POST to the agency's review endpoint
-    setSubmitted(true);
+  const onSubmit = async () => {
+    if (rating === 0 || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/traveller/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ rating, comment: comment.trim() }),
+      });
+      // 201 = saved for a real traveller session. 401 = the mock/demo booking
+      // (no lt_session) — nothing to persist, but the traveller has finished, so
+      // still confirm. Only a genuine server error is surfaced to them.
+      if (res.ok || res.status === 401) {
+        setSubmitted(true);
+      } else {
+        setError("We couldn't send your review just now. Please try again.");
+      }
+    } catch {
+      setError("We couldn't send your review just now. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Rebook suggestion based on destination personality
@@ -85,15 +109,28 @@ export default function ReviewPage() {
               {/* Textarea-ish field */}
               <div className="bg-surface border border-line-light rounded-2xl p-4 mb-3">
                 <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
                   placeholder="Anything you'd like to share with us…"
                   rows={4}
+                  maxLength={2000}
                   className="w-full bg-transparent resize-none text-sm text-ink placeholder-ink-3 focus:outline-none leading-relaxed"
                 />
               </div>
 
-              <ActionButton onClick={onSubmit} disabled={rating === 0}>
-                {rating === 0 ? 'Pick a rating to send' : 'Send my review'}
+              <ActionButton onClick={onSubmit} disabled={rating === 0 || submitting}>
+                {submitting
+                  ? 'Sending…'
+                  : rating === 0
+                    ? 'Pick a rating to send'
+                    : 'Send my review'}
               </ActionButton>
+
+              {error && (
+                <p className="text-[12px] text-danger text-center mt-3 leading-relaxed max-w-[280px] mx-auto">
+                  {error}
+                </p>
+              )}
 
               <p className="text-[11px] text-ink-3 text-center mt-3 leading-relaxed max-w-[280px] mx-auto">
                 Reviews go straight to your agent. With your permission, we may also share on the agency website.

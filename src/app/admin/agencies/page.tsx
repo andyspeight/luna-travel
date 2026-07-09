@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Sparkles, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight } from 'lucide-react';
 
 const C = {
   bg: '#F8FAFC',
@@ -166,22 +166,9 @@ export default function AgenciesListPage() {
               Agencies
             </h1>
           </div>
-          <Link
-            href="/admin/agencies/new"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '0 16px', height: 40, borderRadius: 8,
-              backgroundColor: C.primary, color: '#fff', border: 'none',
-              fontSize: 14, fontWeight: 500, cursor: 'pointer',
-              textDecoration: 'none',
-              transition: 'background-color 150ms',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = C.primaryLight}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = C.primary}
-          >
-            <Sparkles style={{ height: 16, width: 16 }} strokeWidth={1.75} />
-            New agency
-          </Link>
+          {/* Agencies are onboarded in Travelgenix Control (the single source of
+              truth), then appear here once entitled to Luna Travel — so there is
+              deliberately no "create agency" action on this screen. */}
         </div>
 
         {/* Filters bar */}

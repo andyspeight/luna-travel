@@ -1,5 +1,5 @@
 {
-  "version": "0.14.11",
-  "released": "2026-06-03",
-  "notes": "Agent messages are now front and centre. An urgent or unread message shows at the top of the home screen, the Me tab shows an unread count, and you can mark a message as read from the home banner or by opening Notifications."
+  "version": "0.15.0",
+  "released": "2026-07-09",
+  "notes": "Your destination guide now shows live weather and public holidays for your exact dates, and your trip can include excursions, car hire and transfers — each with photos — right alongside your flights and hotels."
 }

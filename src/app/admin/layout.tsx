@@ -9,6 +9,13 @@ import {
   Image as ImageIcon, QrCode, FilePlus,
 } from 'lucide-react';
 
+// The Demo tab surfaces mock booking data and /?demo= deep-links — useful for
+// walkthroughs, but not something every production admin should be led with.
+// Hidden in production unless NEXT_PUBLIC_LUNA_DEMO=1 is set on the deployment.
+// The /admin/demo route itself stays reachable by direct URL either way.
+const SHOW_DEMO =
+  process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_LUNA_DEMO === '1';
+
 const NAV = [
   { id: 'demo', label: 'Demo', href: '/admin/demo', icon: QrCode },
   { id: 'dashboard', label: 'Overview', href: '/admin/dashboard', icon: LayoutDashboard },
@@ -278,7 +285,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           borderRight: `1px solid ${c.border}`,
         }}>
           <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {NAV.map((item) => {
+            {NAV.filter((item) => item.id !== 'demo' || SHOW_DEMO).map((item) => {
               const active = pathname?.startsWith(item.href);
               const Icon = item.icon;
               return (

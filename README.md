@@ -2,7 +2,7 @@
 
 The post-booking traveller PWA in the Travelgenix stack.
 
-An installable, offline-capable Next.js 14 app that re-presents a confirmed
+An installable, offline-capable Next.js 15 app that re-presents a confirmed
 booking to the traveller as a native-feel mobile app — trip wallet, itinerary,
 live flight status, documents, destination guides, maps, agent messaging and a
 Luna concierge. Vamoos-class experience, built on Travelgenix rails.
@@ -16,7 +16,7 @@ foundation of production v1.
 - **Show URL:** https://lunatravel.travelify.io (deploys from `main`)
 - **Repo:** https://github.com/andyspeight/luna-travel
 - **Vercel:** https://vercel.com/agendasgroup/luna-travel (agendasgroup team)
-- **Version:** 0.14.11
+- **Version:** 0.15.0 (go-live hardening in progress on `claude/go-live-readiness-review-74ho1c`)
 
 ---
 
@@ -95,34 +95,66 @@ Luna Travel is two connected systems in one repo:
 | Lint config | 16 Jun — added `.eslintrc.json` (`next/core-web-vitals` + `@typescript-eslint`); `npm run lint` passes clean | DONE |
 | Real photography | Cover splashes + PDF heroes for all 4 demo destinations | DONE |
 
+**Post-0.14.11 → 0.15.0 (destination, off-platform bookings, sync, security):**
+
+| Area | What landed | Status |
+|---|---|---|
+| **Destination guide v1** | Read-only Luna Brain adapter → "For your dates" tab; surfaces Luna Brain events + things-to-do; **live weather (Open-Meteo, keyless) + public holidays (Calendarific) per stay dates** | DONE |
+| **Off-platform bookings** | Bookings not held in Travelify: **manual entry** (Vamoos-style), **PDF import** (Luna Chat extract → Anthropic fallback) with **per-client training** (profiles + correction-capture); full products (excursions / car hire / transfers) with photos + live preview; stored in `luna_travel.bookings` (JSONB payload) | DONE |
+| **Sync-health monitor** | Real Travelify sync-health monitor + per-booking re-sync; `sync_events` feed wired live (replaces the earlier simulated feed); `/api/cron/sync` sweep (Vercel Cron, `CRON_SECRET`-gated) | DONE |
+| **Per-agency Travelify creds** | Live booking lookup now uses each agency's own Control credentials (not the shared demo App 250 path) | DONE |
+| Demo surfaces | Admin **Demo tab** (sample-trip QR deep-links) gated out of production (`NEXT_PUBLIC_LUNA_DEMO=1` to show); retired demo-grade admin surfaces; honest SSO "signed out" screen | DONE |
+| Security headers | **CSP + HSTS** response headers; in-handler auth on the messages GET | DONE |
+
+**Go-live readiness — `claude/go-live-readiness-review-74ho1c` (post-0.15.0):**
+
+| Area | What landed | Status |
+|---|---|---|
+| **White-label branding** | Agency brand (app name, primary/accent colour, welcome message, logo) carried end-to-end into the traveller app: CSS-variable-backed Tailwind tokens re-theme the whole PWA; header renders logo + app name + welcome message | DONE |
+| **Branding override model** | Branding **pulls from Control when available**; a Luna-side `agency_branding` override layer lets each field be set/overridden in Luna Travel; Control-agency overrides **sync back to Control** ("write to both"), native agencies are Luna-only; per-field Reset-to-Control | DONE |
+| **Luna-native agencies** | Agencies can be created **outside Control** for non-Travelgenix clients (stage 2). Prefix-based id scheme (`rec…` = Control, `lt…` = Luna-native); every agency-scoped route is source-aware; list is a Control + Luna union that still shows Luna agencies when Control is unreachable | DONE |
+| **Onboarding honesty** | First run with **no session shows a real onboarding screen** ("Add your trip" / "Find my trip"), not a fake demo trip; demo deep-links (`/?demo=`, saved ref, picker) still show the sample trip. `/welcome` and notifications copy made honest (no fake mailto, no false "encrypted push" claim) | DONE |
+| **Off-platform invites** | Invite-creation failures on off-platform bookings surface to the agent (retry UI) instead of being swallowed | DONE |
+| **Backend hardening** | Constant-time secret comparison (`safeEqual`) for internal keys + cron bearer; `set_updated_at()` search_path pinned (clears Supabase advisory); sync wording made accurate | DONE |
+
 ---
 
 ## What's real vs mock today
 
 **Real (live, Supabase + Travelify + AeroDataBox + Control):**
 - Admin sign-in via Travelgenix ID SSO
-- Agencies list reads live from Control (only clients entitled to `luna-travel`)
+- Agencies list reads live from Control (only clients entitled to `luna-travel`),
+  **unioned with Luna-native agencies** created outside Control
+- **Manual + PDF-import creation of Luna-native agencies** for non-Travelgenix
+  clients (stage 2)
 - Invite creation, QR generation, and traveller redemption (validates the
   booking ref + email + departure date against Travelify before issuing a
-  session)
+  session); off-platform-booking invites surface failures to the agent
 - Per-agency document upload, storage, categorisation and signed download
-- Per-agency branding (logo) and Travelify integration credentials + test
+- **Per-agency white-label branding** — app name, primary/accent colour, welcome
+  message, logo — pulled from Control with a Luna-side override layer that re-themes
+  the whole PWA; Control-agency edits sync back to Control
+- Per-agency Travelify integration credentials + connection test; **the live
+  booking lookup uses each agency's own Control credentials**
 - Hero image upload and serving
 - Agent → traveller messaging pipeline (compose, deliver, unread, mark read)
 - Live flight status pipeline (subscribe + webhook → `trip_flights` → messages),
   active wherever `AERODATABOX_API_KEY` / `AERODATABOX_WEBHOOK_TOKEN` are set
+- **Destination guide** — Luna Brain events + things-to-do, live weather
+  (Open-Meteo) and public holidays (Calendarific) for the traveller's exact dates
+- **Off-platform bookings** — manual + PDF-imported bookings stored in
+  `luna_travel.bookings`, with per-client PDF-extraction training
+- **Travelify sync-health monitor** + per-booking re-sync + cron sweep
 - Audit logging across admin actions; admin stats
 
 **Still mock (prototype data, swappable in production):**
-- The four demo bookings powering the traveller PWA (`mock-bookings.ts`)
+- The four demo bookings powering the traveller PWA (`mock-bookings.ts`), shown
+  only via demo deep-links (`/?demo=`, saved ref, or the hidden picker) — a
+  first run with no session now shows the real onboarding screen, not a demo trip
 - `/welcome` ref-lookup matches against the mock set, not live Travelify
 - The agency **detail** page is live-wired (it fetches `/api/admin/agencies?id=`
   and every tab calls a real API); the in-file `AGENCIES` const is a vestigial
   type anchor, not a data source — worth replacing with a named interface
-- `/admin/sync` deliberately **simulates** a sync activity feed from a
-  hardcoded agency list (visualisation only; not wired to live data)
-- Per-agency Travelify creds exist in Control, but the live booking lookup
-  still uses the demo App 250 path until wired to each agency's own creds
 
 ---
 
@@ -146,7 +178,8 @@ or toggle theme. Hidden from production unless invoked.
 
 | Table | Holds |
 |---|---|
-| `agencies` | Local agency cache / counters (source of truth remains Control) |
+| `agencies` | Luna-native agencies (`lt…` ids) + local cache/counters. Control (`rec…`) remains source of truth for Travelgenix clients |
+| `agency_branding` | Per-agency branding override layer (app name, colours, welcome message, logo) merged over Control on read |
 | `travellers` | Redeemed travellers (booking ref, email, agency, session) |
 | `invites` | Invite records for the QR/redeem loop |
 | `documents` | Per-agency uploaded documents (private bucket pointers) |
@@ -157,6 +190,11 @@ or toggle theme. Hidden from production unless invoked.
 | `audit_events` | Admin action audit log |
 | `bookings` | Off-platform bookings (manual / PDF import) not held in Travelify; JSONB `payload` is the rendered Booking |
 | `pdf_extraction_profiles` | Per-agency PDF-import training — admin hints + confirmed-correct examples fed back into extraction |
+| `reviews` | Post-trip traveller reviews (rating + text) |
+| `sync_events` | Travelify sync-health feed (per-run + per-booking outcomes) |
+
+RLS is on with no policies, so every table is deny-all except the service-role
+client (`getSupabaseAdmin()`), which is the only path that touches them.
 
 ---
 
@@ -174,11 +212,16 @@ or toggle theme. Hidden from production unless invoked.
 | `AERODATABOX_API_KEY` | AeroDataBox (API.Market) flight-status lookups |
 | `AERODATABOX_WEBHOOK_TOKEN` | Shared secret in the inbound webhook `?t=` query (constant-time checked) |
 | `LUNA_TRAVEL_PUBLIC_URL` | Public base URL used to build the webhook callback target |
-| `TG_INTERNAL_KEY` | Internal service-to-service auth for flight subscribe + booking fetch + Luna Chat PDF extraction |
+| `TG_INTERNAL_KEY` | Internal service-to-service auth for flight subscribe + booking fetch + Luna Chat PDF extraction (constant-time checked) |
+| `CRON_SECRET` | Bearer secret for the `/api/cron/sync` sweep (Vercel Cron; constant-time checked). Unset → the route 401s and the admin "Run sync now" button is used instead |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for logo + message-image uploads |
 | `LUNA_CHAT_EXTRACT_URL` | Luna Chat PDF-extraction endpoint (preferred PDF-import backend); see `docs/pdf-import.md` |
 | `ANTHROPIC_API_KEY` | Direct Anthropic fallback for PDF import when `LUNA_CHAT_EXTRACT_URL` is unset |
 | `ANTHROPIC_MODEL` | Optional model override for PDF import (default `claude-sonnet-4-6`) |
+| `CALENDARIFIC_KEY` | Optional — public-holiday lookups for the destination guide (Calendarific). Unset → holidays are skipped, weather still works |
+| `NEXT_PUBLIC_LUNA_DEMO` | Set to `1` to show the admin Demo tab in production (hidden by default; the `/admin/demo` route stays reachable by URL either way) |
+
+Weather uses Open-Meteo, which needs no key.
 
 Missing env vars do not crash the build (clients are lazy) — routes that need
 them return a controlled error and log it.
@@ -206,18 +249,22 @@ Ported from My Booking widget v1.4.1 (`src/lib/format.ts`):
 - Service-role key stays server-side via `getSupabaseAdmin()` only
 - Admin API routes gated server-side in `src/middleware.ts` against the central
   Travelgenix ID session; admin pages gated client-side by `tg-auth-gate.js`.
-  **Defense in depth (done 16 Jun):** all 17 admin API routes also re-verify the
-  session inside the handler via `requireAdmin()`, so a bypassed or regressed
-  middleware cannot reach the logic
+  **Defense in depth:** every privileged admin API route also re-verifies the
+  session inside the handler via `requireAdmin()` (23 of the 25 admin routes; the
+  two exceptions — `me` and `signout` — read/clear the session themselves), so a
+  bypassed or regressed middleware cannot reach the logic
 - The AeroDataBox webhook is unauthenticated by the provider, so it is gated by
   a secret token in the query string, compared in constant time
+- Internal service-to-service secrets (`TG_INTERNAL_KEY`, `CRON_SECRET`) are
+  compared with `safeEqual()` (SHA-256 + `timingSafeEqual`) so neither timing nor
+  length leaks — see `src/lib/constant-time.ts`
 - Travelify calls require the `Origin` header or the API returns a silent 401 —
   do not remove it
 - Traveller documents live in a **private** bucket; the PWA only ever receives
   short-lived (15-min) signed URLs, authorised by the `lt_session` cookie
 - Hero images live in a **public** bucket — durable, cacheable, offline-friendly
-- Response security headers (X-Frame-Options, nosniff, Referrer-Policy,
-  Permissions-Policy) set in `vercel.json`
+- Response security headers (Content-Security-Policy, Strict-Transport-Security,
+  X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy) set in `vercel.json`
 - Every upload validated server-side: roster check, variant whitelist, mime and
   size caps; deny + log on any failure
 
@@ -274,25 +321,44 @@ src/
 │   ├── offline/                # PWA offline fallback
 │   ├── admin/                  # Agency + platform admin (SSO-gated)
 │   │   ├── dashboard/  agencies/[id|new]/  travellers/  flight-test/
-│   │   ├── heroes/  audit/  sync/  settings/  signin/
-│   │   └── agencies/[id]/      # detail page + InvitesTab, TravellersTab, MessageComposer
+│   │   ├── heroes/  audit/  sync/  settings/  signin/  demo/  bookings/new/
+│   │   └── agencies/[id]/      # detail page + Branding, Invites, Travellers,
+│   │                          #   Messages, Integration, Bookings tabs
 │   └── api/
 │       ├── invites/                      # create, fetch, redeem (QR loop)
 │       ├── flights/                      # subscribe, subscribe-booking, webhook
-│       ├── traveller/                    # booking, documents, flights, messages, ping
+│       ├── cron/sync/                    # Vercel Cron sync sweep (CRON_SECRET)
+│       ├── traveller/                    # booking, documents, flights, messages,
+│       │                                 #   ping, review, destination, conditions
 │       └── admin/                        # agencies (+[id] branding/integration/
-│                                         # documents/messages/travellers/upload-logo),
-│                                         # audit, stats, heroes, flight-test, me, signout
+│                                         #   documents/messages/travellers/upload-logo/
+│                                         #   bookings/booking-photo/extraction-profile),
+│                                         #   import-pdf, sync(+run/booking), sync-events,
+│                                         #   demo, audit, stats, heroes, flight-test, me, signout
 ├── components/                 # tab-bar, nav-bar, cover-splash, picker, icons,
-│                               # trip-map, map-sheet, inspiration-card,
-│                               # version-check, engagement-ping, language-switcher…
+│                               # onboarding-home, agency-logo, trip-map, map-sheet,
+│                               # inspiration-card, version-check, engagement-ping,
+│                               # language-switcher…
 ├── lib/
 │   ├── format.ts               # Data integrity formatters
 │   ├── booking-helpers.ts      # Timeline build, lookups, grouping
 │   ├── hero.ts                 # Destination hero gradients + cinematic covers
 │   ├── travelify.ts            # Travelify lookup + AES-256-GCM credential decrypt
 │   ├── order-to-booking.ts     # Travelify order → Booking mapper
+│   ├── control-order.ts        # Control order → Booking mapper
+│   ├── stored-booking.ts       # Off-platform (bookings table) → Booking mapper
+│   ├── booking-extract.ts      # PDF → structured booking (Luna Chat / Anthropic)
+│   ├── pdf-profile.ts          # Per-agency PDF-extraction training profiles
 │   ├── aerodatabox.ts          # AeroDataBox client + status mapping
+│   ├── luna-brain.ts           # Read-only Luna Brain adapter (destination guide)
+│   ├── weather.ts              # Open-Meteo forecast/archive/marine (keyless)
+│   ├── holidays.ts             # Public-holiday lookup (Calendarific)
+│   ├── sync.ts                 # Travelify sync sweep + health
+│   ├── agency-id.ts            # Shared id scheme (rec… Control / lt… Luna-native)
+│   ├── agencies.ts             # Luna-native agency store + resolver
+│   ├── agency-branding.ts      # Branding override layer (merge over Control)
+│   ├── brand.ts                # Brand hex → CSS-variable RGB channels
+│   ├── constant-time.ts        # safeEqual() for secret comparison
 │   ├── use-flight-live.ts      # Client hook for live flight status
 │   ├── use-agent-messages.ts   # Client hook for unread agent messages
 │   ├── supabase.ts             # Lazy admin/public clients (luna_travel schema)
@@ -302,7 +368,7 @@ src/
 │   ├── categorise-document.ts  # Document type auto-categorisation
 │   ├── i18n.ts / locale-context.tsx   # Lightweight 6-locale i18n
 │   ├── trip-map.ts / geo.ts    # Map route + geo helpers
-│   ├── booking-context.tsx     # Active booking state (+ live fetch on mount)
+│   ├── booking-context.tsx     # Active booking state (+ live fetch, onboarding gate)
 │   ├── theme-context.tsx       # Light/dark mode
 │   ├── cover-context.tsx       # Cover mode (opt-in splash) state
 │   └── app-update.ts           # APP_VERSION + force-update routine
@@ -318,7 +384,7 @@ src/
 packages/ui/                    # @travelgenix/ui — shared tokens + components
 public/
 ├── manifest.json               # PWA manifest
-├── version.json                # Build version (0.14.11)
+├── version.json                # Build version (0.15.0)
 ├── icons/  images/             # PWA icons + hero imagery
 └── documents/                  # Pre-generated demo PDFs per booking ref
 
@@ -329,6 +395,8 @@ scripts/
 
 docs/
 ├── live-wiring-state.md        # Control-integration architecture + delta log
+├── go-live-readiness-2026-07-09.md  # Go-live readiness review + gap log
+├── pdf-import.md               # PDF-import backend + training design
 └── smoke-test-2026-06-16.md    # Go-live smoke-test report
 ```
 
@@ -343,12 +411,21 @@ docs/
 
 ## Last updated
 
-16 June 2026 — README brought current to **v0.14.11**. Documents the Flight Hub
-(AeroDataBox live status + webhook fan-out), agent ↔ traveller messaging, trip
-map, 6-locale i18n, inspiration feed, per-agency branding/integration, live
-booking fetch, engagement ping and PWA force-update — none of which existed at
-the previous (0.8.0) update. Records the security/quality hardening shipped the
-same day: Next.js upgraded to 15.5.19 (async route params; React stays 18.3),
-all 17 admin API routes self-gated for defense in depth, the PWA tooling moved
-to `@ducanh2912/next-pwa`, plus the new lint config and refreshed env/data-model
-tables. See `docs/smoke-test-2026-06-16.md` for go-live status.
+10 July 2026 — README brought current to **v0.15.0** plus the go-live hardening
+on `claude/go-live-readiness-review-74ho1c`. Since the 0.14.11 update this
+documents: the **destination guide** (Luna Brain events/things-to-do + live
+Open-Meteo weather and Calendarific holidays for the traveller's exact dates);
+**off-platform bookings** (manual entry + PDF import with per-client training,
+stored in `luna_travel.bookings`); the **Travelify sync-health monitor** and
+cron sweep; **per-agency Travelify credentials** wired into the live lookup; the
+gated Demo tab; and CSP + HSTS headers.
+
+The go-live branch adds: **white-label branding carried end-to-end** into the
+traveller app with a Control-pull + Luna-override model (Control edits sync
+back); **Luna-native agencies** for non-Travelgenix clients (prefix id scheme,
+source-aware routes, Control-outage-tolerant list); an honest **first-run
+onboarding** screen (no fake demo trip) with `/welcome` and notifications copy
+made truthful; off-platform invite-failure surfacing; and backend hardening
+(constant-time secret compares, `set_updated_at` search_path pinned). New
+tables: `agency_branding`, `reviews`, `sync_events`. See
+`docs/go-live-readiness-2026-07-09.md` for the readiness review and gap log.

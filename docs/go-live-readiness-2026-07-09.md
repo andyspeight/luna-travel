@@ -184,20 +184,22 @@ That makes an explicit production env audit essential — a silent fallback is w
   demo tab, per-agency creds). The README's data-model table is also drifted: it lists an
   `agencies` table that **does not exist** in `luna_travel` (agencies are read from Control) and
   omits `push_subscriptions` and `sync_events`/`bookings`/`pdf_extraction_profiles` nuances.
-- **In-repo migrations are a partial set.** `db/migrations/` holds only the 4 newest
-  (`booking_photos_bucket`, `bookings`, `pdf_extraction_profiles`, `sync_events`). Core tables
-  (`travellers`, `invites`, audit) and `push_subscriptions` were applied directly to prod and
-  are **not** reproducible from this repo — a fresh/staging environment built from
-  `db/migrations/` alone would fail (the `sync_events` migration FK-references `travellers`).
-  Fine for the existing prod DB; a gap for reproducibility/DR.
+- **In-repo migrations are a partial set.** *(Closed — see the Session-2-continued addendum.)*
+  Originally `db/migrations/` held only the newest few files; the core tables
+  (`travellers`, `invites`, `documents`, `messages`, `message_recipients`, `trip_flights`,
+  `app_opens`, `audit_events`) had been applied directly to prod, so a fresh environment built
+  from `db/migrations/` alone would fail (the `sync_events` migration FK-references `travellers`).
+  `luna_travel_baseline.sql` now captures those base tables + enums + indexes + RLS, so the repo
+  is reproducible. (`push_subscriptions` is deliberately omitted — it is orphaned/unused; web-push
+  is not implemented, and messaging is in-app for v1.)
 
 ---
 
 ## 8. Prioritised go-live checklist
 
 **Must, before launch**
-- [ ] Replace the no-session demo default with a real onboarding/empty state (§4.1) — *deferred by owner*
-- [ ] Wire `/welcome` to the real booking lookup; remove the demo-mode hint + demo mailto (§4.2) — *deferred by owner*
+- [x] Replace the no-session demo default with a real onboarding/empty state (§4.1) — **done** (first run with no session shows the onboarding screen; the `/?demo=` / saved-ref / picker demo paths are preserved per owner)
+- [ ] Wire `/welcome` to the real booking lookup (§4.2) — **honesty half done** (demo-mode hint + fake `hello@travelaire.co.uk` mailto removed, copy made honest); **live-Travelify lookup still deferred**
 - [x] Wire or remove post-trip reviews (§4.3) — **wired** (`luna_travel.reviews` + `/api/traveller/review`)
 - [x] Remove the vestigial admin sign-in page (§4.4) — **done** (now an honest SSO "signed out" screen; the `admin.signin*` audit *types* were kept for historical rows)
 - [x] Remove/redirect the mock "Create agency" wizard; drop the App-250 default (§4.5) — **done** (Control explainer)
@@ -209,14 +211,14 @@ That makes an explicit production env audit essential — a silent fallback is w
 **Should, at/near launch**
 - [x] `requireAdmin()` on `messages` GET; add CSP + HSTS (§6) — **done** *(validate the CSP on the preview deploy — see note)*
 - [ ] Decide role enforcement (owner vs admin) (§6) — *decision pending*
-- [ ] Surface off-platform invite-creation failures (§6)
-- [ ] Fix "sync" wording / document-count honesty (§6)
-- [ ] Decide + label the push-notifications and Luna-concierge v1 limitations (§6)
-- [ ] Refresh README / docs; commit the missing base migrations for reproducibility (§7)
+- [x] Surface off-platform invite-creation failures (§6) — **done** (invite retried; explicit `inviteError` returned, booking kept; success screen shows a warning + "Retry invite")
+- [x] Fix "sync" wording / document-count honesty (§6) — **done** ("Booking refreshed" → "Booking verified"; the sweep is now described as the reachability check it is)
+- [ ] Decide + label the push-notifications and Luna-concierge v1 limitations (§6) — **notifications done** (page now says in-app-only, no false "encrypted push" claim); Luna-concierge labelling *still pending*
+- [x] Refresh README / docs; commit the missing base migrations for reproducibility (§7) — **done** (README current to 0.15.0 + go-live work; `luna_travel_baseline.sql` captures the 8 base tables/enums/indexes/RLS, validated idempotent against prod)
 
 **Nice-to-have / track**
-- [ ] `source:'pdf'` labelling; timing-safe compares; sync-sweep batching; JWT revocation
-- [ ] Harden `luna_travel.set_updated_at` search_path (§2)
+- [ ] `source:'pdf'` labelling; sync-sweep batching; JWT revocation — timing-safe compares **done** (`safeEqual` on `TG_INTERNAL_KEY` + `CRON_SECRET`)
+- [x] Harden `luna_travel.set_updated_at` search_path (§2) — **done** (`set search_path = ''`; clears the Supabase advisory)
 
 ---
 
@@ -289,3 +291,40 @@ Control's `update-branding` / `clients/get` persisting the five branding fields
 (confirmed present on the Control **Clients** Airtable table). The full
 admin→traveller flows for the new work need the deployed env (SSO + a redeemed
 session) to exercise end-to-end.
+
+### Session 2 (continued) — traveller honesty, hardening, reproducibility
+
+**No fake first-run trip (§4.1).** With no `lt_session` and no demo deep-link the
+home screen now shows a real onboarding view ("Your trip, in your pocket" +
+"Add your trip" / "Find my trip"), tab bar hidden. Demo paths (`/?demo=`, saved
+ref, long-press picker) still load the sample trip. Verified headless 5/5:
+default → onboarding + no tab bar + no Maldives; `/?demo=DEMO81297` → trip + tab
+bar.
+
+**Traveller-facing honesty (§4.2, §6).** `/welcome` lost the demo-mode hint and
+the fake `hello@travelaire.co.uk` mailto (honest placeholders + help copy); the
+Notifications page no longer claims "Push tokens are stored encrypted" — it says
+messaging is in-app for v1. (The live-Travelify `/welcome` lookup and the
+Luna-concierge v1 labelling remain the only open items in §4.2 / §6.)
+
+**Backend honesty + hardening (§2, §6).** `runSyncSweep` now reports "Booking
+verified" (it's a reachability check, not a refresh). Internal secrets are
+compared with `safeEqual` (SHA-256 + `timingSafeEqual`) in
+`flights/subscribe`, `flights/subscribe-booking` and `cron/sync`, so neither
+timing nor length leaks. `luna_travel.set_updated_at()` search_path pinned to
+`''` (clears the Supabase `function_search_path_mutable` advisory).
+
+**Reproducibility (§7).** `db/migrations/luna_travel_baseline.sql` now captures
+the eight base tables (`travellers`, `invites`, `documents`, `messages`,
+`message_recipients`, `trip_flights`, `app_opens`, `audit_events`) with their 11
+enums, indexes, FKs and RLS — reconstructed from the live schema and validated as
+an idempotent no-op re-run against prod. Together with the per-feature create
+files a fresh environment is now buildable from `db/migrations/` alone. README
+brought current to 0.15.0 + all go-live work (env vars, data model, structure,
+security notes).
+
+**Still open (owner decisions / owner actions, not code):** role enforcement
+(owner vs admin), real web-push, the live-Travelify `/welcome` lookup, real Luna
+concierge; production env-var confirmation (`TG_INTERNAL_KEY`, `CRON_SECRET`, AI
+backend); CSP validation on the preview deploy; a Control `clients/create`
+endpoint if Travelgenix clients are ever created from Luna.

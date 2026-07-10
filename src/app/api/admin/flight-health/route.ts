@@ -24,7 +24,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-session';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { adaConfigured, getBalance, hasLiveFeed } from '@/lib/aerodatabox';
+import { adaConfigured, probeAeroDataBox } from '@/lib/aerodatabox';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -32,8 +32,6 @@ export const runtime = 'nodejs';
 // Warn when the credit balance drops below this — enough runway to top up
 // before subscriptions start failing.
 const LOW_CREDIT_THRESHOLD = 100;
-// A busy hub used purely to confirm the live-feed service is up.
-const FEED_PROBE_ICAO = 'EGLL'; // London Heathrow
 
 export async function GET(req: Request) {
   const claims = await requireAdmin(req);
@@ -46,19 +44,15 @@ export async function GET(req: Request) {
     internalKey: !!process.env.TG_INTERNAL_KEY,
   };
 
-  // Live balance + feed probes (only if the key is even set).
-  let balance: { creditsRemaining: number } | null = null;
-  let apiReachable = false;
-  let feedUp = false;
-  if (config.apiKey) {
-    balance = await getBalance();
-    apiReachable = balance !== null;
-    try {
-      feedUp = await hasLiveFeed(FEED_PROBE_ICAO);
-    } catch {
-      feedUp = false;
-    }
-  }
+  // Robust live probe: reachable if ANY of balance / feed-health / a real flight
+  // lookup responds 2xx, so a single unavailable endpoint can't falsely read the
+  // whole pipeline as "down". Credits come from the balance endpoint when it
+  // works; null means "couldn't read the balance" (not the same as API down).
+  const probe = config.apiKey
+    ? await probeAeroDataBox()
+    : { reachable: false, status: null as number | null, credits: null as number | null };
+  const apiReachable = probe.reachable;
+  const credits = probe.credits;
 
   // DB state: active subscriptions + last webhook delivery.
   const supabase = getSupabaseAdmin();
@@ -80,23 +74,36 @@ export async function GET(req: Request) {
 
   // Overall verdict.
   const configComplete = config.apiKey && config.webhookToken && config.publicUrl && config.internalKey;
-  const lowCredits = balance !== null && balance.creditsRemaining < LOW_CREDIT_THRESHOLD;
+  const lowCredits = credits !== null && credits < LOW_CREDIT_THRESHOLD;
+  const creditsUnknown = apiReachable && credits === null;
 
   let status: 'operational' | 'degraded' | 'down';
   const reasons: string[] = [];
-  if (!config.apiKey || !apiReachable) {
+  if (!config.apiKey) {
     status = 'down';
-    if (!config.apiKey) reasons.push('AERODATABOX_API_KEY is not set — flight lookups and subscriptions cannot run.');
-    else reasons.push('AeroDataBox did not respond — the API key may be invalid or the service is unreachable.');
+    reasons.push('AERODATABOX_API_KEY is not set — flight lookups and subscriptions cannot run.');
+  } else if (!apiReachable) {
+    status = 'down';
+    reasons.push(
+      `AeroDataBox did not respond${probe.status ? ` (HTTP ${probe.status})` : ' (no response)'} — the API key ` +
+        'is likely invalid/expired, or your plan does not permit these calls. Flight lookups will also fail. ' +
+        'Check the AeroDataBox subscription on API.Market and renew/upgrade the key.',
+    );
   } else if (!config.webhookToken || !config.publicUrl || !config.internalKey) {
     status = 'down';
     if (!config.webhookToken) reasons.push('AERODATABOX_WEBHOOK_TOKEN is not set — inbound alerts are rejected, so travellers get no updates.');
     if (!config.publicUrl) reasons.push('LUNA_TRAVEL_PUBLIC_URL is not set — the webhook callback URL cannot be built.');
     if (!config.internalKey) reasons.push('TG_INTERNAL_KEY is not set — flights are never auto-subscribed on app open.');
-  } else if (lowCredits || !feedUp) {
+  } else if (lowCredits) {
     status = 'degraded';
-    if (lowCredits) reasons.push(`Only ${balance?.creditsRemaining} alert credits remaining — top up before they run out or new subscriptions will fail.`);
-    if (!feedUp) reasons.push('The live-flight-updates feed health probe did not report OK just now (may be transient).');
+    reasons.push(`Only ${credits} alert credits remaining — top up before they run out or new subscriptions will fail.`);
+  } else if (creditsUnknown) {
+    status = 'degraded';
+    reasons.push(
+      'The API is responding, but the credit-balance endpoint returned an error — proactive flight alerts ' +
+        '(gate changes, cancellations) are credit-based and need a PAID AeroDataBox plan with alert credits. ' +
+        'Confirm your plan + remaining credits on the API.Market / AeroDataBox dashboard.',
+    );
   } else {
     status = 'operational';
   }
@@ -108,8 +115,8 @@ export async function GET(req: Request) {
     config,
     configComplete,
     apiReachable,
-    feedUp,
-    creditsRemaining: balance?.creditsRemaining ?? null,
+    probeStatus: probe.status,
+    creditsRemaining: credits,
     lowCreditThreshold: LOW_CREDIT_THRESHOLD,
     subscriptions: subs,
     checkedAt: new Date().toISOString(),

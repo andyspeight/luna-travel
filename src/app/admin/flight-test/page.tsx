@@ -20,7 +20,7 @@ interface FlightHealth {
   reasons: string[];
   config: { apiKey: boolean; webhookToken: boolean; publicUrl: boolean; internalKey: boolean };
   apiReachable: boolean;
-  feedUp: boolean;
+  probeStatus: number | null;
   creditsRemaining: number | null;
   lowCreditThreshold: number;
   subscriptions: { active: number; total: number; withCoverage: number; lastUpdate: string | null };
@@ -93,7 +93,7 @@ function FlightHealthPanel() {
             <Stat
               icon={<CreditCard size={15} />}
               label="Alert credits"
-              value={health.creditsRemaining === null ? '—' : health.creditsRemaining.toLocaleString()}
+              value={health.creditsRemaining === null ? (health.apiReachable ? 'unknown' : '—') : health.creditsRemaining.toLocaleString()}
               warn={health.creditsRemaining !== null && health.creditsRemaining < health.lowCreditThreshold}
             />
             <Stat icon={<Radio size={15} />} label="Active subscriptions" value={String(health.subscriptions.active)} />

@@ -16,6 +16,11 @@ import {
 const SHOW_DEMO =
   process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_LUNA_DEMO === '1';
 
+// The Flight test / health rig is an internal diagnostic, not for agency-facing
+// admins — surfaced in the nav only for the owner. (The /admin/flight-test route
+// stays reachable by direct URL for anyone with admin access.)
+const OWNER_EMAIL = 'andy.speight@agendas.group';
+
 const NAV = [
   { id: 'demo', label: 'Demo', href: '/admin/demo', icon: QrCode },
   { id: 'dashboard', label: 'Overview', href: '/admin/dashboard', icon: LayoutDashboard },
@@ -24,6 +29,7 @@ const NAV = [
   { id: 'add-booking', label: 'Add booking', href: '/admin/bookings/new', icon: FilePlus },
   { id: 'heroes', label: 'Hero images', href: '/admin/heroes', icon: ImageIcon },
   { id: 'sync', label: 'Sync monitor', href: '/admin/sync', icon: RefreshCw },
+  { id: 'flight-test', label: 'Flight test', href: '/admin/flight-test', icon: Plane },
   { id: 'audit', label: 'Audit log', href: '/admin/audit', icon: Shield },
   { id: 'settings', label: 'Settings', href: '/admin/settings', icon: Settings },
 ];
@@ -285,7 +291,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           borderRight: `1px solid ${c.border}`,
         }}>
           <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {NAV.filter((item) => item.id !== 'demo' || SHOW_DEMO).map((item) => {
+            {NAV.filter((item) =>
+              (item.id !== 'demo' || SHOW_DEMO) &&
+              (item.id !== 'flight-test' || adminEmail === OWNER_EMAIL),
+            ).map((item) => {
               const active = pathname?.startsWith(item.href);
               const Icon = item.icon;
               return (

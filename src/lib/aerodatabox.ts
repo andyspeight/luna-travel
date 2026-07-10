@@ -112,6 +112,66 @@ export async function getBalance(): Promise<{ creditsRemaining: number } | null>
   }
 }
 
+async function probeStatus(path: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${ADA_BASE}${path}`, { headers: headers() });
+    return res.status;
+  } catch {
+    return null; // network error / DNS / timeout
+  }
+}
+
+/**
+ * Health probe for the flight-alert pipeline. Answers "is AeroDataBox reachable
+ * right now, and how many alert credits remain?" robustly — it does NOT hinge
+ * the whole verdict on one endpoint. Reachability is true if ANY of the credit
+ * balance, the airport-feed health endpoint, or a real flight lookup responds
+ * 2xx (so the key is valid and the API is up). Credits are read from the
+ * balance endpoint when available; `null` means "couldn't read the balance"
+ * (which is NOT the same as the API being down — lookups can still work).
+ *
+ * `status` is the HTTP status from the first call, for diagnostics (401/403 →
+ * key invalid/plan; 5xx/null → service/network).
+ */
+export async function probeAeroDataBox(): Promise<{
+  reachable: boolean;
+  status: number | null;
+  credits: number | null;
+}> {
+  if (!ADA_KEY) return { reachable: false, status: null, credits: null };
+
+  // 1) Balance — reachability + credits in one call.
+  let status: number | null = null;
+  try {
+    const res = await fetch(`${ADA_BASE}/subscriptions/balance`, { headers: headers() });
+    status = res.status;
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      const raw = data?.creditsRemaining ?? data?.subscriptionsBalance ?? data?.balance ?? data?.remaining;
+      const n = raw == null ? NaN : Number(raw);
+      return { reachable: true, status, credits: Number.isFinite(n) ? n : null };
+    }
+  } catch {
+    status = null;
+  }
+
+  // 2) Balance unavailable — confirm the API is up another way (credits unknown).
+  const health = await probeStatus('/health/services/airports/EGLL/feeds');
+  if (health && health >= 200 && health < 300) {
+    return { reachable: true, status: status ?? health, credits: null };
+  }
+
+  // 3) Last resort — a real flight lookup (the call the pipeline actually makes).
+  //    A valid key returns 2xx/204 even with no matching flight; an invalid key 4xx.
+  const today = new Date().toISOString().slice(0, 10);
+  const flight = await probeStatus(`/flights/number/BA100/${today}?dateLocalRole=Departure`);
+  if (flight && ((flight >= 200 && flight < 300) || flight === 204)) {
+    return { reachable: true, status: status ?? flight, credits: null };
+  }
+
+  return { reachable: false, status: status ?? health ?? flight, credits: null };
+}
+
 // --- helpers ----------------------------------------------------------------
 
 function airportField(mv: Record<string, unknown> | undefined, key: string): string | undefined {

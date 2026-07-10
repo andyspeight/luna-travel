@@ -50,7 +50,7 @@ export async function GET(req: Request) {
   // works; null means "couldn't read the balance" (not the same as API down).
   const probe = config.apiKey
     ? await probeAeroDataBox()
-    : { reachable: false, status: null as number | null, credits: null as number | null };
+    : { reachable: false, status: null as number | null, credits: null as number | null, balanceOk: false, rawBalance: null as unknown };
   const apiReachable = probe.reachable;
   const credits = probe.credits;
 
@@ -72,10 +72,12 @@ export async function GET(req: Request) {
     /* leave zeros */
   }
 
-  // Overall verdict.
+  // Overall verdict. A 2xx from the subscription-balance endpoint means the
+  // subscription system is accessible — so the pipeline is healthy even if we
+  // can't name the specific credit field. Remaining budget on an API.Market plan
+  // is metered as "API Units" (not this endpoint), so we don't alarm on the
+  // native credit number; we point the operator at the API.Market dashboard.
   const configComplete = config.apiKey && config.webhookToken && config.publicUrl && config.internalKey;
-  const lowCredits = credits !== null && credits < LOW_CREDIT_THRESHOLD;
-  const creditsUnknown = apiReachable && credits === null;
 
   let status: 'operational' | 'degraded' | 'down';
   const reasons: string[] = [];
@@ -94,15 +96,11 @@ export async function GET(req: Request) {
     if (!config.webhookToken) reasons.push('AERODATABOX_WEBHOOK_TOKEN is not set — inbound alerts are rejected, so travellers get no updates.');
     if (!config.publicUrl) reasons.push('LUNA_TRAVEL_PUBLIC_URL is not set — the webhook callback URL cannot be built.');
     if (!config.internalKey) reasons.push('TG_INTERNAL_KEY is not set — flights are never auto-subscribed on app open.');
-  } else if (lowCredits) {
-    status = 'degraded';
-    reasons.push(`Only ${credits} alert credits remaining — top up before they run out or new subscriptions will fail.`);
-  } else if (creditsUnknown) {
+  } else if (!probe.balanceOk) {
     status = 'degraded';
     reasons.push(
-      'The API is responding, but the credit-balance endpoint returned an error — proactive flight alerts ' +
-        '(gate changes, cancellations) are credit-based and need a PAID AeroDataBox plan with alert credits. ' +
-        'Confirm your plan + remaining credits on the API.Market / AeroDataBox dashboard.',
+      `Flight lookups work, but the subscription-balance endpoint returned ${probe.status ? `HTTP ${probe.status}` : 'an error'} — ` +
+        'subscriptions may still register fine; verify on the API.Market dashboard.',
     );
   } else {
     status = 'operational';
@@ -116,7 +114,9 @@ export async function GET(req: Request) {
     configComplete,
     apiReachable,
     probeStatus: probe.status,
+    balanceOk: probe.balanceOk,
     creditsRemaining: credits,
+    rawBalance: probe.rawBalance,
     lowCreditThreshold: LOW_CREDIT_THRESHOLD,
     subscriptions: subs,
     checkedAt: new Date().toISOString(),

@@ -15,11 +15,45 @@ import { requireAdmin } from '@/lib/admin-session';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
 import type { ControlAgency } from '@/lib/order-to-booking';
 import { recordImportCorrection, type ProfileDraft } from '@/lib/pdf-profile';
+import { isAgencyId, isControlAgency } from '@/lib/agency-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
+const CONTROL_HOST = 'https://id.travelify.io';
+
+/**
+ * Best-effort: read the agency's white-label branding from Control so an
+ * off-platform booking is branded the same way a live one is (the traveller
+ * PWA themes off booking.agency). Uses the admin's forwarded cookie. If Control
+ * is unreachable we just proceed with whatever the form supplied — branding is
+ * never allowed to block a booking save.
+ */
+async function loadAgencyBranding(agencyId: string, cookieHeader: string, base: ControlAgency): Promise<ControlAgency> {
+  try {
+    const res = await fetch(`${CONTROL_HOST}/api/admin/clients/get?id=${encodeURIComponent(agencyId)}`, {
+      headers: { Cookie: cookieHeader, Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return base;
+    const data = await res.json().catch(() => null);
+    const c = ((data?.client ?? {}) as Record<string, unknown>);
+    const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
+    return {
+      ...base,
+      name: base.name || s(c.tradingName) || s(c.clientName) || '',
+      email: base.email || s(c.primaryEmail) || '',
+      website: s(c.websiteUrl) || base.website,
+      appName: s(c.appName),
+      logoUrl: s(c.logoUrl),
+      brandPrimaryColour: s(c.brandPrimaryColour),
+      brandAccentColour: s(c.brandAccentColour),
+      welcomeMessage: s(c.welcomeMessage),
+    };
+  } catch {
+    return base;
+  }
+}
 
 function genRef(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
@@ -40,7 +74,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   const agencyId = (params?.id || '').trim();
-  if (!REC_ID_RE.test(agencyId)) {
+  if (!isAgencyId(agencyId)) {
     return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
   }
 
@@ -93,7 +127,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       : [],
   };
 
-  const agency: ControlAgency = { name: str(body.agencyName), email: str(body.agencyEmail) };
+  // Control agencies carry branding on their Control record; pull it so the
+  // stored booking is branded like a live one. Luna-native agencies have no
+  // Control record — their branding comes from the Luna override store and is
+  // applied to the booking at read time, so we just use the name/email here.
+  const agencyBase: ControlAgency = { name: str(body.agencyName), email: str(body.agencyEmail) };
+  const agency: ControlAgency = isControlAgency(agencyId)
+    ? await loadAgencyBranding(agencyId, req.headers.get('cookie') ?? '', agencyBase)
+    : agencyBase;
 
   // Reference: honour a supplied one, else generate.
   const supplied = str(body.reference).toUpperCase();
@@ -143,27 +184,33 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     );
   }
 
-  // Create a pending invite so the traveller can onboard via QR.
-  const { data: invite, error: inviteErr } = await supabase
-    .from('invites')
-    .insert({
-      agency_id: agencyId,
-      booking_ref: reference,
-      email: leadEmail,
-      departure_date: departureDate,
-      return_date: returnDate,
-      destination: destinationLabel,
-      lead_passenger_name: leadName,
-      status: 'pending',
-      created_by: 'manual-booking',
-      expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select('id')
-    .single();
-
-  if (inviteErr) {
-    // The booking is saved; surface a soft warning rather than failing the whole op.
-    console.error('[bookings.POST] invite insert failed:', inviteErr.message);
+  // Create a pending invite so the traveller can onboard via QR. The booking is
+  // already saved, so a transient invite failure must not be swallowed (that
+  // stranded the traveller with a success screen but no QR). Retry once, then —
+  // if it still fails — report it honestly via `inviteError` so the UI can show
+  // a warning and offer a retry instead of a misleading "scan and it appears".
+  const invitePayload = {
+    agency_id: agencyId,
+    booking_ref: reference,
+    email: leadEmail,
+    departure_date: departureDate,
+    return_date: returnDate,
+    destination: destinationLabel,
+    lead_passenger_name: leadName,
+    status: 'pending',
+    created_by: 'manual-booking',
+    expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+  let invite: { id: string } | null = null;
+  let inviteError: string | null = null;
+  for (let attempt = 0; attempt < 2 && !invite; attempt++) {
+    const { data, error } = await supabase.from('invites').insert(invitePayload).select('id').single();
+    if (!error && data) {
+      invite = data as { id: string };
+      break;
+    }
+    inviteError = error?.message ?? 'unknown';
+    console.error(`[bookings.POST] invite insert failed (attempt ${attempt + 1}/2):`, inviteError);
   }
 
   // If this booking came from a PDF import, fold the admin-reviewed result into
@@ -187,11 +234,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     ok: true,
     reference,
     inviteId: invite?.id ?? null,
+    inviteError: invite
+      ? null
+      : 'The booking was saved, but the onboarding invite could not be created. Retry it below.',
     booking: {
       destinationLabel: booking.destinationLabel,
       leadName,
       tripStart: booking.tripStart,
       tripEnd: booking.tripEnd,
+      departureDate,
       flights: booking.flights.length,
       hotels: booking.hotels.length,
     },

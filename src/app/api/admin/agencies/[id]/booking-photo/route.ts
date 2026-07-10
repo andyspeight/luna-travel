@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/admin-session';
+import { isAgencyId } from '@/lib/agency-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -19,7 +20,6 @@ const ALLOWED: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
   'image/heic': 'heic', 'image/heif': 'heif', 'image/avif': 'avif',
 };
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
   const agencyId = (params?.id || '').trim();
-  if (!REC_ID_RE.test(agencyId)) {
+  if (!isAgencyId(agencyId)) {
     return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
   }
 

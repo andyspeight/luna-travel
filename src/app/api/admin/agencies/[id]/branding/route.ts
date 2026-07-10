@@ -1,24 +1,63 @@
 /**
- * POST /api/admin/agencies/[id]/branding
+ * /api/admin/agencies/[id]/branding
  *
- * Saves white-label branding for an agency. An agency IS a Control client, so
- * branding lives in Control — this route forwards to Control's
- * /api/admin/clients/update-branding, the same server-to-server cookie-forward
- * pattern as the agencies read (Path B: no CORS, Control stays the gateway).
+ * POST   — save white-label branding for an agency.
+ *          Body: { appName?, brandPrimaryColour?, brandAccentColour?,
+ *                  welcomeMessage?, logoUrl? }
+ *          Writes to BOTH layers (they are kept in sync):
+ *            1. Luna's own override store (luna_travel.agency_branding) — this is
+ *               what the traveller app actually reads, and it wins on read.
+ *            2. Control's client record (/api/admin/clients/update-branding),
+ *               best-effort, so Control stays aligned.
+ *          The Luna write is authoritative; a Control sync failure is reported
+ *          but does not fail the save.
+ *
+ * DELETE — "Reset to Control": drop the Luna override so the agency reverts to
+ *          inheriting branding from its Control record.
  *
  * Gate: requireAdmin (caller must hold the luna_travel permission).
- * Body: { appName?, brandPrimaryColour?, brandAccentColour?, welcomeMessage? }
  * [id] is the Control client record id (recXXX).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, ADMIN_COOKIE_NAME } from '@/lib/admin-session';
+import {
+  setBrandingOverride,
+  clearBrandingOverride,
+  type BrandingFields,
+} from '@/lib/agency-branding';
+import { isAgencyId, isControlAgency } from '@/lib/agency-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const CONTROL_HOST = 'https://id.travelify.io';
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
+
+const str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() ? v.trim() : undefined;
+
+/** Best-effort forward of the branding to Control so the two stay in sync. */
+async function syncToControl(
+  id: string,
+  payload: Record<string, unknown>,
+  cookieHeader: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${CONTROL_HOST}/api/admin/clients/update-branding`, {
+      method: 'POST',
+      headers: {
+        Cookie: cookieHeader,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ id, ...payload }),
+      cache: 'no-store',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -33,7 +72,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   const id = (params?.id || '').trim();
-  if (!REC_ID_RE.test(id)) {
+  if (!isAgencyId(id)) {
     return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
   }
 
@@ -44,38 +83,54 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  // Only forward the branding fields we own. id comes from the path.
-  const payload: Record<string, unknown> = { id };
-  for (const key of ['appName', 'brandPrimaryColour', 'brandAccentColour', 'welcomeMessage', 'logoUrl']) {
-    if (body[key] !== undefined) payload[key] = body[key];
+  const fields: BrandingFields = {
+    appName: str(body.appName),
+    logoUrl: str(body.logoUrl),
+    brandPrimaryColour: str(body.brandPrimaryColour),
+    brandAccentColour: str(body.brandAccentColour),
+    welcomeMessage: str(body.welcomeMessage),
+  };
+
+  // 1. Luna override — authoritative for the traveller app. Must succeed.
+  try {
+    await setBrandingOverride(id, fields);
+  } catch (err) {
+    console.error('[agencies/[id]/branding] luna override save failed:', (err as Error).message);
+    return NextResponse.json({ error: 'save_failed' }, { status: 500 });
+  }
+
+  // 2. Sync to Control — only for Control agencies (Luna-native agencies have no
+  //    Control record, so there is nothing to sync; report success).
+  let controlSynced = true;
+  if (isControlAgency(id)) {
+    const controlPayload: Record<string, unknown> = {};
+    for (const key of ['appName', 'brandPrimaryColour', 'brandAccentColour', 'welcomeMessage', 'logoUrl']) {
+      if (body[key] !== undefined) controlPayload[key] = body[key];
+    }
+    controlSynced = await syncToControl(id, controlPayload, cookieHeader);
+  }
+
+  return NextResponse.json({ ok: true, controlSynced }, { status: 200 });
+}
+
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
+  const id = (params?.id || '').trim();
+  if (!isAgencyId(id)) {
+    return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
   }
 
   try {
-    const res = await fetch(`${CONTROL_HOST}/api/admin/clients/update-branding`, {
-      method: 'POST',
-      headers: {
-        Cookie: cookieHeader,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      // Surface Control's validation message if present.
-      return NextResponse.json(
-        { error: data?.error || 'control_error', detail: data?.message || data?.detail || '' },
-        { status: res.status },
-      );
-    }
-    return NextResponse.json({ ok: true, branding: data.branding ?? null }, { status: 200 });
+    await clearBrandingOverride(id);
   } catch (err) {
-    console.error('[agencies/[id]/branding] forward failed:', (err as Error).message);
-    return NextResponse.json(
-      { error: 'control_unavailable', detail: 'Could not save branding to Control' },
-      { status: 502 },
-    );
+    console.error('[agencies/[id]/branding] reset failed:', (err as Error).message);
+    return NextResponse.json({ error: 'clear_failed' }, { status: 500 });
   }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
 }

@@ -33,11 +33,20 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin();
 
-  // Fetch the documents for this traveller
+  // Match documents for this traveller by traveller_id OR by the booking ref of
+  // their session — so documents an agency attached to the booking BEFORE the
+  // traveller redeemed (traveller_id still null) are delivered too. Scoped to
+  // the traveller's own agency so nothing leaks across agencies.
+  const orParts = [`traveller_id.eq.${claims.travellerId}`];
+  if (claims.bookingRef && /^[A-Za-z0-9._-]+$/.test(claims.bookingRef)) {
+    orParts.push(`booking_ref.eq.${claims.bookingRef}`);
+  }
+
   const { data, error } = await supabase
     .from('documents')
     .select('id, storage_path, filename, mime_type, size_bytes, category, uploaded_at')
-    .eq('traveller_id', claims.travellerId)
+    .eq('agency_id', claims.agencyId)
+    .or(orParts.join(','))
     .is('deleted_at', null)
     .order('uploaded_at', { ascending: false });
 

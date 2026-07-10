@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCover } from '@/lib/cover-context';
+import { useBooking } from '@/lib/booking-context';
 import { useI18n } from '@/lib/locale-context';
 import { useAgentMessages } from '@/lib/use-agent-messages';
 import { IconHome, IconCalendar, IconDoc, IconChat, IconUser } from './icons';
@@ -18,6 +19,7 @@ const TABS = [
 export function TabBar() {
   const pathname = usePathname();
   const { coverEnabled, coverDismissed } = useCover();
+  const { onboarding } = useBooking();
   const { t } = useI18n();
   const { unreadCount } = useAgentMessages();
 
@@ -25,9 +27,14 @@ export function TabBar() {
   const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
   if (splashShowing) return null;
 
-  // Booth-display and onboarding screens are standalone (no trip context yet)
-  // — hide the tab bar so they read as self-contained surfaces.
-  if (pathname === '/install' || pathname === '/welcome') return null;
+  // Booth-display, onboarding and the agency portal are standalone surfaces
+  // (no trip context) — hide the tab bar so they read as self-contained.
+  if (pathname === '/install' || pathname === '/welcome' || pathname.startsWith('/agency')) {
+    return null;
+  }
+
+  // First-run / un-onboarded visitor: no trip yet, so no trip navigation.
+  if (onboarding) return null;
 
   return (
     <nav

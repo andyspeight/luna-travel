@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { useCover } from '@/lib/cover-context';
 import { BookingPicker } from '@/components/booking-picker';
+import { AgencyLogo } from '@/components/agency-logo';
 import {
   IconCalendar,
   IconDoc,
@@ -90,7 +91,10 @@ export function CoverSplash() {
         </Link>
 
         <BookingPicker>
-          <div className="px-3 py-2 rounded-xl bg-white/15 backdrop-blur border border-white/15">
+          <div className="px-3 py-2 rounded-xl bg-white/15 backdrop-blur border border-white/15 flex flex-col items-center gap-1.5">
+            {booking.agency.logoUrl && (
+              <AgencyLogo agency={booking.agency} size={26} />
+            )}
             <div className="text-[10px] uppercase tracking-[0.18em] text-white/80 text-center">
               {booking.agency.name}
             </div>

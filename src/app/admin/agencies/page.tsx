@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Sparkles, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight, Plus } from 'lucide-react';
 
 const C = {
   bg: '#F8FAFC',
@@ -115,6 +115,7 @@ export default function AgenciesListPage() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [controlError, setControlError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +132,12 @@ export default function AgenciesListPage() {
           return;
         }
         const data = await res.json();
-        if (!cancelled) setAgencies(Array.isArray(data.agencies) ? data.agencies : []);
+        if (!cancelled) {
+          setAgencies(Array.isArray(data.agencies) ? data.agencies : []);
+          // Control unreachable: the list still shows Luna-native agencies, but
+          // Travelgenix clients are missing — surface that rather than hide it.
+          setControlError(!!data.controlError);
+        }
       } catch {
         if (!cancelled) setError('Could not reach the server. Please try again.');
       } finally {
@@ -166,6 +172,8 @@ export default function AgenciesListPage() {
               Agencies
             </h1>
           </div>
+          {/* Travelgenix clients appear automatically once entitled in Control;
+              this creates a Luna-native agency for a non-Travelgenix client. */}
           <Link
             href="/admin/agencies/new"
             style={{
@@ -173,16 +181,26 @@ export default function AgenciesListPage() {
               padding: '0 16px', height: 40, borderRadius: 8,
               backgroundColor: C.primary, color: '#fff', border: 'none',
               fontSize: 14, fontWeight: 500, cursor: 'pointer',
-              textDecoration: 'none',
-              transition: 'background-color 150ms',
+              textDecoration: 'none', transition: 'background-color 150ms',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = C.primaryLight}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = C.primary}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = C.primaryLight)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = C.primary)}
           >
-            <Sparkles style={{ height: 16, width: 16 }} strokeWidth={1.75} />
+            <Plus style={{ height: 16, width: 16 }} strokeWidth={2} />
             New agency
           </Link>
         </div>
+
+        {controlError && (
+          <div style={{
+            marginBottom: 20, padding: '12px 16px', borderRadius: 10,
+            backgroundColor: '#FFF7ED', border: '1px solid #F59E0B',
+            fontSize: 13, color: C.text, lineHeight: 1.5,
+          }}>
+            <strong>Couldn&rsquo;t reach Control.</strong> Only Luna-native agencies are shown below —
+            your Travelgenix clients will reappear once Control is back.
+          </div>
+        )}
 
         {/* Filters bar */}
         <div style={{

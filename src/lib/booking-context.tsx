@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Booking } from '@/types/booking';
 import { BOOKINGS, getDefaultBooking } from '@/data/mock-bookings';
+import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
 
 const STORAGE_KEY = 'luna-travel.activeBookingRef';
 
@@ -24,6 +25,16 @@ interface BookingContextValue {
   allBookings: Booking[];
   source: BookingSource;
   liveLoading: boolean;
+  /**
+   * True when there is no real (lt_session) booking AND no demo trip has been
+   * explicitly chosen (via /?demo=, a saved picker selection, or the picker).
+   * i.e. a genuine first-time / un-onboarded visitor — the app shows an
+   * onboarding prompt instead of the (fallback) demo trip. `booking` still
+   * holds the demo default so nothing crashes, but the UI must not present it.
+   */
+  onboarding: boolean;
+  /** A demo trip was explicitly chosen (deep-link / saved selection / picker). */
+  demoSelected: boolean;
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null);
@@ -33,6 +44,9 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [source, setSource] = useState<BookingSource>('mock');
   const [liveLoading, setLiveLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
+  // A demo trip was explicitly chosen (deep-link, saved selection, or picker).
+  // Distinguishes "show the demo trip" from "first-run onboarding".
+  const [demoSelected, setDemoSelected] = useState(false);
 
   // 1. Restore mock selection on mount. A /?demo=<ref> deep-link (used by the
   //    admin Demo launchpad QRs) selects a sample trip directly and takes
@@ -45,6 +59,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
         const dm = BOOKINGS.find((b) => b.reference.toUpperCase() === demoRef.toUpperCase());
         if (dm) {
           setBooking(dm);
+          setDemoSelected(true);
           try { window.localStorage.setItem(STORAGE_KEY, dm.reference); } catch { /* ignore */ }
           setHydrated(true);
           return;
@@ -53,7 +68,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const found = BOOKINGS.find((b) => b.reference === saved);
-        if (found) setBooking(found);
+        if (found) { setBooking(found); setDemoSelected(true); }
       }
     } catch {
       /* ignore */
@@ -120,6 +135,22 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+  // Apply the active agency's white-label brand colours to the document as CSS
+  // variables (the `teal`/`navy` Tailwind tokens read these). When the agency
+  // has no colours, we clear the overrides so the Luna Travel defaults in
+  // globals.css apply — this also handles switching from a branded booking back
+  // to an unbranded one.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const vars = brandVars(booking.agency.brandPrimaryColour, booking.agency.brandAccentColour);
+    for (const key of BRAND_VAR_KEYS) {
+      const v = vars[key];
+      if (v) root.style.setProperty(key, v);
+      else root.style.removeProperty(key);
+    }
+  }, [booking.agency.brandPrimaryColour, booking.agency.brandAccentColour]);
+
   // Picker - drives MOCK data only, exactly as before. When the user picks a
   // mock booking we also drop back to the mock source.
   const setBookingByRef = (ref: string) => {
@@ -127,6 +158,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     if (!found) return;
     setBooking(found);
     setSource('mock');
+    setDemoSelected(true);
     try {
       window.localStorage.setItem(STORAGE_KEY, found.reference);
     } catch {
@@ -134,12 +166,19 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Genuine first-run: no live booking and no demo explicitly chosen. While the
+  // live fetch is still in flight we are NOT onboarding yet (avoids flashing the
+  // onboarding screen before a real booking resolves).
+  const onboarding = !liveLoading && source === 'mock' && !demoSelected;
+
   const value: BookingContextValue = {
     booking,
     setBookingByRef,
     allBookings: BOOKINGS,
     source,
     liveLoading,
+    onboarding,
+    demoSelected,
   };
 
   // hydrated retained for parity with the original gating pattern.

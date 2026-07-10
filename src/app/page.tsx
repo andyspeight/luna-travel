@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { BookingPicker } from '@/components/booking-picker';
+import { AgencyLogo } from '@/components/agency-logo';
+import { OnboardingHome } from '@/components/onboarding-home';
 import { SectionHeading } from '@/components/section-heading';
 import {
   IconPlane,
@@ -37,7 +39,7 @@ import { useCover } from '@/lib/cover-context';
 import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
 
 export default function HomePage() {
-  const { booking } = useBooking();
+  const { booking, onboarding, liveLoading, demoSelected, source } = useBooking();
   const { coverEnabled, coverDismissed } = useCover();
   const { t } = useI18n();
   const { latest } = useAgentMessages();
@@ -77,6 +79,22 @@ export default function HomePage() {
   const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
   const inspirations = getInspirations(booking.primaryCountryCode);
 
+  // First-run / un-onboarded visitor (no session, no demo trip chosen): show
+  // the onboarding prompt instead of the fallback demo booking.
+  if (onboarding) {
+    return <OnboardingHome />;
+  }
+
+  // Still checking for a real booking (and no demo chosen) — show a light
+  // loading state rather than briefly flashing the fallback demo trip.
+  if (liveLoading && !demoSelected && source !== 'live') {
+    return (
+      <main className="min-h-[100dvh] flex items-center justify-center" aria-busy="true">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-navy to-teal animate-pulse" />
+      </main>
+    );
+  }
+
   // Cover mode: full-bleed splash takes over the home route until the user
   // taps a dock action (which calls dismiss()). The dashboard then becomes
   // accessible via the tab bar for the rest of the session.
@@ -91,11 +109,11 @@ export default function HomePage() {
       <header className="flex items-center justify-between py-3">
         <BookingPicker>
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center shadow-sm">
-              L
-            </div>
+            <AgencyLogo agency={booking.agency} size={36} />
             <div className="text-left">
-              <div className="text-sm font-semibold text-ink leading-none">Luna Travel</div>
+              <div className="text-sm font-semibold text-ink leading-none">
+                {booking.agency.appName || 'Luna Travel'}
+              </div>
               <div className="text-[11px] text-ink-3 leading-none mt-1">
                 {booking.agency.name}
               </div>
@@ -116,6 +134,11 @@ export default function HomePage() {
           </em>
           .
         </h1>
+        {booking.agency.welcomeMessage && (
+          <p className="text-sm text-ink-2 mt-2 leading-relaxed max-w-[340px]">
+            {booking.agency.welcomeMessage}
+          </p>
+        )}
       </div>
 
       {/* Urgent / unread agent message, surfaced at the top so it can't be missed */}
@@ -166,7 +189,7 @@ export default function HomePage() {
       <Link href="/itinerary" className="block">
         <article className="rounded-3xl overflow-hidden bg-surface shadow-md hover:shadow-lg transition-shadow">
           <div
-            className="relative h-48 p-4 text-white"
+            className="relative h-56 p-4 text-white"
             style={{ background: hero.gradient }}
           >
             {hero.image && (
@@ -181,6 +204,13 @@ export default function HomePage() {
               className="absolute inset-0"
               style={{ background: hero.glow }}
             />
+            {/* Scrim — lifts the destination + countdown off the image for a
+                cinematic, always-legible cover. */}
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(to top, rgba(2,6,23,0.62) 0%, rgba(2,6,23,0.12) 42%, transparent 68%)' }}
+            />
             <div className="relative flex justify-between items-start">
               <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-light shadow-[0_0_0_3px_rgba(72,202,228,0.3)]" />
@@ -191,10 +221,16 @@ export default function HomePage() {
               </span>
             </div>
             <div className="absolute bottom-5 left-5 right-5">
-              <h2 className="font-serif text-3xl leading-none mb-1">
+              {!tripOver && (
+                <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-3 py-1 rounded-full text-[12px] font-semibold mb-2.5 shadow-sm">
+                  <IconPlane size={13} />
+                  {countdownPill(parts, t, countdownKey(booking.tripStartEvent))}
+                </span>
+              )}
+              <h2 className="font-serif text-[32px] leading-none mb-1.5 drop-shadow-sm">
                 <em>{booking.destinationLabel}</em>
               </h2>
-              <p className="text-sm opacity-90 truncate">
+              <p className="text-sm opacity-95 truncate">
                 {booking.hotels[0]?.name ?? 'Custom itinerary'} · {booking.durationLabel} ·{' '}
                 {booking.travellers.length} traveller{booking.travellers.length === 1 ? '' : 's'}
               </p>
@@ -219,9 +255,7 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <div className="text-center text-[11px] text-ink-2 pb-4">
-            {t(countdownKey(booking.tripStartEvent))}
-          </div>
+          <div className="pb-4" />
         </article>
       </Link>
 
@@ -389,6 +423,14 @@ function countdownKey(event: string): string {
   return 'cd.travel';
 }
 
+/** One elegant line for the hero cover, e.g. "12 days until you fly". */
+function countdownPill(parts: CountdownParts, t: (k: string) => string, key: string): string {
+  const until = t(key);
+  if (parts.days >= 1) return `${parts.days} ${t('cd.days')} ${until}`;
+  if (parts.hours >= 1) return `${parts.hours} ${t('cd.hours')} ${until}`;
+  return `${parts.minutes} ${t('cd.mins')} ${until}`;
+}
+
 function QuickTile({
   href,
   icon,
@@ -418,6 +460,48 @@ function QuickTile({
 }
 
 function UpNextCard({ event }: { event: TimelineEvent }) {
+  // Flights get a boarding-pass-style layout: the route reads at a glance.
+  const route = event.kind === 'flight' ? (event.meta || '').split('→').map((s) => s.trim()) : null;
+  if (route && route.length === 2 && route[0] && route[1]) {
+    const [from, to] = route;
+    return (
+      <Link
+        href={event.href}
+        className="block bg-surface border border-line-light rounded-2xl p-4 hover:shadow-sm transition-shadow tap"
+      >
+        <div className="flex items-center gap-2 mb-3.5">
+          <span
+            aria-hidden
+            className="w-8 h-8 rounded-lg text-white flex items-center justify-center flex-shrink-0"
+            style={{ background: eventGradient('flight') }}
+          >
+            <IconPlane size={15} />
+          </span>
+          <span className="text-[13px] font-semibold text-ink truncate">{event.subtitle}</span>
+          <span className="ml-auto text-[11px] text-ink-3 inline-flex items-center gap-1 flex-shrink-0">
+            <IconClock size={11} />
+            {formatDayMonth(event.date)}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-left">
+            <div className="text-xl font-extrabold text-ink leading-none tracking-tight">{from}</div>
+            <div className="text-[11px] text-ink-3 mt-1">{formatTime(event.date)}</div>
+          </div>
+          <div className="flex-1 relative h-px bg-line mx-1">
+            <span className="absolute left-1/2 -top-[9px] -translate-x-1/2 bg-surface px-1 text-navy dark:text-teal-light">
+              <IconPlane size={14} />
+            </span>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-extrabold text-ink leading-none tracking-tight">{to}</div>
+            <div className="text-[11px] text-ink-3 mt-1">&nbsp;</div>
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={event.href}

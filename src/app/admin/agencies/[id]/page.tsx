@@ -49,6 +49,10 @@ interface Agency {
   primary: string;
   accent: string;
   appName: string;
+  logoUrl?: string;
+  welcomeMessage?: string;
+  brandingOverridden?: boolean;
+  source?: string;
   contact: string;
   city: string;
   joined: string;
@@ -201,6 +205,106 @@ function FormField({ label, helper, children }: { label: string; helper?: string
 
 // ============ TAB CONTENT ============
 
+function PortalAccessCard({ agency }: { agency: Agency }) {
+  const [loading, setLoading] = useState(false);
+  const [url, setUrl] = useState('');
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const generate = async () => {
+    setLoading(true);
+    setErr('');
+    setCopied(false);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/access-link`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(
+          data.error === 'no_contact_email'
+            ? 'Add a contact email for this agency first.'
+            : 'Could not generate a link. Please try again.',
+        );
+        return;
+      }
+      setUrl(data.url);
+    } catch {
+      setErr('Could not generate a link. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const mailto =
+    agency.contact && url
+      ? `mailto:${agency.contact}?subject=${encodeURIComponent('Your Luna Travel agency sign-in link')}&body=${encodeURIComponent(
+          `Hello,\n\nUse this one-time link to sign in to your Luna Travel agency portal, where you can set up your app branding and send travellers access:\n\n${url}\n\nThe link expires in 14 days.`,
+        )}`
+      : '';
+
+  return (
+    <Card>
+      <CardHeader
+        title="Agency portal access"
+        subtitle="This agency has no Travelgenix login — generate a one-time sign-in link to send them"
+      />
+      <div style={{ padding: '16px 24px' }}>
+        {!url ? (
+          <>
+            <button
+              type="button"
+              onClick={generate}
+              disabled={loading}
+              style={{
+                background: C.primary, color: '#fff', border: 'none', borderRadius: 8,
+                padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {loading ? 'Generating…' : 'Generate access link'}
+            </button>
+            {err && <div style={{ color: C.error, fontSize: 13, marginTop: 10 }}>{err}</div>}
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                readOnly
+                value={url}
+                style={{
+                  flex: 1, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px',
+                  fontSize: 12, color: C.textSecondary, fontFamily: 'ui-monospace, monospace',
+                }}
+              />
+              <button type="button" onClick={copy} style={{ border: `1px solid ${C.border}`, background: '#fff', color: C.textSecondary, fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 8, cursor: 'pointer' }}>
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: C.textTertiary, marginTop: 10 }}>
+              Single-use, expires in 14 days.{' '}
+              {mailto && (
+                <a href={mailto} style={{ color: C.textAccent, fontWeight: 600 }}>
+                  Email it to {agency.contact}
+                </a>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function OverviewTab({ agency }: { agency: Agency }) {
   const [events, setEvents] = useState<{ ref: string; status: string; detail: string; time: string }[]>([]);
   useEffect(() => {
@@ -225,6 +329,9 @@ function OverviewTab({ agency }: { agency: Agency }) {
   }, [agency.id]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Luna-native agencies sign in via a one-time link, not Travelgenix SSO. */}
+      {agency.source === 'luna' && <PortalAccessCard agency={agency} />}
+
       {/* KPIs */}
       <Card>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
@@ -286,6 +393,8 @@ function BrandingTab({ agency }: { agency: Agency }) {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [overridden, setOverridden] = useState(!!agency.brandingOverridden);
+  const [resetting, setResetting] = useState(false);
 
   const ALLOWED_LOGO = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
@@ -338,7 +447,13 @@ function BrandingTab({ agency }: { agency: Agency }) {
       if (!res.ok) {
         setSaveMsg({ kind: 'err', text: data?.detail || data?.error || 'Could not save — check the values and try again.' });
       } else {
-        setSaveMsg({ kind: 'ok', text: 'Branding saved.' });
+        setOverridden(true);
+        setSaveMsg({
+          kind: 'ok',
+          text: data?.controlSynced === false
+            ? 'Saved in Luna Travel. Couldn’t sync to Control just now — save again to retry.'
+            : 'Branding saved (and synced to Control).',
+        });
       }
     } catch {
       setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
@@ -347,11 +462,35 @@ function BrandingTab({ agency }: { agency: Agency }) {
     }
   }
 
+  // "Reset to Control": drop the Luna override so this agency goes back to
+  // inheriting its Control branding.
+  async function handleReset() {
+    setResetting(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/branding`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveMsg({ kind: 'err', text: data?.error || 'Could not reset — try again.' });
+      } else {
+        setOverridden(false);
+        setSaveMsg({ kind: 'ok', text: 'Reverted — now inheriting branding from Control.' });
+      }
+    } catch {
+      setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 24 }}>
       {/* Form */}
       <Card>
-        <CardHeader title="White-label settings" subtitle="Changes apply to all installed devices within a minute." />
+        <CardHeader title="White-label settings" subtitle="Managed here and synced to Control; Luna Travel's values win. Applies to installed devices within a minute." />
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <FormField label="App display name" helper="Shown on the install screen and at the top of every traveller's app.">
             <Input value={appName} onChange={setAppName} />
@@ -459,11 +598,16 @@ function BrandingTab({ agency }: { agency: Agency }) {
                 {saveMsg.text}
               </span>
             )}
+            {overridden && agency.source !== 'luna' && (
+              <Button variant="secondary" onClick={handleReset}>
+                {resetting ? 'Resetting…' : 'Reset to Control'}
+              </Button>
+            )}
             <Button variant="secondary" onClick={() => {
               setPrimary(agency.primary); setAccent(agency.accent);
               setAppName(agency.appName);
-              setWelcome((agency as { welcomeMessage?: string }).welcomeMessage || '');
-              setLogoUrl((agency as { logoUrl?: string }).logoUrl || '');
+              setWelcome(agency.welcomeMessage || '');
+              setLogoUrl(agency.logoUrl || '');
               setSaveMsg(null);
             }}>Discard</Button>
             <Button onClick={handleSave}>{saving ? 'Saving…' : 'Save changes'}</Button>
@@ -1330,6 +1474,8 @@ export default function AgencyDetailPage() {
           appName: a.appName || a.name || 'Luna Travel',
           welcomeMessage: a.welcomeMessage || '',
           logoUrl: a.logoUrl || '',
+          brandingOverridden: !!a.brandingOverridden,
+          source: a.source || 'control',
           contact: a.contact || '',
           city: a.website || '',
           joined: a.goLive ? new Date(a.goLive).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—',
@@ -1396,10 +1542,12 @@ export default function AgencyDetailPage() {
     );
   }
 
+  // Luna-native agencies are off-platform only — no Travelify integration tab.
+  const isNativeAgency = agency.source === 'luna';
   const TABS = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'branding' as const, label: 'White-label' },
-    { id: 'credentials' as const, label: 'Travelify' },
+    ...(isNativeAgency ? [] : [{ id: 'credentials' as const, label: 'Travelify' }]),
     { id: 'travellers' as const, label: 'Travellers' },
     { id: 'invite' as const, label: 'Invite' },
     { id: 'documents' as const, label: 'Documents' },
@@ -1439,6 +1587,12 @@ export default function AgencyDetailPage() {
                   status={agency.status}
                   label={agency.status === 'live' ? 'Live' : agency.status === 'paused' ? 'Paused' : agency.status === 'setup' ? 'Setup' : 'Maintenance'}
                 />
+                {agency.source === 'luna' && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 999,
+                    backgroundColor: '#EEF2FF', color: '#4338CA', border: '1px solid #C7D2FE',
+                  }}>Luna-native</span>
+                )}
               </div>
               <div style={{ fontSize: 13, color: C.textTertiary, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: 'ui-monospace, monospace' }}>{agency.id}</span>

@@ -33,6 +33,8 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
 import { getStoredBooking } from '@/lib/stored-booking';
+import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-branding';
+import { isAgencyId, isLunaAgency } from '@/lib/agency-id';
 import type { Booking } from '@/types/booking';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +42,6 @@ export const runtime = 'nodejs';
 
 const SESSION_COOKIE = 'lt_session';
 const CONTROL_HOST = 'https://id.travelify.io'; // same host the agencies route uses
-const RECORD_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
 /**
  * Fire-and-forget: trigger auto-subscribe for this booking's flights. We do NOT
@@ -109,9 +110,9 @@ export async function GET(req: NextRequest) {
   const email = String(traveller.email || '');
   const departDate = String(traveller.departure_date || '').slice(0, 10);
 
-  if (!RECORD_ID_RE.test(recordId) || !orderRef || !email || !departDate) {
+  if (!isAgencyId(recordId) || !orderRef || !email || !departDate) {
     console.warn('[traveller.booking] incomplete traveller row', {
-      recordIdOk: RECORD_ID_RE.test(recordId),
+      recordIdOk: isAgencyId(recordId),
       hasRef: !!orderRef,
       hasEmail: !!email,
       hasDate: !!departDate,
@@ -119,13 +120,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
+  // Luna's white-label override for this agency (recordId == agency_id). Applied
+  // on top of whatever branding the booking already carries (from Control or the
+  // stored payload), so the traveller always sees the effective brand:
+  // Luna override ?? Control ?? defaults.
+  const brandingOverride = await getBrandingOverride(recordId);
+
   // 1b. Off-platform booking? Return the stored payload directly — there is no
   //     Travelify order to fetch. Still kicks off flight auto-subscribe so live
   //     flight tracking works for manually-added bookings too.
   const stored = await getStoredBooking(recordId, orderRef);
   if (stored?.payload) {
+    applyBrandingOverride(stored.payload.agency, brandingOverride);
     triggerAutoSubscribe(stored.payload, recordId, orderRef);
     return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
+  }
+
+  // Luna-native agencies are off-platform only — there is no Travelify order to
+  // fetch, so a missing stored booking is simply not found (never call Control).
+  if (isLunaAgency(recordId)) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
   // On-platform: the live Travelify lookup needs the internal key.
@@ -172,6 +186,7 @@ export async function GET(req: NextRequest) {
   if (!booking) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
+  applyBrandingOverride(booking.agency, brandingOverride);
 
   // 4. Fire-and-forget Flight Hub auto-subscribe (deduped server-side).
   triggerAutoSubscribe(booking, recordId, orderRef);

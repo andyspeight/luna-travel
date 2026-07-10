@@ -460,6 +460,48 @@ function QuickTile({
 }
 
 function UpNextCard({ event }: { event: TimelineEvent }) {
+  // Flights get a boarding-pass-style layout: the route reads at a glance.
+  const route = event.kind === 'flight' ? (event.meta || '').split('→').map((s) => s.trim()) : null;
+  if (route && route.length === 2 && route[0] && route[1]) {
+    const [from, to] = route;
+    return (
+      <Link
+        href={event.href}
+        className="block bg-surface border border-line-light rounded-2xl p-4 hover:shadow-sm transition-shadow tap"
+      >
+        <div className="flex items-center gap-2 mb-3.5">
+          <span
+            aria-hidden
+            className="w-8 h-8 rounded-lg text-white flex items-center justify-center flex-shrink-0"
+            style={{ background: eventGradient('flight') }}
+          >
+            <IconPlane size={15} />
+          </span>
+          <span className="text-[13px] font-semibold text-ink truncate">{event.subtitle}</span>
+          <span className="ml-auto text-[11px] text-ink-3 inline-flex items-center gap-1 flex-shrink-0">
+            <IconClock size={11} />
+            {formatDayMonth(event.date)}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-left">
+            <div className="text-xl font-extrabold text-ink leading-none tracking-tight">{from}</div>
+            <div className="text-[11px] text-ink-3 mt-1">{formatTime(event.date)}</div>
+          </div>
+          <div className="flex-1 relative h-px bg-line mx-1">
+            <span className="absolute left-1/2 -top-[9px] -translate-x-1/2 bg-surface px-1 text-navy dark:text-teal-light">
+              <IconPlane size={14} />
+            </span>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-extrabold text-ink leading-none tracking-tight">{to}</div>
+            <div className="text-[11px] text-ink-3 mt-1">&nbsp;</div>
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={event.href}

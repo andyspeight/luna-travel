@@ -78,7 +78,7 @@ export async function syncBooking(input: SyncBookingInput, source: SyncSource): 
       });
       if (r.ok) {
         status = 'success';
-        detail = 'Booking refreshed (agency credentials)';
+        detail = 'Booking verified (agency credentials)';
       } else if (r.status === 404) {
         detail = 'Booking not found in Travelify';
         errorCode = '404';
@@ -100,7 +100,7 @@ export async function syncBooking(input: SyncBookingInput, source: SyncSource): 
         const b = res.booking;
         const thin = !b.destination && !b.departureDate;
         status = thin ? 'partial' : 'success';
-        detail = thin ? 'Booking refreshed — limited data (demo)' : 'Booking refreshed (demo integration)';
+        detail = thin ? 'Booking verified — limited data (demo)' : 'Booking verified (demo integration)';
       } else {
         const c = classifyFailure(res.reason);
         detail = c.detail;

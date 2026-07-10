@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { safeEqual } from '@/lib/constant-time';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -33,7 +34,7 @@ interface IncomingLeg {
 }
 
 export async function POST(req: NextRequest) {
-  if (!INTERNAL_KEY || req.headers.get('x-tg-internal-key') !== INTERNAL_KEY) {
+  if (!INTERNAL_KEY || !safeEqual(req.headers.get('x-tg-internal-key') || '', INTERNAL_KEY)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
   }
 

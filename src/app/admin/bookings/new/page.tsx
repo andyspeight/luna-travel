@@ -51,7 +51,7 @@ const emptyExp = (): ExpRow => ({ kind: 'excursion', title: '', supplier: '', lo
 
 const toIso = (local: string): string => (local ? `${local}:00.000Z` : '');
 
-interface Result { reference: string; inviteId: string | null; destinationLabel: string; leadName: string }
+interface Result { reference: string; inviteId: string | null; inviteError?: string | null; departureDate?: string | null; destinationLabel: string; leadName: string }
 
 export default function NewBookingPage() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
@@ -76,6 +76,7 @@ export default function NewBookingPage() {
   const [result, setResult] = useState<Result | null>(null);
   const [qr, setQr] = useState('');
   const [copied, setCopied] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/agencies', { credentials: 'include' })
@@ -153,11 +154,29 @@ export default function NewBookingPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data?.message || data?.error || 'Could not save booking.'); return; }
-      setResult({ reference: data.reference, inviteId: data.inviteId, destinationLabel: data.booking?.destinationLabel || destinationLabel, leadName: data.booking?.leadName || '' });
+      setResult({ reference: data.reference, inviteId: data.inviteId, inviteError: data.inviteError ?? null, departureDate: data.booking?.departureDate ?? null, destinationLabel: data.booking?.destinationLabel || destinationLabel, leadName: data.booking?.leadName || '' });
       if (data.inviteId) {
         try { setQr(await QRCode.toDataURL(`${window.location.origin}/install?invite=${data.inviteId}`, { errorCorrectionLevel: 'M', margin: 1, width: 512, color: { dark: '#0F172A', light: '#FFFFFF' } })); } catch { /* QR optional */ }
       }
     } catch { setError('Network error — please try again.'); } finally { setSubmitting(false); }
+  };
+
+  // Retry just the onboarding invite when it failed during save (the booking is
+  // already stored). Uses the shared invite endpoint; on success the QR appears.
+  const retryInvite = async () => {
+    if (!result || retrying) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/invites', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agencyId, bookingRef: result.reference, email: leadEmail, departureDate: result.departureDate || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.inviteId) { setError(data?.detail || data?.error || 'Could not create the invite — please try again.'); return; }
+      setResult({ ...result, inviteId: data.inviteId, inviteError: null });
+      try { setQr(await QRCode.toDataURL(`${window.location.origin}/install?invite=${data.inviteId}`, { errorCorrectionLevel: 'M', margin: 1, width: 512, color: { dark: '#0F172A', light: '#FFFFFF' } })); } catch { /* QR optional */ }
+    } catch { setError('Network error — please try again.'); } finally { setRetrying(false); }
   };
 
   if (result) {
@@ -168,9 +187,9 @@ export default function NewBookingPage() {
             <CheckCircle2 style={{ height: 18, width: 18 }} strokeWidth={1.75} /> Booking created
           </div>
           <p style={{ fontSize: 14, color: C.textSecondary, marginTop: 8 }}>
-            <strong>{result.destinationLabel}</strong>{result.leadName ? ` · ${result.leadName}` : ''} · ref <span style={{ fontFamily: 'ui-monospace, monospace' }}>{result.reference}</span>. It&rsquo;s live in the app — scan, enter the email, and it appears.
+            <strong>{result.destinationLabel}</strong>{result.leadName ? ` · ${result.leadName}` : ''} · ref <span style={{ fontFamily: 'ui-monospace, monospace' }}>{result.reference}</span>.{result.inviteId ? ' It’s live in the app — scan, enter the email, and it appears.' : ' The booking is saved.'}
           </p>
-          {qr && (
+          {result.inviteId && qr && (
             <div style={{ marginTop: 20, display: 'flex', gap: 20, alignItems: 'center' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qr} alt="Onboarding QR" style={{ height: 160, width: 160, borderRadius: 10, border: `1px solid ${C.border}` }} />
@@ -185,6 +204,20 @@ export default function NewBookingPage() {
                 </div>
               </div>
             </div>
+          )}
+          {!result.inviteId && (
+            <div style={{ marginTop: 20, padding: 16, borderRadius: 10, backgroundColor: '#FFF7ED', border: '1px solid #F59E0B' }}>
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 4 }}>Onboarding invite not created</div>
+              <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.5 }}>
+                {result.inviteError || 'The QR / install link could not be generated.'} Retry now, or issue an invite from the agency&rsquo;s Invite tab.
+              </div>
+              <button onClick={retryInvite} disabled={retrying} style={{ ...btnPrimary, marginTop: 12, opacity: retrying ? 0.6 : 1, cursor: retrying ? 'default' : 'pointer' }}>
+                {retrying ? 'Retrying…' : 'Retry invite'}
+              </button>
+            </div>
+          )}
+          {error && (
+            <div style={{ marginTop: 12, fontSize: 13, color: C.error }}>{error}</div>
           )}
           <button onClick={() => window.location.reload()} style={{ ...btnSecondary(false), marginTop: 24 }}>Add another booking</button>
         </div>

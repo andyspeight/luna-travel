@@ -181,27 +181,33 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     );
   }
 
-  // Create a pending invite so the traveller can onboard via QR.
-  const { data: invite, error: inviteErr } = await supabase
-    .from('invites')
-    .insert({
-      agency_id: agencyId,
-      booking_ref: reference,
-      email: leadEmail,
-      departure_date: departureDate,
-      return_date: returnDate,
-      destination: destinationLabel,
-      lead_passenger_name: leadName,
-      status: 'pending',
-      created_by: 'manual-booking',
-      expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select('id')
-    .single();
-
-  if (inviteErr) {
-    // The booking is saved; surface a soft warning rather than failing the whole op.
-    console.error('[bookings.POST] invite insert failed:', inviteErr.message);
+  // Create a pending invite so the traveller can onboard via QR. The booking is
+  // already saved, so a transient invite failure must not be swallowed (that
+  // stranded the traveller with a success screen but no QR). Retry once, then —
+  // if it still fails — report it honestly via `inviteError` so the UI can show
+  // a warning and offer a retry instead of a misleading "scan and it appears".
+  const invitePayload = {
+    agency_id: agencyId,
+    booking_ref: reference,
+    email: leadEmail,
+    departure_date: departureDate,
+    return_date: returnDate,
+    destination: destinationLabel,
+    lead_passenger_name: leadName,
+    status: 'pending',
+    created_by: 'manual-booking',
+    expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+  let invite: { id: string } | null = null;
+  let inviteError: string | null = null;
+  for (let attempt = 0; attempt < 2 && !invite; attempt++) {
+    const { data, error } = await supabase.from('invites').insert(invitePayload).select('id').single();
+    if (!error && data) {
+      invite = data as { id: string };
+      break;
+    }
+    inviteError = error?.message ?? 'unknown';
+    console.error(`[bookings.POST] invite insert failed (attempt ${attempt + 1}/2):`, inviteError);
   }
 
   // If this booking came from a PDF import, fold the admin-reviewed result into
@@ -225,11 +231,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     ok: true,
     reference,
     inviteId: invite?.id ?? null,
+    inviteError: invite
+      ? null
+      : 'The booking was saved, but the onboarding invite could not be created. Retry it below.',
     booking: {
       destinationLabel: booking.destinationLabel,
       leadName,
       tripStart: booking.tripStart,
       tripEnd: booking.tripEnd,
+      departureDate,
       flights: booking.flights.length,
       hotels: booking.hotels.length,
     },

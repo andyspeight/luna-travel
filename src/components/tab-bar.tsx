@@ -27,9 +27,11 @@ export function TabBar() {
   const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
   if (splashShowing) return null;
 
-  // Booth-display and onboarding screens are standalone (no trip context yet)
-  // — hide the tab bar so they read as self-contained surfaces.
-  if (pathname === '/install' || pathname === '/welcome') return null;
+  // Booth-display, onboarding and the agency portal are standalone surfaces
+  // (no trip context) — hide the tab bar so they read as self-contained.
+  if (pathname === '/install' || pathname === '/welcome' || pathname.startsWith('/agency')) {
+    return null;
+  }
 
   // First-run / un-onboarded visitor: no trip yet, so no trip navigation.
   if (onboarding) return null;

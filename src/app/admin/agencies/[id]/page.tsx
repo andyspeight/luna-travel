@@ -205,6 +205,106 @@ function FormField({ label, helper, children }: { label: string; helper?: string
 
 // ============ TAB CONTENT ============
 
+function PortalAccessCard({ agency }: { agency: Agency }) {
+  const [loading, setLoading] = useState(false);
+  const [url, setUrl] = useState('');
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const generate = async () => {
+    setLoading(true);
+    setErr('');
+    setCopied(false);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/access-link`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(
+          data.error === 'no_contact_email'
+            ? 'Add a contact email for this agency first.'
+            : 'Could not generate a link. Please try again.',
+        );
+        return;
+      }
+      setUrl(data.url);
+    } catch {
+      setErr('Could not generate a link. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const mailto =
+    agency.contact && url
+      ? `mailto:${agency.contact}?subject=${encodeURIComponent('Your Luna Travel agency sign-in link')}&body=${encodeURIComponent(
+          `Hello,\n\nUse this one-time link to sign in to your Luna Travel agency portal, where you can set up your app branding and send travellers access:\n\n${url}\n\nThe link expires in 14 days.`,
+        )}`
+      : '';
+
+  return (
+    <Card>
+      <CardHeader
+        title="Agency portal access"
+        subtitle="This agency has no Travelgenix login — generate a one-time sign-in link to send them"
+      />
+      <div style={{ padding: '16px 24px' }}>
+        {!url ? (
+          <>
+            <button
+              type="button"
+              onClick={generate}
+              disabled={loading}
+              style={{
+                background: C.primary, color: '#fff', border: 'none', borderRadius: 8,
+                padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {loading ? 'Generating…' : 'Generate access link'}
+            </button>
+            {err && <div style={{ color: C.error, fontSize: 13, marginTop: 10 }}>{err}</div>}
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                readOnly
+                value={url}
+                style={{
+                  flex: 1, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px',
+                  fontSize: 12, color: C.textSecondary, fontFamily: 'ui-monospace, monospace',
+                }}
+              />
+              <button type="button" onClick={copy} style={{ border: `1px solid ${C.border}`, background: '#fff', color: C.textSecondary, fontSize: 13, fontWeight: 600, padding: '9px 14px', borderRadius: 8, cursor: 'pointer' }}>
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: C.textTertiary, marginTop: 10 }}>
+              Single-use, expires in 14 days.{' '}
+              {mailto && (
+                <a href={mailto} style={{ color: C.textAccent, fontWeight: 600 }}>
+                  Email it to {agency.contact}
+                </a>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function OverviewTab({ agency }: { agency: Agency }) {
   const [events, setEvents] = useState<{ ref: string; status: string; detail: string; time: string }[]>([]);
   useEffect(() => {
@@ -229,6 +329,9 @@ function OverviewTab({ agency }: { agency: Agency }) {
   }, [agency.id]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Luna-native agencies sign in via a one-time link, not Travelgenix SSO. */}
+      {agency.source === 'luna' && <PortalAccessCard agency={agency} />}
+
       {/* KPIs */}
       <Card>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>

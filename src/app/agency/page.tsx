@@ -33,9 +33,10 @@ function Dashboard() {
       </p>
 
       <div style={{ marginTop: 20 }}>
-        <Callout title="Two steps to launch">
-          Brand your app so it feels like yours, then send a traveller their access. That&rsquo;s it —
-          they&rsquo;ll have your app on their phone in seconds.
+        <Callout title="Getting started">
+          Brand your app so it feels like yours, add <strong>Trips</strong> and{' '}
+          <strong>Documents</strong> for any bookings that aren&rsquo;t in Travelify, then send your
+          traveller their access — they&rsquo;ll have your app on their phone in seconds.
         </Callout>
       </div>
 

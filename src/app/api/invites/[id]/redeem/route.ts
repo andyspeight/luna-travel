@@ -31,6 +31,7 @@ import { validateAgencyBooking } from '@/lib/control-order';
 import { getStoredBooking } from '@/lib/stored-booking';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
+import { getPlatformSettings } from '@/lib/platform-settings';
 
 // ───────── Validation (matches retrieve-order.js patterns) ─────────
 
@@ -104,6 +105,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // come from Supabase as uuid() — but we still bound them.
   if (!inviteId || typeof inviteId !== 'string' || inviteId.length < 8 || inviteId.length > 64) {
     return notFound();
+  }
+
+  // Platform kill switch: pause new traveller onboarding (Settings → kill
+  // switches). Existing travellers are unaffected — this only blocks redeeming
+  // a new invite.
+  if ((await getPlatformSettings()).onboardingPaused) {
+    return NextResponse.json(
+      { error: 'onboarding_paused', message: 'New sign-ins are paused right now. Please try again shortly.' },
+      { status: 503 },
+    );
   }
 
   // Parse body

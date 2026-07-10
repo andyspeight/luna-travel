@@ -247,4 +247,45 @@ block anything at runtime — the map iframes render, Google Fonts load, and her
 browser console. The policy was written to be compatible, but `vercel.json`
 headers only apply on Vercel (not `next start`), so this is the first place it
 can be exercised end-to-end.
-</content>
+
+---
+
+## Addendum — session 2 (10 Jul 2026): agency platform + gap closes
+
+Built on top of the go-live pass above; all gates (type-check, lint, `next build`)
+stayed green throughout, and each DB change was applied to prod and round-tripped.
+
+**White-label branding now reaches the traveller app (was §3 gap "biggest").**
+The agency `Agency` type + `orderToBooking` carry `appName` / brand colours /
+`welcomeMessage` (colours sanitised to `#RRGGBB`); the `teal`/`navy` Tailwind
+tokens are CSS-variable-backed so an agency's colours re-theme the app at
+runtime; a new `AgencyLogo` renders logo + app name on home / cover / Me, and the
+welcome message shows on home. Verified in a headless browser (default teal vs a
+gold-branded agency, resets on switch).
+
+**Branding override model (owner-chosen "write to both").** New
+`luna_travel.agency_branding` — effective branding resolves per-field as
+`Luna override ?? Control ?? default`, Luna wins on read. The White-label tab
+writes the Luna override *and* syncs to Control, with a "Reset to Control".
+`/api/traveller/booking` overlays the override on live + stored bookings.
+
+**Off-platform invite failure surfaced (was §6).** The Add-booking route retries
+the invite and, on failure, returns an explicit `inviteError` (booking kept); the
+success screen shows a warning + "Retry invite" instead of a QR-less success.
+
+**Luna-native agencies (stage 2 — non-Travelgenix clients).** An agency can now
+be a Control client (`rec…`) or Luna-native (`lt…`, `luna_travel.agencies`).
+Shared `lib/agency-id.ts` + `lib/agencies.ts`; create form + `POST
+/api/admin/agencies`; list = Control + Luna (native still listed if Control is
+down); every agency-scoped path is source-aware (branding syncs to Control only
+for Control agencies; off-platform bookings + traveller render never call Control
+for native; Travelify tab hidden for native). Verified: store round-trips; id
+scheme classifies `rec`/`lt`/junk correctly.
+
+**Deferred / owner action:** the Control side must expose a `clients/create`
+endpoint if Travelgenix clients should ever be *created* from Luna (native
+agencies don't need it); the branding "sync to Control" + reads still depend on
+Control's `update-branding` / `clients/get` persisting the five branding fields
+(confirmed present on the Control **Clients** Airtable table). The full
+admin→traveller flows for the new work need the deployed env (SSO + a redeemed
+session) to exercise end-to-end.

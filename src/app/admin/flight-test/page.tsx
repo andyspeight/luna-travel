@@ -10,10 +10,151 @@
  * where booked time and live time are genuinely independent sources).
  */
 
-import React, { useState } from 'react';
-import { Plane, Search, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio } from 'lucide-react';
 import { FlightHero, LiveNowPanel, AircraftPanel } from '@/components/flight-card';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
+
+interface FlightHealth {
+  status: 'operational' | 'degraded' | 'down';
+  reasons: string[];
+  config: { apiKey: boolean; webhookToken: boolean; publicUrl: boolean; internalKey: boolean };
+  apiReachable: boolean;
+  feedUp: boolean;
+  creditsRemaining: number | null;
+  lowCreditThreshold: number;
+  subscriptions: { active: number; total: number; withCoverage: number; lastUpdate: string | null };
+  checkedAt: string;
+}
+
+function FlightHealthPanel() {
+  const [health, setHealth] = useState<FlightHealth | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch('/api/admin/flight-health', { credentials: 'include', cache: 'no-store' });
+      if (!res.ok) throw new Error();
+      setHealth((await res.json()) as FlightHealth);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const tone =
+    health?.status === 'operational'
+      ? { bg: '#ecfdf5', border: '#a7f3d0', fg: '#047857', label: 'Operational', Icon: CheckCircle2 }
+      : health?.status === 'degraded'
+        ? { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', label: 'Needs attention', Icon: AlertTriangle }
+        : { bg: '#fef2f2', border: '#fecaca', fg: '#b91c1c', label: 'Not working', Icon: XCircle };
+
+  return (
+    <section className="mb-8 rounded-xl border border-tg-border bg-tg-bg-elevated overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-tg-border">
+        <Radio size={16} className="text-tg-accent" />
+        <h2 className="text-[15px] font-semibold text-tg-text-primary">Flight-alert pipeline health</h2>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-medium text-tg-text-secondary hover:text-tg-text-primary disabled:opacity-50 cursor-pointer"
+        >
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
+        </button>
+      </div>
+
+      {loading && !health ? (
+        <div className="px-5 py-6 text-sm text-tg-text-secondary">Checking AeroDataBox…</div>
+      ) : error || !health ? (
+        <div className="px-5 py-6 text-sm text-red-600">Could not load health — try Refresh.</div>
+      ) : (
+        <div className="p-5">
+          {/* Overall status */}
+          <div className="rounded-lg border p-4" style={{ background: tone.bg, borderColor: tone.border }}>
+            <div className="flex items-center gap-2" style={{ color: tone.fg }}>
+              <tone.Icon size={18} />
+              <span className="font-semibold">Live flight alerts: {tone.label}</span>
+            </div>
+            {health.reasons.length > 0 && (
+              <ul className="mt-2 space-y-1 text-[13px]" style={{ color: tone.fg }}>
+                {health.reasons.map((r, i) => <li key={i}>• {r}</li>)}
+              </ul>
+            )}
+          </div>
+
+          {/* Key stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+            <Stat
+              icon={<CreditCard size={15} />}
+              label="Alert credits"
+              value={health.creditsRemaining === null ? '—' : health.creditsRemaining.toLocaleString()}
+              warn={health.creditsRemaining !== null && health.creditsRemaining < health.lowCreditThreshold}
+            />
+            <Stat icon={<Radio size={15} />} label="Active subscriptions" value={String(health.subscriptions.active)} />
+            <Stat icon={<Plane size={15} />} label="With live coverage" value={String(health.subscriptions.withCoverage)} />
+            <Stat
+              icon={<RefreshCw size={15} />}
+              label="Last update"
+              value={health.subscriptions.lastUpdate ? relTime(health.subscriptions.lastUpdate) : 'never'}
+            />
+          </div>
+
+          {/* Config checklist */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+            <Check ok={health.config.apiKey} label="API key" />
+            <Check ok={health.apiReachable} label="API reachable" />
+            <Check ok={health.config.webhookToken} label="Webhook token" />
+            <Check ok={health.config.publicUrl} label="Callback URL" />
+          </div>
+
+          <div className="mt-3 text-[11px] text-tg-text-tertiary">
+            Checked {new Date(health.checkedAt).toLocaleTimeString('en-GB')}. Credit + feed checks read AeroDataBox
+            meta endpoints and do not consume alert credits.
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Stat({ icon, label, value, warn }: { icon: React.ReactNode; label: string; value: string; warn?: boolean }) {
+  return (
+    <div className="rounded-lg border border-tg-border bg-tg-bg-primary p-3">
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-tg-text-tertiary">
+        {icon} {label}
+      </div>
+      <div className={`text-xl font-bold mt-1 tabular-nums ${warn ? 'text-amber-600' : 'text-tg-text-primary'}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Check({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[13px]">
+      {ok ? <CheckCircle2 size={15} className="text-emerald-600" /> : <XCircle size={15} className="text-red-500" />}
+      <span className={ok ? 'text-tg-text-secondary' : 'text-red-600 font-medium'}>{label}</span>
+    </div>
+  );
+}
+
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diff)) return '—';
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
 
 interface Normalised {
   statusCode: string;
@@ -160,6 +301,8 @@ export default function FlightTestPage() {
           see the full data — no booking or subscription needed.
         </p>
       </header>
+
+      <FlightHealthPanel />
 
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div className="flex-1 min-w-[160px]">

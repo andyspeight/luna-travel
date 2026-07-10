@@ -19,6 +19,61 @@ export const runtime = 'nodejs';
 const isEmailLike = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 const isDateLike = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 
+interface InviteRow {
+  id: string;
+  booking_ref: string | null;
+  email: string | null;
+  departure_date: string | null;
+  status: string;
+  first_viewed_at: string | null;
+  redeemed_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+/**
+ * GET /api/agency/invites — list this agency's invites with status/stats.
+ * Effective status folds an elapsed expiry into "expired" (there is no auto
+ * -expiry job). Scoped to the session's agency only.
+ */
+export async function GET(req: NextRequest) {
+  const claims = await requireAgency(req as unknown as Request);
+  if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+
+  const { data, error } = await getSupabaseAdmin()
+    .from('invites')
+    .select('id, booking_ref, email, departure_date, status, first_viewed_at, redeemed_at, expires_at, created_at')
+    .eq('agency_id', claims.agencyId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('[agency/invites] list failed', error.message);
+    return NextResponse.json({ error: 'list_failed' }, { status: 500 });
+  }
+
+  const now = Date.now();
+  const invites = ((data ?? []) as InviteRow[]).map((r) => {
+    let status = r.status;
+    if (status === 'pending' && Date.parse(r.expires_at) < now) status = 'expired';
+    return {
+      id: r.id,
+      bookingRef: r.booking_ref,
+      email: r.email,
+      departureDate: r.departure_date,
+      status, // pending | redeemed | expired | revoked
+      opened: !!r.first_viewed_at && status === 'pending',
+      firstViewedAt: r.first_viewed_at,
+      redeemedAt: r.redeemed_at,
+      expiresAt: r.expires_at,
+      createdAt: r.created_at,
+      qrUrl: `${req.nextUrl.origin}/install?invite=${r.id}`,
+    };
+  });
+
+  return NextResponse.json({ ok: true, invites });
+}
+
 export async function POST(req: NextRequest) {
   const claims = await requireAgency(req as unknown as Request);
   if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });

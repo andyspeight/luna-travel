@@ -20,6 +20,40 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
+const CONTROL_HOST = 'https://id.travelify.io';
+
+/**
+ * Best-effort: read the agency's white-label branding from Control so an
+ * off-platform booking is branded the same way a live one is (the traveller
+ * PWA themes off booking.agency). Uses the admin's forwarded cookie. If Control
+ * is unreachable we just proceed with whatever the form supplied — branding is
+ * never allowed to block a booking save.
+ */
+async function loadAgencyBranding(agencyId: string, cookieHeader: string, base: ControlAgency): Promise<ControlAgency> {
+  try {
+    const res = await fetch(`${CONTROL_HOST}/api/admin/clients/get?id=${encodeURIComponent(agencyId)}`, {
+      headers: { Cookie: cookieHeader, Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return base;
+    const data = await res.json().catch(() => null);
+    const c = ((data?.client ?? {}) as Record<string, unknown>);
+    const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
+    return {
+      ...base,
+      name: base.name || s(c.tradingName) || s(c.clientName) || '',
+      email: base.email || s(c.primaryEmail) || '',
+      website: s(c.websiteUrl) || base.website,
+      appName: s(c.appName),
+      logoUrl: s(c.logoUrl),
+      brandPrimaryColour: s(c.brandPrimaryColour),
+      brandAccentColour: s(c.brandAccentColour),
+      welcomeMessage: s(c.welcomeMessage),
+    };
+  } catch {
+    return base;
+  }
+}
 
 function genRef(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
@@ -93,7 +127,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       : [],
   };
 
-  const agency: ControlAgency = { name: str(body.agencyName), email: str(body.agencyEmail) };
+  const agency: ControlAgency = await loadAgencyBranding(
+    agencyId,
+    req.headers.get('cookie') ?? '',
+    { name: str(body.agencyName), email: str(body.agencyEmail) },
+  );
 
   // Reference: honour a supplied one, else generate.
   const supplied = str(body.reference).toUpperCase();

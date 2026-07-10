@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Wordmark, HERO_BG, P, SERIF, card } from '../portal-chrome';
 
 export default function AgencyLoginPage() {
   const router = useRouter();
@@ -59,18 +60,33 @@ export default function AgencyLoginPage() {
   }, [router]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 24, maxWidth: 380, width: '100%', textAlign: 'center', boxShadow: '0 1px 3px rgba(15,23,42,0.06)' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Luna Travel</div>
+    <div style={{ minHeight: '100vh', background: HERO_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ ...card, padding: 30, maxWidth: 380, width: '100%', textAlign: 'center' }} className="animate-slide-up">
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <Wordmark on="light" size={24} />
+        </div>
         {!error ? (
-          <p style={{ color: '#64748b', fontSize: 14, marginTop: 10 }}>Signing you in…</p>
+          <>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+              <span
+                className="animate-spin"
+                style={{ width: 26, height: 26, borderRadius: 999, border: `2.5px solid ${P.line}`, borderTopColor: P.teal, display: 'inline-block' }}
+              />
+            </div>
+            <p style={{ color: P.ink2, fontSize: 14, marginTop: 16 }}>Signing you in…</p>
+          </>
         ) : (
-          <p style={{ color: '#475569', fontSize: 14, marginTop: 10, lineHeight: 1.5 }}>
-            {error === 'missing'
-              ? 'This link is missing its sign-in code.'
-              : 'This sign-in link is invalid or has expired.'}{' '}
-            Ask your Luna Travel contact to send you a fresh access link.
-          </p>
+          <>
+            <div style={{ fontFamily: SERIF, fontSize: 22, color: P.ink, marginTop: 18 }}>
+              {error === 'missing' ? 'Missing sign-in code' : 'Link expired'}
+            </div>
+            <p style={{ color: P.ink2, fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>
+              {error === 'missing'
+                ? 'This link is missing its sign-in code.'
+                : 'This sign-in link is invalid or has already been used.'}{' '}
+              Ask your Luna Travel contact to send you a fresh access link.
+            </p>
+          </>
         )}
       </div>
     </div>

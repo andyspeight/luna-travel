@@ -6,30 +6,42 @@
  */
 
 import Link from 'next/link';
-import { AgencyShell, useAgencyMe } from './portal-chrome';
+import { Palette, Send, ArrowRight } from 'lucide-react';
+import { AgencyShell, useAgencyMe, P, SERIF, card } from './portal-chrome';
 
 function Dashboard() {
   const { me } = useAgencyMe();
   const appName = me.branding.appName || me.agency.name;
+  const primary = me.branding.brandPrimaryColour || P.navy;
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0 }}>
-        Welcome{me.agency.name ? `, ${me.agency.name}` : ''}
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: P.tealDark }}>
+        Welcome back
+      </div>
+      <h1 style={{ fontFamily: SERIF, fontSize: 34, lineHeight: 1.08, color: P.ink, margin: '6px 0 0' }}>
+        {me.agency.name}
       </h1>
-      <p style={{ color: '#64748b', fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
-        This is where you set up your travellers&rsquo; app and send them access. Your app is
-        currently branded as <strong style={{ color: '#0f172a' }}>{appName}</strong>.
+      <p style={{ color: P.ink2, fontSize: 15, marginTop: 10, lineHeight: 1.55, maxWidth: 520 }}>
+        Set up your travellers&rsquo; app and send them access — all from here. Your app currently
+        opens as{' '}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: P.ink }}>
+          <span style={{ width: 12, height: 12, borderRadius: 4, background: primary, display: 'inline-block' }} />
+          {appName}
+        </span>
+        .
       </p>
 
-      <div style={{ display: 'grid', gap: 12, marginTop: 20 }}>
+      <div style={{ display: 'grid', gap: 14, marginTop: 26 }}>
         <ActionCard
           href="/agency/branding"
+          icon={<Palette size={22} strokeWidth={1.9} />}
           title="App branding"
-          body="Set your app name, colours, welcome message and logo. Travellers see this the moment they open their trip."
+          body="Your app name, colours, welcome message and logo. Travellers see this the moment they open their trip."
         />
         <ActionCard
           href="/agency/access"
+          icon={<Send size={22} strokeWidth={1.9} />}
           title="Send app access"
           body="Create a sign-in link and QR code for a booking, so your traveller can open their trip in the app."
         />
@@ -38,25 +50,27 @@ function Dashboard() {
   );
 }
 
-function ActionCard({ href, title, body }: { href: string; title: string; body: string }) {
+function ActionCard({ href, icon, title, body }: { href: string; icon: React.ReactNode; title: string; body: string }) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: 'block',
-        background: '#fff',
-        border: '1px solid #e2e8f0',
-        borderRadius: 14,
-        padding: 18,
-        textDecoration: 'none',
-        boxShadow: '0 1px 3px rgba(15,23,42,0.05)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{title}</span>
-        <span style={{ marginLeft: 'auto', color: '#4f46e5', fontSize: 18 }}>→</span>
+    <Link href={href} style={{ ...card, display: 'block', padding: 20, textDecoration: 'none' }} className="portal-lift">
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+        <span
+          style={{
+            width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+            background: `linear-gradient(135deg, ${P.navy}, ${P.navyLight})`,
+            color: P.tealLight, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {icon}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: P.ink }}>{title}</span>
+            <ArrowRight size={18} style={{ marginLeft: 'auto', color: P.teal }} />
+          </div>
+          <p style={{ color: P.ink2, fontSize: 13.5, marginTop: 5, lineHeight: 1.5 }}>{body}</p>
+        </div>
       </div>
-      <p style={{ color: '#64748b', fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>{body}</p>
     </Link>
   );
 }

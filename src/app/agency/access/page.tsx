@@ -8,7 +8,8 @@
 
 import { useState } from 'react';
 import QRCode from 'qrcode';
-import { AgencyShell } from '../portal-chrome';
+import { Send, Copy, Check, RotateCcw } from 'lucide-react';
+import { AgencyShell, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
 
 interface Created {
   inviteId: string;
@@ -49,7 +50,7 @@ function AccessForm() {
         errorCorrectionLevel: 'M',
         margin: 1,
         width: 512,
-        color: { dark: '#0f172a', light: '#ffffff' },
+        color: { dark: '#0d1836', light: '#ffffff' },
       });
       setCreated({ inviteId: data.inviteId, qrUrl: data.qrUrl, qrDataUrl, expiresAt: data.expiresAt });
       setStatus('idle');
@@ -80,35 +81,45 @@ function AccessForm() {
   if (created) {
     return (
       <div>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Access link ready</h1>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
-          Send this to your traveller. They scan the QR or open the link to install their trip.
+        <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Access link ready</h1>
+        <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
+          Send this to your traveller — they scan the QR or open the link to install their trip.
         </p>
-        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 20, marginTop: 16, textAlign: 'center' }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={created.qrDataUrl} alt="Invite QR code" style={{ width: 240, height: 240, display: 'block', margin: '0 auto' }} />
-          <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-            <input readOnly value={created.qrUrl} style={{ ...inputStyle, fontSize: 12 }} />
-            <button type="button" onClick={copy} style={ghostBtn}>{copied ? 'Copied' : 'Copy'}</button>
+
+        <div style={{ ...card, padding: 24, marginTop: 18, textAlign: 'center' }} className="animate-slide-up">
+          <div style={{ display: 'inline-block', padding: 12, borderRadius: 18, background: '#fff', border: `1px solid ${P.line}`, boxShadow: '0 8px 24px -14px rgba(15,23,42,0.25)' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={created.qrDataUrl} alt="Invite QR code" style={{ width: 208, height: 208, display: 'block' }} />
           </div>
           {bookingRef.trim() && (
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>Booking {bookingRef.trim()}</div>
+            <div style={{ fontSize: 12.5, color: P.ink3, marginTop: 12 }}>
+              Booking <span style={{ fontFamily: 'ui-monospace, monospace', color: P.ink2 }}>{bookingRef.trim()}</span>
+            </div>
           )}
+          <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+            <input readOnly value={created.qrUrl} style={{ ...inputStyle, fontSize: 12, color: P.ink2 }} onFocus={(e) => e.currentTarget.select()} />
+            <button type="button" onClick={copy} style={{ ...ghostBtn, display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+              {copied ? <Check size={15} color="#059669" /> : <Copy size={15} />} {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
-        <button type="button" onClick={reset} style={{ ...primaryBtn, marginTop: 16 }}>Send another</button>
+
+        <button type="button" onClick={reset} style={{ ...ghostBtn, display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 18 }}>
+          <RotateCcw size={15} /> Send another
+        </button>
       </div>
     );
   }
 
   return (
     <div>
-      <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Send app access</h1>
-      <p style={{ color: '#64748b', fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
+      <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Send app access</h1>
+      <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
         Create a sign-in link + QR for a booking. The booking reference and email pre-fill the
         traveller&rsquo;s sign-in (all optional).
       </p>
 
-      <div style={{ display: 'grid', gap: 16, marginTop: 18 }}>
+      <div style={{ ...card, padding: 20, marginTop: 18, display: 'grid', gap: 18 }}>
         <Field label="Booking reference" hint="Optional — pre-fills the traveller's sign-in.">
           <input value={bookingRef} onChange={(e) => setBookingRef(e.target.value)} placeholder="e.g. LT-4837" style={inputStyle} />
         </Field>
@@ -122,8 +133,8 @@ function AccessForm() {
 
       {status === 'error' && <p style={{ color: '#dc2626', fontSize: 13, marginTop: 14 }}>{errorMsg}</p>}
 
-      <button type="button" onClick={create} disabled={status === 'creating'} style={{ ...primaryBtn, marginTop: 18 }}>
-        {status === 'creating' ? 'Creating…' : 'Create access link'}
+      <button type="button" onClick={create} disabled={status === 'creating'} style={{ ...primaryBtn, display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18, opacity: status === 'creating' ? 0.7 : 1 }}>
+        <Send size={16} /> {status === 'creating' ? 'Creating…' : 'Create access link'}
       </button>
     </div>
   );
@@ -133,6 +144,7 @@ function prettyError(code?: string): string {
   switch (code) {
     case 'invalid_email': return 'That email address looks invalid.';
     case 'invalid_departure_date': return 'Departure date must be a valid date.';
+    case 'agency_inactive': return 'This agency is no longer active — contact Luna Travel.';
     case 'unauthorised': return 'Your session has ended — ask for a fresh access link.';
     default: return 'Could not create the link. Please try again.';
   }
@@ -141,45 +153,23 @@ function prettyError(code?: string): string {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label style={{ display: 'block' }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: P.ink, marginBottom: 6 }}>{label}</div>
       {children}
-      {hint && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 5 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 12, color: P.ink3, marginTop: 5 }}>{hint}</div>}
     </label>
   );
 }
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  border: '1px solid #cbd5e1',
-  borderRadius: 8,
-  padding: '10px 12px',
+  border: `1px solid ${P.line}`,
+  borderRadius: 11,
+  padding: '11px 13px',
   fontSize: 14,
-  color: '#0f172a',
+  color: P.ink,
   background: '#fff',
   boxSizing: 'border-box',
-};
-
-const primaryBtn: React.CSSProperties = {
-  background: '#4f46e5',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 8,
-  padding: '10px 18px',
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: 'pointer',
-};
-
-const ghostBtn: React.CSSProperties = {
-  border: '1px solid #cbd5e1',
-  background: '#fff',
-  color: '#475569',
-  fontSize: 13,
-  fontWeight: 600,
-  padding: '8px 14px',
-  borderRadius: 8,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
+  outlineColor: P.teal,
 };
 
 export default function AgencyAccessPage() {

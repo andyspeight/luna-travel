@@ -8,6 +8,7 @@ import { useI18n } from '@/lib/locale-context';
 import { LanguageSetting } from '@/components/language-switcher';
 import { useCover } from '@/lib/cover-context';
 import { PageEnter } from '@/components/page-enter';
+import { AgencyLogo } from '@/components/agency-logo';
 import {
   IconSun,
   IconMoon,
@@ -78,7 +79,7 @@ export default function MePage() {
             className="p-4 text-white relative"
             style={{
               background:
-                'linear-gradient(135deg, #1B2B5B 0%, #2A3F7A 100%)',
+                'linear-gradient(135deg, rgb(var(--brand-primary-rgb)) 0%, rgb(var(--brand-primary-light-rgb)) 100%)',
             }}
           >
             <div
@@ -86,21 +87,24 @@ export default function MePage() {
               className="absolute inset-0"
               style={{
                 background:
-                  'radial-gradient(ellipse at 85% 20%, rgba(0,180,216,0.35), transparent 50%)',
+                  'radial-gradient(ellipse at 85% 20%, rgb(var(--brand-accent-rgb) / 0.35), transparent 50%)',
               }}
             />
-            <div className="relative">
-              <div className="text-base font-semibold">{booking.agency.name}</div>
-              {booking.agency.atolNumber && (
-                <div className="text-[11px] opacity-80 inline-flex items-center gap-1 mt-0.5">
-                  <IconShield2 size={11} /> {booking.agency.atolNumber}
-                </div>
-              )}
-              {booking.agency.website && (
-                <div className="text-[11px] opacity-80 mt-1">
-                  {booking.agency.website}
-                </div>
-              )}
+            <div className="relative flex items-center gap-3">
+              {booking.agency.logoUrl && <AgencyLogo agency={booking.agency} size={40} />}
+              <div>
+                <div className="text-base font-semibold">{booking.agency.name}</div>
+                {booking.agency.atolNumber && (
+                  <div className="text-[11px] opacity-80 inline-flex items-center gap-1 mt-0.5">
+                    <IconShield2 size={11} /> {booking.agency.atolNumber}
+                  </div>
+                )}
+                {booking.agency.website && (
+                  <div className="text-[11px] opacity-80 mt-1">
+                    {booking.agency.website}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="divide-y divide-line-light">
@@ -173,7 +177,7 @@ export default function MePage() {
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
-          Luna Travel · v{APP_VERSION} · {booking.agency.name}
+          {booking.agency.appName || 'Luna Travel'} · v{APP_VERSION} · {booking.agency.name}
         </p>
       </main>
     </PageEnter>

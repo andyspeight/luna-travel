@@ -15,12 +15,35 @@ import type { Booking } from '@/types/booking';
 
 const DEMO_AGENCY = {
   name: 'Travelaire Holidays',
+  appName: 'Travelaire',
   logoUrl: '/images/travelaire-logo.svg',
   phone: '+44 121 555 8800',
   email: 'hello@travelaire.co.uk',
   emergencyPhone: '+44 7700 900900',
   website: 'travelaire.co.uk',
   atolNumber: 'ATOL 12345',
+  welcomeMessage:
+    "We're delighted to have you travelling with us. Anything you need before or during your trip, your Travelaire team is one tap away.",
+  // No brand colours set — this agency uses the default Luna Travel palette,
+  // which also exercises the "revert to defaults" path when switching bookings.
+};
+
+// A second demo agency with full white-label branding (its own colours + logo),
+// used by the Dubai booking so the demo shows the app re-themed per agency — and
+// switching to/from it proves brand colours apply and reset correctly.
+const MERIDIAN_AGENCY = {
+  name: 'Meridian Luxury Travel',
+  appName: 'Meridian',
+  logoUrl: '/images/meridian-logo.svg',
+  phone: '+44 20 7946 0500',
+  email: 'concierge@meridiantravel.co.uk',
+  emergencyPhone: '+44 7700 900555',
+  website: 'meridiantravel.co.uk',
+  atolNumber: 'ATOL 20891',
+  brandPrimaryColour: '#14243D', // deep navy
+  brandAccentColour: '#c99b3f', // gold
+  welcomeMessage:
+    'Welcome to your Meridian journey. Your dedicated concierge has arranged every detail — simply relax and let us take care of the rest.',
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -245,7 +268,7 @@ export const DUBAI_PATEL: Booking = {
     { id: 'd6', name: 'Travel insurance summary', kind: 'insurance', url: '/documents/DEMO66541/travel-insurance.pdf', sizeBytes: 288619, updatedAt: '2026-05-13T14:15:00.000Z' },
   ],
   payment: { currency: 'GBP', total: 11280.00, deposit: 2256.00, balance: 0, balanceDueDate: '2026-08-08' },
-  agency: DEMO_AGENCY,
+  agency: MERIDIAN_AGENCY,
 };
 
 // ────────────────────────────────────────────────────────────────

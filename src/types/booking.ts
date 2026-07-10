@@ -151,6 +151,12 @@ export interface Agency {
   emergencyPhone?: string;
   website?: string;
   atolNumber?: string;
+  // White-label branding (from the Control client record). All optional — the
+  // traveller PWA falls back to Luna Travel defaults when a field is absent.
+  appName?: string;
+  brandPrimaryColour?: string; // sanitised #RRGGBB
+  brandAccentColour?: string; // sanitised #RRGGBB
+  welcomeMessage?: string;
 }
 
 export interface Booking {

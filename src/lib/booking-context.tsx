@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Booking } from '@/types/booking';
 import { BOOKINGS, getDefaultBooking } from '@/data/mock-bookings';
+import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
 
 const STORAGE_KEY = 'luna-travel.activeBookingRef';
 
@@ -119,6 +120,22 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
+
+  // Apply the active agency's white-label brand colours to the document as CSS
+  // variables (the `teal`/`navy` Tailwind tokens read these). When the agency
+  // has no colours, we clear the overrides so the Luna Travel defaults in
+  // globals.css apply — this also handles switching from a branded booking back
+  // to an unbranded one.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const vars = brandVars(booking.agency.brandPrimaryColour, booking.agency.brandAccentColour);
+    for (const key of BRAND_VAR_KEYS) {
+      const v = vars[key];
+      if (v) root.style.setProperty(key, v);
+      else root.style.removeProperty(key);
+    }
+  }, [booking.agency.brandPrimaryColour, booking.agency.brandAccentColour]);
 
   // Picker - drives MOCK data only, exactly as before. When the user picks a
   // mock booking we also drop back to the mock source.

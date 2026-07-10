@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { BookingPicker } from '@/components/booking-picker';
+import { AgencyLogo } from '@/components/agency-logo';
 import { SectionHeading } from '@/components/section-heading';
 import {
   IconPlane,
@@ -91,11 +92,11 @@ export default function HomePage() {
       <header className="flex items-center justify-between py-3">
         <BookingPicker>
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center shadow-sm">
-              L
-            </div>
+            <AgencyLogo agency={booking.agency} size={36} />
             <div className="text-left">
-              <div className="text-sm font-semibold text-ink leading-none">Luna Travel</div>
+              <div className="text-sm font-semibold text-ink leading-none">
+                {booking.agency.appName || 'Luna Travel'}
+              </div>
               <div className="text-[11px] text-ink-3 leading-none mt-1">
                 {booking.agency.name}
               </div>
@@ -116,6 +117,11 @@ export default function HomePage() {
           </em>
           .
         </h1>
+        {booking.agency.welcomeMessage && (
+          <p className="text-sm text-ink-2 mt-2 leading-relaxed max-w-[340px]">
+            {booking.agency.welcomeMessage}
+          </p>
+        )}
       </div>
 
       {/* Urgent / unread agent message, surfaced at the top so it can't be missed */}

@@ -93,6 +93,21 @@ export interface ControlAgency {
 
 // ───────── Small helpers ─────────
 
+/**
+ * Accept a colour only if it is a plain hex (#RGB or #RRGGBB), returning a
+ * normalised #rrggbb. Anything else (including CSS functions/expressions) is
+ * rejected — these values are written into CSS custom properties on the
+ * traveller's device, so unbounded input would be an injection vector.
+ */
+function hexColour(v?: string | null): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(v.trim());
+  if (!m) return undefined;
+  let h = m[1].toLowerCase();
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  return `#${h}`;
+}
+
 function dateOnly(s?: string | null): string {
   if (typeof s !== 'string' || !s) return '';
   return s.slice(0, 10);
@@ -376,6 +391,13 @@ export function orderToBooking(
     phone: agency?.phone || '',
     email: agency?.email || '',
     website: agency?.website || undefined,
+    // White-label fields. Colours are sanitised to #RRGGBB before they ever
+    // reach the browser — they are written into CSS variables, so an unbounded
+    // string would be a CSS-injection vector.
+    appName: agency?.appName?.trim() || undefined,
+    brandPrimaryColour: hexColour(agency?.brandPrimaryColour),
+    brandAccentColour: hexColour(agency?.brandAccentColour),
+    welcomeMessage: agency?.welcomeMessage?.trim() || undefined,
     // emergencyPhone and atolNumber are not held on the Control Clients record
     // yet, so they are intentionally omitted (UI hides them).
   };

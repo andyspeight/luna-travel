@@ -33,15 +33,21 @@ const config: Config = {
         'ink-2':        'var(--text-2)',
         'ink-3':        'var(--text-3)',
 
-        // Brand accents used by the PWA. These are stable across themes.
+        // Brand accents used by the PWA. Backed by CSS variables so an agency's
+        // white-label colours re-theme the app at runtime (defaults = Luna
+        // Travel's teal/navy, set in globals.css; overridden per-agency in
+        // booking-context). The `rgb(var(--x) / <alpha-value>)` form keeps
+        // opacity modifiers (bg-teal/10, text-navy/50, …) working.
+        // `navy.dark` stays a fixed near-black — it's used as strong text, not
+        // as brand, so it must not shift with the agency colour.
         teal: {
-          DEFAULT: '#00b4d8',
-          light:   '#5eead4',
-          dark:    '#0096b7',
+          DEFAULT: 'rgb(var(--brand-accent-rgb) / <alpha-value>)',
+          light:   'rgb(var(--brand-accent-light-rgb) / <alpha-value>)',
+          dark:    'rgb(var(--brand-accent-dark-rgb) / <alpha-value>)',
         },
         navy: {
-          DEFAULT: '#1b2b5b',
-          light:   '#2a3f7a',
+          DEFAULT: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
+          light:   'rgb(var(--brand-primary-light-rgb) / <alpha-value>)',
           dark:    '#0f172a',
         },
 

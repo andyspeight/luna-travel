@@ -22,6 +22,16 @@
   --text: #0f172a;
   --text-2: #475569;
   --text-3: #94a3b8;
+  /* White-label brand colours — space-separated RGB channels so Tailwind's
+     `rgb(var(--x) / <alpha-value>)` tokens support opacity modifiers. These are
+     the Luna Travel defaults; the active agency's colours override them at
+     runtime (see src/lib/booking-context.tsx / src/lib/brand.ts). The `teal`
+     token maps to --brand-accent-*, `navy` to --brand-primary-*. */
+  --brand-primary-rgb: 27 43 91; /* #1b2b5b navy */
+  --brand-primary-light-rgb: 42 63 122; /* #2a3f7a */
+  --brand-accent-rgb: 0 180 216; /* #00b4d8 teal */
+  --brand-accent-light-rgb: 94 234 212; /* #5eead4 */
+  --brand-accent-dark-rgb: 0 150 183; /* #0096b7 */
   /* Safe-area insets for PWA on devices with notches */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -82,7 +92,7 @@ header {
 
 /* Focus ring — visible, branded, never removed */
 :focus-visible {
-  outline: 2px solid #00b4d8;
+  outline: 2px solid rgb(var(--brand-accent-rgb));
   outline-offset: 2px;
   border-radius: 4px;
 }

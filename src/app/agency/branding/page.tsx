@@ -8,7 +8,8 @@
 
 import { useState } from 'react';
 import { Check } from 'lucide-react';
-import { AgencyShell, useAgencyMe, P, SERIF, card, primaryBtn } from '../portal-chrome';
+import { AgencyShell, useAgencyMe, Callout, P, SERIF, primaryBtn } from '../portal-chrome';
+import { PhonePreview } from '../phone-preview';
 
 const DEFAULT_PRIMARY = '#1b2b5b';
 const DEFAULT_ACCENT = '#00b4d8';
@@ -61,12 +62,20 @@ function BrandingForm() {
     <div>
       <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>App branding</h1>
       <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
-        This is what your travellers see when they open their trip. Changes preview live.
+        This is what your travellers see when they open their trip. Every change previews live.
       </p>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 22, alignItems: 'flex-start' }}>
+      <div style={{ marginTop: 16 }}>
+        <Callout title="Make it unmistakably yours">
+          Set your app name, pick two brand colours, add a warm welcome message and your logo. Watch
+          the phone re-skin as you type — then hit <strong>Save branding</strong>. It goes live for
+          every traveller instantly.
+        </Callout>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, marginTop: 24, alignItems: 'flex-start' }}>
         {/* Live phone preview */}
-        <div style={{ flex: '1 1 220px', minWidth: 220, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ flex: '1 1 258px', minWidth: 258, display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
           <PhonePreview name={shownName} primary={primary} accent={accent} welcome={welcome.trim()} logoUrl={logoUrl.trim()} />
         </div>
 
@@ -82,7 +91,7 @@ function BrandingForm() {
           </div>
 
           <Field label="Welcome message" hint="A short greeting on the traveller's home screen.">
-            <textarea value={welcome} onChange={(e) => setWelcome(e.target.value)} maxLength={240} rows={3} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} />
+            <textarea value={welcome} onChange={(e) => setWelcome(e.target.value)} maxLength={240} rows={3} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} placeholder="e.g. Welcome aboard — we can't wait for you to travel with us." />
           </Field>
 
           <Field label="Logo URL" hint="Paste a hosted logo image URL (https). File upload is coming soon.">
@@ -101,57 +110,6 @@ function BrandingForm() {
               </span>
             )}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PhonePreview({ name, primary, accent, welcome, logoUrl }: { name: string; primary: string; accent: string; welcome: string; logoUrl: string }) {
-  return (
-    <div style={{ width: 232, borderRadius: 36, padding: 9, background: 'linear-gradient(160deg,#1b2540,#0d1836)', boxShadow: '0 24px 50px -20px rgba(13,24,54,0.7)' }}>
-      <div style={{ borderRadius: 28, overflow: 'hidden', background: '#fff', position: 'relative' }}>
-        {/* notch */}
-        <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 74, height: 18, borderRadius: 12, background: '#0d1836', zIndex: 2 }} />
-        {/* branded header */}
-        <div style={{ background: primary, padding: '30px 16px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover', background: '#fff', flexShrink: 0 }} />
-          ) : (
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, flexShrink: 0 }}>
-              {name.charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 15, lineHeight: 1.1, overflow: 'hidden' }}>{name}</div>
-        </div>
-        {/* welcome */}
-        {welcome && (
-          <div style={{ padding: '11px 14px', fontSize: 11.5, color: '#334155', background: '#fff', borderBottom: '1px solid #eef1f6', lineHeight: 1.45 }}>
-            {welcome}
-          </div>
-        )}
-        {/* faux trip content */}
-        <div style={{ padding: 14, display: 'grid', gap: 10, background: '#f7f9fc' }}>
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: accent }}>Upcoming trip</div>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 12, boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
-            <div style={{ height: 8, width: '62%', borderRadius: 4, background: '#e2e8f0' }} />
-            <div style={{ height: 7, width: '40%', borderRadius: 4, background: '#eef1f6', marginTop: 8 }} />
-            <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-              <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: primary, borderRadius: 6, padding: '3px 8px' }}>View trip</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: primary, background: `${accent}22`, borderRadius: 6, padding: '3px 8px' }}>Documents</span>
-            </div>
-          </div>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 12, boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
-            <div style={{ height: 7, width: '52%', borderRadius: 4, background: '#e2e8f0' }} />
-            <div style={{ height: 7, width: '34%', borderRadius: 4, background: '#eef1f6', marginTop: 8 }} />
-          </div>
-        </div>
-        {/* tab bar hint */}
-        <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 0 14px', background: '#fff', borderTop: '1px solid #eef1f6' }}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: i === 0 ? primary : '#cbd5e1' }} />
-          ))}
         </div>
       </div>
     </div>

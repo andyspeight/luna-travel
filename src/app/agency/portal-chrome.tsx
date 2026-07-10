@@ -14,7 +14,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutGrid, Palette, Send, LogOut } from 'lucide-react';
+import { LayoutGrid, Palette, Send, LogOut, Lightbulb } from 'lucide-react';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -61,6 +61,21 @@ export const ghostBtn: React.CSSProperties = {
   borderRadius: 10,
   cursor: 'pointer',
 };
+
+// ── Help callout ─────────────────────────────────────────────────────────────
+export function Callout({ title, children, icon }: { title?: string; children: React.ReactNode; icon?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', gap: 12, background: `linear-gradient(180deg, ${P.teal}0e, ${P.navy}08)`, border: `1px solid ${P.teal}33`, borderRadius: 14, padding: '13px 15px' }}>
+      <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: `${P.teal}1f`, color: P.tealDark, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        {icon ?? <Lightbulb size={16} />}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        {title && <div style={{ fontSize: 13.5, fontWeight: 700, color: P.ink }}>{title}</div>}
+        <div style={{ fontSize: 13, color: P.ink2, lineHeight: 1.55, marginTop: title ? 3 : 0 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
 
 // ── Wordmark ─────────────────────────────────────────────────────────────────
 export function Wordmark({ on = 'dark' as 'dark' | 'light', size = 20 }: { on?: 'dark' | 'light'; size?: number }) {

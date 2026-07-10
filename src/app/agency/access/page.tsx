@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import QRCode from 'qrcode';
 import { Send, Copy, Check, RotateCcw } from 'lucide-react';
-import { AgencyShell, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
+import { AgencyShell, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
 
 interface Created {
   inviteId: string;
@@ -115,9 +115,16 @@ function AccessForm() {
     <div>
       <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Send app access</h1>
       <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
-        Create a sign-in link + QR for a booking. The booking reference and email pre-fill the
-        traveller&rsquo;s sign-in (all optional).
+        Create a sign-in link + QR for a booking so your traveller can open their trip in the app.
       </p>
+
+      <div style={{ marginTop: 16 }}>
+        <Callout title="How it works">
+          Fill in the booking details you have (all optional), tap <strong>Create access link</strong>,
+          then send the traveller the QR or link. They scan it once to install their trip — no
+          passwords, no app store.
+        </Callout>
+      </div>
 
       <div style={{ ...card, padding: 20, marginTop: 18, display: 'grid', gap: 18 }}>
         <Field label="Booking reference" hint="Optional — pre-fills the traveller's sign-in.">

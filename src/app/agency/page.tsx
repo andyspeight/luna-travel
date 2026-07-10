@@ -7,7 +7,7 @@
 
 import Link from 'next/link';
 import { Palette, Send, ArrowRight } from 'lucide-react';
-import { AgencyShell, useAgencyMe, P, SERIF, card } from './portal-chrome';
+import { AgencyShell, useAgencyMe, Callout, P, SERIF, card } from './portal-chrome';
 
 function Dashboard() {
   const { me } = useAgencyMe();
@@ -32,14 +32,23 @@ function Dashboard() {
         .
       </p>
 
-      <div style={{ display: 'grid', gap: 14, marginTop: 26 }}>
+      <div style={{ marginTop: 20 }}>
+        <Callout title="Two steps to launch">
+          Brand your app so it feels like yours, then send a traveller their access. That&rsquo;s it —
+          they&rsquo;ll have your app on their phone in seconds.
+        </Callout>
+      </div>
+
+      <div style={{ display: 'grid', gap: 14, marginTop: 16 }}>
         <ActionCard
+          step={1}
           href="/agency/branding"
           icon={<Palette size={22} strokeWidth={1.9} />}
           title="App branding"
           body="Your app name, colours, welcome message and logo. Travellers see this the moment they open their trip."
         />
         <ActionCard
+          step={2}
           href="/agency/access"
           icon={<Send size={22} strokeWidth={1.9} />}
           title="Send app access"
@@ -50,18 +59,22 @@ function Dashboard() {
   );
 }
 
-function ActionCard({ href, icon, title, body }: { href: string; icon: React.ReactNode; title: string; body: string }) {
+function ActionCard({ step, href, icon, title, body }: { step: number; href: string; icon: React.ReactNode; title: string; body: string }) {
   return (
     <Link href={href} style={{ ...card, display: 'block', padding: 20, textDecoration: 'none' }} className="portal-lift">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
         <span
           style={{
+            position: 'relative',
             width: 46, height: 46, borderRadius: 13, flexShrink: 0,
             background: `linear-gradient(135deg, ${P.navy}, ${P.navyLight})`,
             color: P.tealLight, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
           {icon}
+          <span style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 999, background: P.teal, color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,180,216,0.5)' }}>
+            {step}
+          </span>
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>

@@ -159,3 +159,13 @@ header {
 @media (prefers-reduced-motion: reduce) {
   .portal-lift, .portal-lift:hover { transform: none; }
 }
+
+/* Agency portal — gentle float for the device preview (see src/app/agency). */
+@keyframes portal-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+.portal-float { animation: portal-float 5.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .portal-float { animation: none; }
+}

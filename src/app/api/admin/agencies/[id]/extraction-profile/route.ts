@@ -10,11 +10,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-session';
 import { getProfileSummary, setProfileHints } from '@/lib/pdf-profile';
+import { isAgencyId } from '@/lib/agency-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -22,7 +21,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
 
   const agencyId = (params?.id || '').trim();
-  if (!REC_ID_RE.test(agencyId)) return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
+  if (!isAgencyId(agencyId)) return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
 
   const summary = await getProfileSummary(agencyId);
   return NextResponse.json(summary);
@@ -34,7 +33,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
 
   const agencyId = (params?.id || '').trim();
-  if (!REC_ID_RE.test(agencyId)) return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
+  if (!isAgencyId(agencyId)) return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
 
   let body: Record<string, unknown>;
   try {

@@ -17,8 +17,8 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { isAgencyId } from '@/lib/agency-id';
 
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 const MAX_EXAMPLES = 10; // how many we retain per agency
 const FEWSHOT_EXAMPLES = 2; // how many we inject into a given extraction
 const MAX_HINTS = 4000;
@@ -61,7 +61,7 @@ export interface ProfileSummary {
 
 /** Read the profile for injection into an extraction call (null = nothing useful). */
 export async function getExtractionProfile(agencyId: string): Promise<ExtractionProfile | null> {
-  if (!REC_ID_RE.test(agencyId)) return null;
+  if (!isAgencyId(agencyId)) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('pdf_extraction_profiles')
@@ -83,7 +83,7 @@ export async function getExtractionProfile(agencyId: string): Promise<Extraction
 /** Summary for the admin UI. */
 export async function getProfileSummary(agencyId: string): Promise<ProfileSummary> {
   const empty: ProfileSummary = { hints: '', bookingsLearned: 0, exampleCount: 0, lastLearnedAt: null, sources: [] };
-  if (!REC_ID_RE.test(agencyId)) return empty;
+  if (!isAgencyId(agencyId)) return empty;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('pdf_extraction_profiles')
@@ -104,7 +104,7 @@ export async function getProfileSummary(agencyId: string): Promise<ProfileSummar
 
 /** Admin edits the layout hints. */
 export async function setProfileHints(agencyId: string, hints: string): Promise<boolean> {
-  if (!REC_ID_RE.test(agencyId)) return false;
+  if (!isAgencyId(agencyId)) return false;
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
     .from('pdf_extraction_profiles')
@@ -131,7 +131,7 @@ export async function recordImportCorrection(
   finalDraft: ProfileDraft,
   meta: { reference: string; source?: string },
 ): Promise<void> {
-  if (!REC_ID_RE.test(agencyId)) return;
+  if (!isAgencyId(agencyId)) return;
   const supabase = getSupabaseAdmin();
 
   const { data } = await supabase

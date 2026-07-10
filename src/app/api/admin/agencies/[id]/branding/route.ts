@@ -26,12 +26,12 @@ import {
   clearBrandingOverride,
   type BrandingFields,
 } from '@/lib/agency-branding';
+import { isAgencyId, isControlAgency } from '@/lib/agency-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const CONTROL_HOST = 'https://id.travelify.io';
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() ? v.trim() : undefined;
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   const id = (params?.id || '').trim();
-  if (!REC_ID_RE.test(id)) {
+  if (!isAgencyId(id)) {
     return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
   }
 
@@ -99,12 +99,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'save_failed' }, { status: 500 });
   }
 
-  // 2. Best-effort sync to Control (only the fields present in the request).
-  const controlPayload: Record<string, unknown> = {};
-  for (const key of ['appName', 'brandPrimaryColour', 'brandAccentColour', 'welcomeMessage', 'logoUrl']) {
-    if (body[key] !== undefined) controlPayload[key] = body[key];
+  // 2. Sync to Control — only for Control agencies (Luna-native agencies have no
+  //    Control record, so there is nothing to sync; report success).
+  let controlSynced = true;
+  if (isControlAgency(id)) {
+    const controlPayload: Record<string, unknown> = {};
+    for (const key of ['appName', 'brandPrimaryColour', 'brandAccentColour', 'welcomeMessage', 'logoUrl']) {
+      if (body[key] !== undefined) controlPayload[key] = body[key];
+    }
+    controlSynced = await syncToControl(id, controlPayload, cookieHeader);
   }
-  const controlSynced = await syncToControl(id, controlPayload, cookieHeader);
 
   return NextResponse.json({ ok: true, controlSynced }, { status: 200 });
 }
@@ -117,7 +121,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   }
 
   const id = (params?.id || '').trim();
-  if (!REC_ID_RE.test(id)) {
+  if (!isAgencyId(id)) {
     return NextResponse.json({ error: 'invalid_id' }, { status: 400 });
   }
 

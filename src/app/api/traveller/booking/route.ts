@@ -34,6 +34,7 @@ import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
 import { getStoredBooking } from '@/lib/stored-booking';
 import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-branding';
+import { isAgencyId, isLunaAgency } from '@/lib/agency-id';
 import type { Booking } from '@/types/booking';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,6 @@ export const runtime = 'nodejs';
 
 const SESSION_COOKIE = 'lt_session';
 const CONTROL_HOST = 'https://id.travelify.io'; // same host the agencies route uses
-const RECORD_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 
 /**
  * Fire-and-forget: trigger auto-subscribe for this booking's flights. We do NOT
@@ -110,9 +110,9 @@ export async function GET(req: NextRequest) {
   const email = String(traveller.email || '');
   const departDate = String(traveller.departure_date || '').slice(0, 10);
 
-  if (!RECORD_ID_RE.test(recordId) || !orderRef || !email || !departDate) {
+  if (!isAgencyId(recordId) || !orderRef || !email || !departDate) {
     console.warn('[traveller.booking] incomplete traveller row', {
-      recordIdOk: RECORD_ID_RE.test(recordId),
+      recordIdOk: isAgencyId(recordId),
       hasRef: !!orderRef,
       hasEmail: !!email,
       hasDate: !!departDate,
@@ -134,6 +134,12 @@ export async function GET(req: NextRequest) {
     applyBrandingOverride(stored.payload.agency, brandingOverride);
     triggerAutoSubscribe(stored.payload, recordId, orderRef);
     return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
+  }
+
+  // Luna-native agencies are off-platform only — there is no Travelify order to
+  // fetch, so a missing stored booking is simply not found (never call Control).
+  if (isLunaAgency(recordId)) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
   // On-platform: the live Travelify lookup needs the internal key.

@@ -15,11 +15,11 @@ import { requireAdmin } from '@/lib/admin-session';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
 import type { ControlAgency } from '@/lib/order-to-booking';
 import { recordImportCorrection, type ProfileDraft } from '@/lib/pdf-profile';
+import { isAgencyId, isControlAgency } from '@/lib/agency-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
 const CONTROL_HOST = 'https://id.travelify.io';
 
 /**
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   const agencyId = (params?.id || '').trim();
-  if (!REC_ID_RE.test(agencyId)) {
+  if (!isAgencyId(agencyId)) {
     return NextResponse.json({ error: 'invalid_agency' }, { status: 400 });
   }
 
@@ -127,11 +127,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       : [],
   };
 
-  const agency: ControlAgency = await loadAgencyBranding(
-    agencyId,
-    req.headers.get('cookie') ?? '',
-    { name: str(body.agencyName), email: str(body.agencyEmail) },
-  );
+  // Control agencies carry branding on their Control record; pull it so the
+  // stored booking is branded like a live one. Luna-native agencies have no
+  // Control record — their branding comes from the Luna override store and is
+  // applied to the booking at read time, so we just use the name/email here.
+  const agencyBase: ControlAgency = { name: str(body.agencyName), email: str(body.agencyEmail) };
+  const agency: ControlAgency = isControlAgency(agencyId)
+    ? await loadAgencyBranding(agencyId, req.headers.get('cookie') ?? '', agencyBase)
+    : agencyBase;
 
   // Reference: honour a supplied one, else generate.
   const supplied = str(body.reference).toUpperCase();

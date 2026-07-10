@@ -1,18 +1,21 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Building2, ArrowLeft, ExternalLink } from 'lucide-react';
 
 /**
- * "Add an agency" — informational.
+ * Create an agency.
  *
- * Agencies are NOT created in Luna Travel. Control (Travelgenix ID) is the
- * single source of truth for clients; Luna Travel stores no agency records and
- * simply reads the clients entitled to the `luna-travel` product. So there is
- * no create form here — this page explains how a new agency comes to exist and
- * appear in the list. (This replaced an earlier mock wizard that never
- * persisted and defaulted to the demo Travelify app.)
+ * Two kinds of agency exist in Luna Travel:
+ *   - Travelgenix clients come from Control automatically once entitled to the
+ *     luna-travel product (nothing to create here).
+ *   - Non-Travelgenix clients are created here as Luna-native agencies (stage 2)
+ *     — off-platform bookings only, branded and onboarded the same way.
+ *
+ * This form creates the latter (POST /api/admin/agencies) and drops you on the
+ * new agency's detail page to set branding and add bookings.
  */
 
 const C = {
@@ -25,36 +28,58 @@ const C = {
   textTertiary: '#94A3B8',
   primary: '#1B2B5B',
   accent: '#00B4D8',
+  error: '#EF4444',
 };
 
-const STEPS = [
-  {
-    title: 'Create or find the client in Control',
-    body: 'In Travelgenix Control, open the client (agency) record — or create it there if it does not exist yet. Control is where clients and their Travelify credentials live.',
-  },
-  {
-    title: 'Enable the Luna Travel product',
-    body: 'On the client detail page, toggle on the “luna-travel” catalogue product. Only clients entitled to it appear in Luna Travel.',
-  },
-  {
-    title: 'Set the agency’s Travelify credentials',
-    body: 'Add the agency’s own Travelify App ID, Site ID and API key in Control. Luna Travel looks bookings up with each agency’s own credentials — never a shared demo account.',
-  },
-  {
-    title: 'It appears here automatically',
-    body: 'Back in Luna Travel, the agency shows in the Agencies list. From its detail page you can then upload documents, set branding, create invites and add off-platform bookings.',
-  },
-];
+export default function NewAgencyPage() {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [tradingName, setTradingName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [website, setWebsite] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export default function AddAgencyPage() {
+  const canSave = name.trim().length > 1 && !saving;
+
+  async function submit() {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/agencies', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          tradingName: tradingName.trim() || undefined,
+          contactName: contactName.trim() || undefined,
+          contactEmail: contactEmail.trim() || undefined,
+          phone: phone.trim() || undefined,
+          website: website.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.agency?.id) {
+        setError(data?.message || data?.error || 'Could not create the agency.');
+        return;
+      }
+      router.push(`/admin/agencies/${data.agency.id}`);
+    } catch {
+      setError('Network error — please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div style={{ padding: '32px', maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ padding: '32px', maxWidth: 640, margin: '0 auto' }}>
       <Link
         href="/admin/agencies"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 13, color: C.textSecondary, textDecoration: 'none', marginBottom: 20,
-        }}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textSecondary, textDecoration: 'none', marginBottom: 20 }}
       >
         <ArrowLeft style={{ height: 14, width: 14 }} strokeWidth={1.75} />
         Agencies
@@ -69,61 +94,84 @@ export default function AddAgencyPage() {
           <Building2 style={{ height: 20, width: 20, color: '#fff' }} strokeWidth={1.75} />
         </span>
         <div>
-          <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.textTertiary }}>
-            Travelgenix admin
-          </div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.2, color: C.text, margin: 0, letterSpacing: '-0.01em' }}>
-            Adding an agency
-          </h1>
+          <div style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.textTertiary }}>Travelgenix admin</div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.2, color: C.text, margin: 0, letterSpacing: '-0.01em' }}>New agency</h1>
         </div>
       </div>
 
-      <p style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.65, margin: '4px 0 28px' }}>
-        Agencies are managed in <strong style={{ color: C.text }}>Travelgenix Control</strong>,
-        the single source of truth for clients. Luna Travel stores no agency records — it reads
-        the clients entitled to the Luna Travel product. To bring a new agency on board:
+      <p style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.6, margin: '4px 0 24px' }}>
+        For a <strong style={{ color: C.text }}>non-Travelgenix client</strong>. Travelgenix clients
+        appear here automatically once you enable the Luna&nbsp;Travel product for them in{' '}
+        <a href="https://id.travelify.io/admin" target="_blank" rel="noopener noreferrer" style={{ color: C.accent, textDecoration: 'none' }}>
+          Control <ExternalLink style={{ height: 11, width: 11, display: 'inline', verticalAlign: 'baseline' }} strokeWidth={1.75} />
+        </a>. A Luna-native agency is off-platform only (manual / PDF-imported bookings).
       </p>
 
-      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {STEPS.map((s, i) => (
-          <li
-            key={i}
+      <div style={{ borderRadius: 12, backgroundColor: C.bgElevated, border: `1px solid ${C.border}`, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Field label="Agency name" required>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sunshine Travel Ltd" autoFocus style={inputStyle} />
+        </Field>
+        <Field label="Trading name" hint="If different from the registered name — shown to travellers.">
+          <input value={tradingName} onChange={(e) => setTradingName(e.target.value)} placeholder="Sunshine Holidays" style={inputStyle} />
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Field label="Contact name">
+            <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Jane Doe" style={inputStyle} />
+          </Field>
+          <Field label="Contact email">
+            <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="hello@sunshine.co.uk" style={inputStyle} />
+          </Field>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Field label="Phone">
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+44 20 7946 0000" style={inputStyle} />
+          </Field>
+          <Field label="Website">
+            <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="sunshine.co.uk" style={inputStyle} />
+          </Field>
+        </div>
+
+        {error && (
+          <div style={{ fontSize: 13, color: C.error, backgroundColor: '#FEF2F2', border: `1px solid ${C.error}`, borderRadius: 8, padding: 10 }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 4 }}>
+          <Link href="/admin/agencies" style={{ display: 'inline-flex', alignItems: 'center', height: 40, padding: '0 16px', borderRadius: 8, border: `1px solid ${C.border}`, backgroundColor: C.bgElevated, color: C.text, fontSize: 14, fontWeight: 500, textDecoration: 'none' }}>
+            Cancel
+          </Link>
+          <button
+            onClick={submit}
+            disabled={!canSave}
             style={{
-              display: 'flex', gap: 14,
-              backgroundColor: C.bgElevated,
-              border: `1px solid ${C.border}`,
-              borderRadius: 12,
-              padding: '16px 18px',
+              height: 40, padding: '0 18px', borderRadius: 8, border: 'none',
+              backgroundColor: canSave ? C.primary : C.textTertiary, color: '#fff',
+              fontSize: 14, fontWeight: 500, cursor: canSave ? 'pointer' : 'not-allowed',
             }}
           >
-            <span style={{
-              height: 26, width: 26, borderRadius: 8, flexShrink: 0,
-              backgroundColor: C.bgTertiary, color: C.primary,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 13, fontWeight: 700,
-            }}>{i + 1}</span>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 3 }}>{s.title}</div>
-              <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.6 }}>{s.body}</div>
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      <a
-        href="https://id.travelify.io/admin"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          marginTop: 24, padding: '0 16px', height: 42, borderRadius: 8,
-          backgroundColor: C.primary, color: '#fff', textDecoration: 'none',
-          fontSize: 14, fontWeight: 500,
-        }}
-      >
-        Open Travelgenix Control
-        <ExternalLink style={{ height: 15, width: 15 }} strokeWidth={1.75} />
-      </a>
+            {saving ? 'Creating…' : 'Create agency'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.text, marginBottom: 5 }}>
+        {label}{required && <span style={{ color: C.error }}> *</span>}
+      </label>
+      {children}
+      {hint && <div style={{ fontSize: 11, color: C.textTertiary, marginTop: 4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: 40, padding: '0 12px', borderRadius: 8,
+  border: `1px solid ${C.border}`, backgroundColor: C.bgElevated, color: C.text,
+  fontSize: 14, lineHeight: 1.5, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
+};

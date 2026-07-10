@@ -33,6 +33,13 @@ import {
   mergeBranding,
   type BrandingFields,
 } from '@/lib/agency-branding';
+import { isLunaAgency } from '@/lib/agency-id';
+import {
+  createLunaAgency,
+  getLunaAgency,
+  listLunaAgencies,
+  lunaRowToAgency,
+} from '@/lib/agencies';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -68,6 +75,7 @@ function toAgency(
   const d = (detail?.client ?? {}) as Record<string, unknown>;
   return {
     id: row.id, // Control client record id — the canonical agency_id
+    source: 'control' as const,
     name: row.tradingName || row.clientName || '',
     legalName: row.clientName || '',
     tier: row.plan || (row.package?.name ?? ''),
@@ -167,9 +175,22 @@ export async function GET(req: NextRequest) {
 
   const singleId = req.nextUrl.searchParams.get('id')?.trim();
 
-  try {
-    // ── Single agency ──
-    if (singleId) {
+  // ── Single agency ──
+  if (singleId) {
+    // Luna-native agency (lt…) — resolve from Luna's own store, not Control.
+    if (isLunaAgency(singleId)) {
+      const row = await getLunaAgency(singleId);
+      if (!row) {
+        return NextResponse.json({ error: 'not_found' }, { status: 404 });
+      }
+      const override = await getBrandingOverride(singleId);
+      return NextResponse.json(
+        { agency: withEffectiveBranding(lunaRowToAgency(row), override), entitlements: [] },
+        { status: 200 },
+      );
+    }
+    // Control client (rec…).
+    try {
       const detail = await controlGet(
         `/api/admin/clients/get?id=${encodeURIComponent(singleId)}`,
         cookieHeader,
@@ -186,16 +207,25 @@ export async function GET(req: NextRequest) {
         { agency: withEffectiveBranding(agency, override), entitlements: detail.entitlements ?? [] },
         { status: 200 },
       );
+    } catch (err) {
+      console.error('[admin/agencies] Control detail failed:', (err as Error).message);
+      return NextResponse.json(
+        { error: 'control_unavailable', detail: 'Could not read the agency from Control' },
+        { status: 502 },
+      );
     }
+  }
 
-    // ── Full list ──
+  // ── Full list ── Control-entitled clients + Luna-native agencies. Luna-native
+  // agencies are always listed, even if Control is unreachable (controlError).
+  const lunaAgencies = (await listLunaAgencies()).map(lunaRowToAgency);
+
+  let controlAgencies: ReturnType<typeof toAgency>[] = [];
+  let controlError = false;
+  try {
     const list = await controlGet('/api/admin/clients/list', cookieHeader);
     const clients: ControlClientListRow[] = Array.isArray(list?.clients) ? list.clients : [];
-
-    // We need each client's entitlement grid to know if luna-travel is on.
-    // /list only gives counts, so fetch /get per client. Fine for the current
-    // client count; if this grows large we add a Control endpoint that returns
-    // entitlements in the list. Done in parallel with a sane concurrency cap.
+    // /list only gives counts, so fetch /get per client to read the entitlement grid.
     const results = await Promise.allSettled(
       clients.map((c) =>
         controlGet(`/api/admin/clients/get?id=${encodeURIComponent(c.id)}`, cookieHeader).then(
@@ -203,25 +233,66 @@ export async function GET(req: NextRequest) {
         ),
       ),
     );
-
-    const agencies = results
+    controlAgencies = results
       .filter(
         (r): r is PromiseFulfilledResult<{ c: ControlClientListRow; detail: any }> =>
           r.status === 'fulfilled' && hasLunaTravel(r.value.detail),
       )
-      .map((r) => toAgency(r.value.c, r.value.detail))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    // Overlay Luna branding overrides (batched) so list rows show effective brand.
-    const overrides = await getBrandingOverrides(agencies.map((a) => a.id));
-    const withBranding = agencies.map((a) => withEffectiveBranding(a, overrides.get(a.id) || {}));
-
-    return NextResponse.json({ agencies: withBranding, total: withBranding.length }, { status: 200 });
+      .map((r) => toAgency(r.value.c, r.value.detail));
   } catch (err) {
-    console.error('[admin/agencies] Control read failed:', (err as Error).message);
-    return NextResponse.json(
-      { error: 'control_unavailable', detail: 'Could not read agencies from Control' },
-      { status: 502 },
-    );
+    console.error('[admin/agencies] Control list failed:', (err as Error).message);
+    controlError = true;
+  }
+
+  const allAgencies = [...controlAgencies, ...lunaAgencies];
+  const overrides = await getBrandingOverrides(allAgencies.map((a) => a.id));
+  const withBranding = allAgencies
+    .map((a) => withEffectiveBranding(a, overrides.get(a.id) || {}))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return NextResponse.json(
+    { agencies: withBranding, total: withBranding.length, controlError },
+    { status: 200 },
+  );
+}
+
+// ── Create a Luna-native agency (non-Travelgenix client) ──
+export async function POST(req: NextRequest) {
+  const claims = await requireAdmin(req as unknown as Request);
+  if (!claims) {
+    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+  }
+
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const name = str(body.name);
+  if (!name) {
+    return NextResponse.json({ error: 'name_required', message: 'Agency name is required' }, { status: 400 });
+  }
+  const contactEmail = str(body.contactEmail).toLowerCase();
+  if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+    return NextResponse.json({ error: 'email_invalid', message: 'Contact email is not a valid address' }, { status: 400 });
+  }
+
+  try {
+    const row = await createLunaAgency({
+      name,
+      tradingName: str(body.tradingName) || undefined,
+      contactEmail: contactEmail || undefined,
+      contactName: str(body.contactName) || undefined,
+      phone: str(body.phone) || undefined,
+      website: str(body.website) || undefined,
+      createdBy: claims.email,
+    });
+    return NextResponse.json({ agency: lunaRowToAgency(row) }, { status: 201 });
+  } catch (err) {
+    console.error('[admin/agencies POST] create failed:', (err as Error).message);
+    return NextResponse.json({ error: 'create_failed', message: 'Could not create the agency' }, { status: 500 });
   }
 }

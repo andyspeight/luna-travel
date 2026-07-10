@@ -52,6 +52,7 @@ interface Agency {
   logoUrl?: string;
   welcomeMessage?: string;
   brandingOverridden?: boolean;
+  source?: string;
   contact: string;
   city: string;
   joined: string;
@@ -1371,6 +1372,7 @@ export default function AgencyDetailPage() {
           welcomeMessage: a.welcomeMessage || '',
           logoUrl: a.logoUrl || '',
           brandingOverridden: !!a.brandingOverridden,
+          source: a.source || 'control',
           contact: a.contact || '',
           city: a.website || '',
           joined: a.goLive ? new Date(a.goLive).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—',
@@ -1437,10 +1439,12 @@ export default function AgencyDetailPage() {
     );
   }
 
+  // Luna-native agencies are off-platform only — no Travelify integration tab.
+  const isNativeAgency = agency.source === 'luna';
   const TABS = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'branding' as const, label: 'White-label' },
-    { id: 'credentials' as const, label: 'Travelify' },
+    ...(isNativeAgency ? [] : [{ id: 'credentials' as const, label: 'Travelify' }]),
     { id: 'travellers' as const, label: 'Travellers' },
     { id: 'invite' as const, label: 'Invite' },
     { id: 'documents' as const, label: 'Documents' },
@@ -1480,6 +1484,12 @@ export default function AgencyDetailPage() {
                   status={agency.status}
                   label={agency.status === 'live' ? 'Live' : agency.status === 'paused' ? 'Paused' : agency.status === 'setup' ? 'Setup' : 'Maintenance'}
                 />
+                {agency.source === 'luna' && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 999,
+                    backgroundColor: '#EEF2FF', color: '#4338CA', border: '1px solid #C7D2FE',
+                  }}>Luna-native</span>
+                )}
               </div>
               <div style={{ fontSize: 13, color: C.textTertiary, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: 'ui-monospace, monospace' }}>{agency.id}</span>

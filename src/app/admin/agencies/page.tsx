@@ -115,6 +115,7 @@ export default function AgenciesListPage() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [controlError, setControlError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +132,12 @@ export default function AgenciesListPage() {
           return;
         }
         const data = await res.json();
-        if (!cancelled) setAgencies(Array.isArray(data.agencies) ? data.agencies : []);
+        if (!cancelled) {
+          setAgencies(Array.isArray(data.agencies) ? data.agencies : []);
+          // Control unreachable: the list still shows Luna-native agencies, but
+          // Travelgenix clients are missing — surface that rather than hide it.
+          setControlError(!!data.controlError);
+        }
       } catch {
         if (!cancelled) setError('Could not reach the server. Please try again.');
       } finally {
@@ -184,6 +190,17 @@ export default function AgenciesListPage() {
             New agency
           </Link>
         </div>
+
+        {controlError && (
+          <div style={{
+            marginBottom: 20, padding: '12px 16px', borderRadius: 10,
+            backgroundColor: '#FFF7ED', border: '1px solid #F59E0B',
+            fontSize: 13, color: C.text, lineHeight: 1.5,
+          }}>
+            <strong>Couldn&rsquo;t reach Control.</strong> Only Luna-native agencies are shown below —
+            your Travelgenix clients will reappear once Control is back.
+          </div>
+        )}
 
         {/* Filters bar */}
         <div style={{

@@ -495,7 +495,7 @@ function BrandingTab({ agency }: { agency: Agency }) {
                 {saveMsg.text}
               </span>
             )}
-            {overridden && (
+            {overridden && agency.source !== 'luna' && (
               <Button variant="secondary" onClick={handleReset}>
                 {resetting ? 'Resetting…' : 'Reset to Control'}
               </Button>

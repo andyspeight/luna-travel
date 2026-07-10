@@ -272,7 +272,7 @@ export async function POST(req: NextRequest) {
 
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
   const name = str(body.name);
-  if (!name) {
+  if (name.length < 2) {
     return NextResponse.json({ error: 'name_required', message: 'Agency name is required' }, { status: 400 });
   }
   const contactEmail = str(body.contactEmail).toLowerCase();

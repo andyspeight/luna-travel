@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { BookingPicker } from '@/components/booking-picker';
 import { AgencyLogo } from '@/components/agency-logo';
+import { OnboardingHome } from '@/components/onboarding-home';
 import { SectionHeading } from '@/components/section-heading';
 import {
   IconPlane,
@@ -38,7 +39,7 @@ import { useCover } from '@/lib/cover-context';
 import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
 
 export default function HomePage() {
-  const { booking } = useBooking();
+  const { booking, onboarding, liveLoading, demoSelected, source } = useBooking();
   const { coverEnabled, coverDismissed } = useCover();
   const { t } = useI18n();
   const { latest } = useAgentMessages();
@@ -77,6 +78,22 @@ export default function HomePage() {
   const hasFlights = booking.flights.length > 0;
   const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
   const inspirations = getInspirations(booking.primaryCountryCode);
+
+  // First-run / un-onboarded visitor (no session, no demo trip chosen): show
+  // the onboarding prompt instead of the fallback demo booking.
+  if (onboarding) {
+    return <OnboardingHome />;
+  }
+
+  // Still checking for a real booking (and no demo chosen) — show a light
+  // loading state rather than briefly flashing the fallback demo trip.
+  if (liveLoading && !demoSelected && source !== 'live') {
+    return (
+      <main className="min-h-[100dvh] flex items-center justify-center" aria-busy="true">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-navy to-teal animate-pulse" />
+      </main>
+    );
+  }
 
   // Cover mode: full-bleed splash takes over the home route until the user
   // taps a dock action (which calls dismiss()). The dashboard then becomes

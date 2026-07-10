@@ -105,7 +105,8 @@ export default function NotificationsPage() {
               Notifications
             </h1>
             <p className="text-sm text-ink-2 mt-1.5">
-              We&rsquo;ll only send you what matters for this trip.
+              Trip updates appear on your home screen and here — we&rsquo;ll only surface
+              what matters.
             </p>
           </header>
 
@@ -144,7 +145,8 @@ export default function NotificationsPage() {
 
           <p className="text-[11px] text-ink-3 mt-5 px-1 inline-flex items-start gap-1.5 leading-relaxed">
             <IconShield2 size={12} className="flex-shrink-0 mt-0.5" />
-            <span>Push tokens are stored encrypted. You can disable any category here at any time.</span>
+            <span>For now these updates appear inside the app — on your home screen and here.
+            Lock-screen notifications on your phone are coming soon.</span>
           </p>
         </main>
       </PageEnter>

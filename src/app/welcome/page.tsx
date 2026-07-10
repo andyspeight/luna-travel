@@ -84,7 +84,7 @@ export default function WelcomePage() {
             label="Booking reference"
             value={ref}
             onChange={setRef}
-            placeholder="e.g. DEMO81297"
+            placeholder="e.g. ABC12345"
             autoCapitalize="characters"
             autoComplete="off"
             name="booking-reference"
@@ -94,7 +94,7 @@ export default function WelcomePage() {
             label="Lead traveller last name"
             value={verifier}
             onChange={setVerifier}
-            placeholder="e.g. Swan"
+            placeholder="e.g. Smith"
             autoCapitalize="words"
             autoComplete="family-name"
             name="last-name"
@@ -122,24 +122,12 @@ export default function WelcomePage() {
             <IconLock size={11} />
             Your details are encrypted end-to-end.
           </div>
-          <a
-            href="mailto:hello@travelaire.co.uk"
-            className="block text-sm text-teal-dark dark:text-teal-light hover:underline inline-flex items-center gap-1.5"
-          >
-            <IconHelp size={14} />
-            Can&rsquo;t find your reference?
-          </a>
-        </div>
-
-        {/* Demo hint for show */}
-        <div className="mt-auto pt-6 text-center">
-          <div className="text-[10px] uppercase tracking-wider text-ink-3 font-semibold mb-1">
-            Demo mode
-          </div>
-          <p className="text-[11px] text-ink-3 leading-relaxed max-w-[280px] mx-auto">
-            Try <strong className="text-ink-2 tabular">DEMO81297</strong> with{' '}
-            <strong className="text-ink-2">Swan</strong>, or open the booking
-            picker (long-press the L logo on the home screen) once you&rsquo;re in.
+          <p className="text-xs text-ink-3 leading-relaxed max-w-[300px] mx-auto inline-flex items-start gap-1.5">
+            <IconHelp size={13} className="mt-0.5 flex-shrink-0" />
+            <span>
+              Can&rsquo;t find your reference? Your travel agent sent you a booking link —
+              open that to add your trip, or ask them to resend it.
+            </span>
           </p>
         </div>
       </main>

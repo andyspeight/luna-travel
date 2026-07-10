@@ -3,34 +3,43 @@
 /**
  * /agency/login?token=… — exchanges a magic-link token for a session.
  *
- * The link an operator sends lands here. We POST the token to
- * /api/agency/login, which sets the lt_agency_session cookie, then send the
- * agency on to the portal. No token, or an invalid/expired one, shows a clear
- * "ask for a fresh link" message rather than a dead end.
+ * The link an operator sends lands here. We read the token ONCE from the URL,
+ * POST it to /api/agency/login (which sets the lt_agency_session cookie), then
+ * send the agency on to the portal. No token, or an invalid/expired one, shows
+ * a clear "ask for a fresh link" message rather than a dead end.
+ *
+ * We read the token from window.location (not the reactive useSearchParams) and
+ * run exactly once (ran-ref guard). That way, stripping the token from the URL
+ * afterwards can't cause the effect to re-read an empty URL and mis-report the
+ * link as "missing".
  */
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-function LoginInner() {
+export default function AgencyLoginPage() {
   const router = useRouter();
-  const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const ran = useRef(false);
 
   useEffect(() => {
-    const token = params.get('token');
+    if (ran.current) return; // guard against a double-invoke (e.g. StrictMode)
+    ran.current = true;
+
+    const token = new URLSearchParams(window.location.search).get('token');
     if (!token) {
       setError('missing');
       return;
     }
-    // Strip the token from the address bar/history right away. It's single-use,
-    // but this keeps it out of browser history and any Referer once it's read.
+
+    // Capture done — strip the token from the address bar/history. Safe now:
+    // nothing re-reads the URL after this point.
     try {
       window.history.replaceState(null, '', '/agency/login');
     } catch {
       /* noop */
     }
-    let cancelled = false;
+
     (async () => {
       try {
         const res = await fetch('/api/agency/login', {
@@ -38,20 +47,16 @@ function LoginInner() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token }),
         });
-        if (cancelled) return;
         if (res.ok) {
           router.replace('/agency');
         } else {
           setError('invalid');
         }
       } catch {
-        if (!cancelled) setError('invalid');
+        setError('invalid');
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [params, router]);
+  }, [router]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -69,13 +74,5 @@ function LoginInner() {
         )}
       </div>
     </div>
-  );
-}
-
-export default function AgencyLoginPage() {
-  return (
-    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#f8fafc' }} />}>
-      <LoginInner />
-    </Suspense>
   );
 }

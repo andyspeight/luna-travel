@@ -137,19 +137,21 @@ export async function probeAeroDataBox(): Promise<{
   reachable: boolean;
   status: number | null;
   credits: number | null;
+  balanceOk: boolean; // the /subscriptions/balance endpoint returned 2xx
+  rawBalance: unknown; // its body, for diagnostics (owner-only)
 }> {
-  if (!ADA_KEY) return { reachable: false, status: null, credits: null };
+  if (!ADA_KEY) return { reachable: false, status: null, credits: null, balanceOk: false, rawBalance: null };
 
-  // 1) Balance — reachability + credits in one call.
+  // 1) Balance — reachability + credits in one call. A 2xx here means the
+  //    subscription system is accessible (even if we can't name the credit
+  //    field), so the pipeline is healthy.
   let status: number | null = null;
   try {
     const res = await fetch(`${ADA_BASE}/subscriptions/balance`, { headers: headers() });
     status = res.status;
     if (res.ok) {
-      const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-      const raw = data?.creditsRemaining ?? data?.subscriptionsBalance ?? data?.balance ?? data?.remaining;
-      const n = raw == null ? NaN : Number(raw);
-      return { reachable: true, status, credits: Number.isFinite(n) ? n : null };
+      const data = await res.json().catch(() => null);
+      return { reachable: true, status, credits: extractCredits(data), balanceOk: true, rawBalance: data };
     }
   } catch {
     status = null;
@@ -158,7 +160,7 @@ export async function probeAeroDataBox(): Promise<{
   // 2) Balance unavailable — confirm the API is up another way (credits unknown).
   const health = await probeStatus('/health/services/airports/EGLL/feeds');
   if (health && health >= 200 && health < 300) {
-    return { reachable: true, status: status ?? health, credits: null };
+    return { reachable: true, status: status ?? health, credits: null, balanceOk: false, rawBalance: null };
   }
 
   // 3) Last resort — a real flight lookup (the call the pipeline actually makes).
@@ -166,10 +168,29 @@ export async function probeAeroDataBox(): Promise<{
   const today = new Date().toISOString().slice(0, 10);
   const flight = await probeStatus(`/flights/number/BA100/${today}?dateLocalRole=Departure`);
   if (flight && ((flight >= 200 && flight < 300) || flight === 204)) {
-    return { reachable: true, status: status ?? flight, credits: null };
+    return { reachable: true, status: status ?? flight, credits: null, balanceOk: false, rawBalance: null };
   }
 
-  return { reachable: false, status: status ?? health ?? flight, credits: null };
+  return { reachable: false, status: status ?? health ?? flight, credits: null, balanceOk: false, rawBalance: null };
+}
+
+/** Pull a credit/units-like number out of the balance response, whatever it's named. */
+function extractCredits(data: unknown, depth = 0): number | null {
+  if (typeof data === 'number') return Number.isFinite(data) ? data : null;
+  if (data && typeof data === 'object' && depth < 3) {
+    const obj = data as Record<string, unknown>;
+    for (const k of ['creditsRemaining', 'subscriptionsBalance', 'balance', 'remaining', 'credits', 'amount', 'value']) {
+      if (typeof obj[k] === 'number') return obj[k] as number;
+    }
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'number' && /credit|balance|remain|unit/i.test(k)) return v;
+      if (v && typeof v === 'object') {
+        const nested = extractCredits(v, depth + 1);
+        if (nested != null) return nested;
+      }
+    }
+  }
+  return null;
 }
 
 // --- helpers ----------------------------------------------------------------

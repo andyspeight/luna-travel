@@ -21,6 +21,7 @@ interface FlightHealth {
   config: { apiKey: boolean; webhookToken: boolean; publicUrl: boolean; internalKey: boolean };
   apiReachable: boolean;
   probeStatus: number | null;
+  balanceOk: boolean;
   creditsRemaining: number | null;
   lowCreditThreshold: number;
   subscriptions: { active: number; total: number; withCoverage: number; lastUpdate: string | null };
@@ -92,8 +93,8 @@ function FlightHealthPanel() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
             <Stat
               icon={<CreditCard size={15} />}
-              label="Alert credits"
-              value={health.creditsRemaining === null ? (health.apiReachable ? 'unknown' : '—') : health.creditsRemaining.toLocaleString()}
+              label="Subscription API"
+              value={health.creditsRemaining !== null ? health.creditsRemaining.toLocaleString() : health.balanceOk ? 'OK' : health.apiReachable ? 'unknown' : '—'}
               warn={health.creditsRemaining !== null && health.creditsRemaining < health.lowCreditThreshold}
             />
             <Stat icon={<Radio size={15} />} label="Active subscriptions" value={String(health.subscriptions.active)} />
@@ -114,8 +115,9 @@ function FlightHealthPanel() {
           </div>
 
           <div className="mt-3 text-[11px] text-tg-text-tertiary">
-            Checked {new Date(health.checkedAt).toLocaleTimeString('en-GB')}. Credit + feed checks read AeroDataBox
-            meta endpoints and do not consume alert credits.
+            Checked {new Date(health.checkedAt).toLocaleTimeString('en-GB')}. The probe reads AeroDataBox meta
+            endpoints (usage 0 — it doesn&rsquo;t consume your quota). Your remaining budget is metered as
+            <strong> API Units</strong> — monitor it in the API.Market dashboard.
           </div>
         </div>
       )}

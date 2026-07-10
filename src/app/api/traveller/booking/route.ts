@@ -33,6 +33,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
 import { getStoredBooking } from '@/lib/stored-booking';
+import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-branding';
 import type { Booking } from '@/types/booking';
 
 export const dynamic = 'force-dynamic';
@@ -119,11 +120,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
+  // Luna's white-label override for this agency (recordId == agency_id). Applied
+  // on top of whatever branding the booking already carries (from Control or the
+  // stored payload), so the traveller always sees the effective brand:
+  // Luna override ?? Control ?? defaults.
+  const brandingOverride = await getBrandingOverride(recordId);
+
   // 1b. Off-platform booking? Return the stored payload directly — there is no
   //     Travelify order to fetch. Still kicks off flight auto-subscribe so live
   //     flight tracking works for manually-added bookings too.
   const stored = await getStoredBooking(recordId, orderRef);
   if (stored?.payload) {
+    applyBrandingOverride(stored.payload.agency, brandingOverride);
     triggerAutoSubscribe(stored.payload, recordId, orderRef);
     return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
   }
@@ -172,6 +180,7 @@ export async function GET(req: NextRequest) {
   if (!booking) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
+  applyBrandingOverride(booking.agency, brandingOverride);
 
   // 4. Fire-and-forget Flight Hub auto-subscribe (deduped server-side).
   triggerAutoSubscribe(booking, recordId, orderRef);

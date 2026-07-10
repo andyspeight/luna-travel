@@ -49,6 +49,9 @@ interface Agency {
   primary: string;
   accent: string;
   appName: string;
+  logoUrl?: string;
+  welcomeMessage?: string;
+  brandingOverridden?: boolean;
   contact: string;
   city: string;
   joined: string;
@@ -286,6 +289,8 @@ function BrandingTab({ agency }: { agency: Agency }) {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [overridden, setOverridden] = useState(!!agency.brandingOverridden);
+  const [resetting, setResetting] = useState(false);
 
   const ALLOWED_LOGO = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
@@ -338,7 +343,13 @@ function BrandingTab({ agency }: { agency: Agency }) {
       if (!res.ok) {
         setSaveMsg({ kind: 'err', text: data?.detail || data?.error || 'Could not save — check the values and try again.' });
       } else {
-        setSaveMsg({ kind: 'ok', text: 'Branding saved.' });
+        setOverridden(true);
+        setSaveMsg({
+          kind: 'ok',
+          text: data?.controlSynced === false
+            ? 'Saved in Luna Travel. Couldn’t sync to Control just now — save again to retry.'
+            : 'Branding saved (and synced to Control).',
+        });
       }
     } catch {
       setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
@@ -347,11 +358,35 @@ function BrandingTab({ agency }: { agency: Agency }) {
     }
   }
 
+  // "Reset to Control": drop the Luna override so this agency goes back to
+  // inheriting its Control branding.
+  async function handleReset() {
+    setResetting(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch(`/api/admin/agencies/${agency.id}/branding`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setSaveMsg({ kind: 'err', text: data?.error || 'Could not reset — try again.' });
+      } else {
+        setOverridden(false);
+        setSaveMsg({ kind: 'ok', text: 'Reverted — now inheriting branding from Control.' });
+      }
+    } catch {
+      setSaveMsg({ kind: 'err', text: 'Could not reach the server.' });
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 24 }}>
       {/* Form */}
       <Card>
-        <CardHeader title="White-label settings" subtitle="Changes apply to all installed devices within a minute." />
+        <CardHeader title="White-label settings" subtitle="Managed here and synced to Control; Luna Travel's values win. Applies to installed devices within a minute." />
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <FormField label="App display name" helper="Shown on the install screen and at the top of every traveller's app.">
             <Input value={appName} onChange={setAppName} />
@@ -459,11 +494,16 @@ function BrandingTab({ agency }: { agency: Agency }) {
                 {saveMsg.text}
               </span>
             )}
+            {overridden && (
+              <Button variant="secondary" onClick={handleReset}>
+                {resetting ? 'Resetting…' : 'Reset to Control'}
+              </Button>
+            )}
             <Button variant="secondary" onClick={() => {
               setPrimary(agency.primary); setAccent(agency.accent);
               setAppName(agency.appName);
-              setWelcome((agency as { welcomeMessage?: string }).welcomeMessage || '');
-              setLogoUrl((agency as { logoUrl?: string }).logoUrl || '');
+              setWelcome(agency.welcomeMessage || '');
+              setLogoUrl(agency.logoUrl || '');
               setSaveMsg(null);
             }}>Discard</Button>
             <Button onClick={handleSave}>{saving ? 'Saving…' : 'Save changes'}</Button>
@@ -1330,6 +1370,7 @@ export default function AgencyDetailPage() {
           appName: a.appName || a.name || 'Luna Travel',
           welcomeMessage: a.welcomeMessage || '',
           logoUrl: a.logoUrl || '',
+          brandingOverridden: !!a.brandingOverridden,
           contact: a.contact || '',
           city: a.website || '',
           joined: a.goLive ? new Date(a.goLive).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—',

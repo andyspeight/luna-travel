@@ -27,6 +27,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, ADMIN_COOKIE_NAME } from '@/lib/admin-session';
+import {
+  getBrandingOverride,
+  getBrandingOverrides,
+  mergeBranding,
+  type BrandingFields,
+} from '@/lib/agency-branding';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -92,6 +98,40 @@ function toAgency(
   };
 }
 
+/**
+ * Overlay Luna's branding override onto a Control-shaped agency so the admin UI
+ * (and anything reading this endpoint) sees the effective brand: Luna override
+ * wins per-field, else the Control value. `brandingOverridden` tells the
+ * White-label tab whether a "Reset to Control" is available.
+ */
+function withEffectiveBranding<
+  T extends {
+    appName: string;
+    logoUrl: string;
+    brandPrimaryColour: string;
+    brandAccentColour: string;
+    welcomeMessage: string;
+  },
+>(agency: T, override: BrandingFields) {
+  const base: BrandingFields = {
+    appName: agency.appName || undefined,
+    logoUrl: agency.logoUrl || undefined,
+    brandPrimaryColour: agency.brandPrimaryColour || undefined,
+    brandAccentColour: agency.brandAccentColour || undefined,
+    welcomeMessage: agency.welcomeMessage || undefined,
+  };
+  const eff = mergeBranding(base, override);
+  return {
+    ...agency,
+    appName: eff.appName || '',
+    logoUrl: eff.logoUrl || '',
+    brandPrimaryColour: eff.brandPrimaryColour || '',
+    brandAccentColour: eff.brandAccentColour || '',
+    welcomeMessage: eff.welcomeMessage || '',
+    brandingOverridden: Object.values(override).some((v) => v !== undefined),
+  };
+}
+
 async function controlGet(path: string, cookieHeader: string) {
   const res = await fetch(`${CONTROL_HOST}${path}`, {
     method: 'GET',
@@ -141,7 +181,11 @@ export async function GET(req: NextRequest) {
         );
       }
       const agency = toAgency(detail.client as ControlClientListRow, detail);
-      return NextResponse.json({ agency, entitlements: detail.entitlements ?? [] }, { status: 200 });
+      const override = await getBrandingOverride(singleId);
+      return NextResponse.json(
+        { agency: withEffectiveBranding(agency, override), entitlements: detail.entitlements ?? [] },
+        { status: 200 },
+      );
     }
 
     // ── Full list ──
@@ -168,7 +212,11 @@ export async function GET(req: NextRequest) {
       .map((r) => toAgency(r.value.c, r.value.detail))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return NextResponse.json({ agencies, total: agencies.length }, { status: 200 });
+    // Overlay Luna branding overrides (batched) so list rows show effective brand.
+    const overrides = await getBrandingOverrides(agencies.map((a) => a.id));
+    const withBranding = agencies.map((a) => withEffectiveBranding(a, overrides.get(a.id) || {}));
+
+    return NextResponse.json({ agencies: withBranding, total: withBranding.length }, { status: 200 });
   } catch (err) {
     console.error('[admin/agencies] Control read failed:', (err as Error).message);
     return NextResponse.json(

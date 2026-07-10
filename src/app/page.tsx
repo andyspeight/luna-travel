@@ -189,7 +189,7 @@ export default function HomePage() {
       <Link href="/itinerary" className="block">
         <article className="rounded-3xl overflow-hidden bg-surface shadow-md hover:shadow-lg transition-shadow">
           <div
-            className="relative h-48 p-4 text-white"
+            className="relative h-56 p-4 text-white"
             style={{ background: hero.gradient }}
           >
             {hero.image && (
@@ -204,6 +204,13 @@ export default function HomePage() {
               className="absolute inset-0"
               style={{ background: hero.glow }}
             />
+            {/* Scrim — lifts the destination + countdown off the image for a
+                cinematic, always-legible cover. */}
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(to top, rgba(2,6,23,0.62) 0%, rgba(2,6,23,0.12) 42%, transparent 68%)' }}
+            />
             <div className="relative flex justify-between items-start">
               <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-light shadow-[0_0_0_3px_rgba(72,202,228,0.3)]" />
@@ -214,10 +221,16 @@ export default function HomePage() {
               </span>
             </div>
             <div className="absolute bottom-5 left-5 right-5">
-              <h2 className="font-serif text-3xl leading-none mb-1">
+              {!tripOver && (
+                <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-3 py-1 rounded-full text-[12px] font-semibold mb-2.5 shadow-sm">
+                  <IconPlane size={13} />
+                  {countdownPill(parts, t, countdownKey(booking.tripStartEvent))}
+                </span>
+              )}
+              <h2 className="font-serif text-[32px] leading-none mb-1.5 drop-shadow-sm">
                 <em>{booking.destinationLabel}</em>
               </h2>
-              <p className="text-sm opacity-90 truncate">
+              <p className="text-sm opacity-95 truncate">
                 {booking.hotels[0]?.name ?? 'Custom itinerary'} · {booking.durationLabel} ·{' '}
                 {booking.travellers.length} traveller{booking.travellers.length === 1 ? '' : 's'}
               </p>
@@ -242,9 +255,7 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <div className="text-center text-[11px] text-ink-2 pb-4">
-            {t(countdownKey(booking.tripStartEvent))}
-          </div>
+          <div className="pb-4" />
         </article>
       </Link>
 
@@ -410,6 +421,14 @@ function countdownKey(event: string): string {
   if (event === 'flight') return 'cd.fly';
   if (event === 'check-in') return 'cd.checkin';
   return 'cd.travel';
+}
+
+/** One elegant line for the hero cover, e.g. "12 days until you fly". */
+function countdownPill(parts: CountdownParts, t: (k: string) => string, key: string): string {
+  const until = t(key);
+  if (parts.days >= 1) return `${parts.days} ${t('cd.days')} ${until}`;
+  if (parts.hours >= 1) return `${parts.hours} ${t('cd.hours')} ${until}`;
+  return `${parts.minutes} ${t('cd.mins')} ${until}`;
 }
 
 function QuickTile({

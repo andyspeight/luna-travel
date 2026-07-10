@@ -12,6 +12,7 @@ import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { getLunaAgency } from '@/lib/agencies';
 import { logAuditEvent } from '@/lib/audit';
+import { getPlatformSettings } from '@/lib/platform-settings';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -107,7 +108,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_departure_date' }, { status: 400 });
   }
 
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const expiryDays = (await getPlatformSettings()).inviteExpiryDays;
+  const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await getSupabaseAdmin()
     .from('invites')

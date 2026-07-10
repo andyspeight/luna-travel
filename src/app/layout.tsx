@@ -7,6 +7,7 @@ import { CoverProvider } from '@/lib/cover-context';
 import { TabBar } from '@/components/tab-bar';
 import { VersionCheck } from '@/components/version-check';
 import { EngagementPing } from '@/components/engagement-ping';
+import { MaintenanceBanner } from '@/components/maintenance-banner';
 import './globals.css';
 
 const inter = Inter({
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <CoverProvider>
                 <VersionCheck />
                 <EngagementPing />
+                <MaintenanceBanner />
                 <div
                   className="min-h-screen pb-[88px]"
                   style={{ paddingTop: 'var(--safe-top)' }}

@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
+import { getPlatformSettings } from '@/lib/platform-settings';
 
 // Dynamic — this route hits the database, no caching
 export const dynamic = 'force-dynamic';
@@ -82,10 +83,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'departureDate must be YYYY-MM-DD' }, { status: 400 });
   }
 
-  // Validate expiry
+  // Validate expiry. When the caller doesn't specify, use the platform default
+  // (Settings → system defaults).
+  const defaultExpiryDays = (await getPlatformSettings()).inviteExpiryDays;
   const expiresInDays = typeof body.expiresInDays === 'number' && body.expiresInDays > 0
     ? Math.min(body.expiresInDays, 365)
-    : 30;
+    : defaultExpiryDays;
   const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString();
 
   // Insert the invite

@@ -19,6 +19,7 @@ import {
   normaliseFlight,
 } from '@/lib/aerodatabox';
 import { safeEqual } from '@/lib/constant-time';
+import { getPlatformSettings } from '@/lib/platform-settings';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -44,6 +45,12 @@ export async function POST(req: NextRequest) {
   }
   if (!adaConfigured()) {
     return NextResponse.json({ ok: false, error: 'flight api not configured' }, { status: 503 });
+  }
+  // Platform kill switch: stop registering NEW flight-alert subscriptions (e.g.
+  // to stop burning API units). Existing watched flights keep updating via the
+  // webhook; only new subscriptions are paused.
+  if ((await getPlatformSettings()).flightAlertsPaused) {
+    return NextResponse.json({ ok: true, paused: true, note: 'flight-alert subscriptions paused' });
   }
 
   let body: { agencyId?: string; bookingRef?: string; legs?: SubscribeLeg[] };

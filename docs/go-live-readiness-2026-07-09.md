@@ -328,3 +328,36 @@ security notes).
 concierge; production env-var confirmation (`TG_INTERNAL_KEY`, `CRON_SECRET`, AI
 backend); CSP validation on the preview deploy; a Control `clients/create`
 endpoint if Travelgenix clients are ever created from Luna.
+
+### Session 3 (10 Jul 2026) — self-serve agency portal + traveller home polish
+
+Closes the stage-2 gap surfaced while reviewing native agencies: they had no way
+in. A non-Travelgenix agency has no Travelgenix ID, so the SSO admin can't be
+their door.
+
+**Passwordless agency portal (`/agency/*`, no SSO).** Magic-link login backed by
+`luna_travel.agency_login_tokens` (single-use, sha256-hashed, atomic
+`used_at is null` consume; migration applied to prod). Session is an
+`lt_agency_session` JWT with a fixed `kind:'agency'` claim so it can never be
+swapped with a traveller `lt_session`. Operators mint a link from the SSO admin
+(agency detail → "Generate access link"); a later "email me a link" self-serve
+path can reuse `createLoginToken` once a transactional-email provider exists
+(there is none today).
+
+**Self-serve surfaces, all `/api/agency/*`, all agency-scoped from the session:**
+branding (with a live phone preview), Trips (manual itinerary builder reusing
+`buildManualBooking`), Documents (upload against a booking ref — delivered to the
+traveller by traveller_id **or** the session's booking ref), and Send access
+(create invite + track status + revoke). An adversarial review confirmed authz
+isolation, single-use tokens and traveller/agency session separation; DB
+round-trips proved cross-agency revoke / delete / document reads are blocked.
+
+**Traveller home.** Cinematic hero (scrim + "{N} days until you fly" pill) and a
+boarding-pass "Up next" card for flights, bringing the live app up to the
+branding-preview standard.
+
+**Still open / owner action:** a transactional-email provider (e.g. Resend) to
+auto-deliver agency magic links and traveller invites (today links are shown to
+copy/send); logo **file** upload in the portal (URL paste only for now); and the
+demo "Seaside Travel" (`ltDEMOPORTAL0001`) agency + sample data seeded in prod
+for the walkthrough — remove before go-live.

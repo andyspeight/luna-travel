@@ -117,6 +117,26 @@ Luna Travel is two connected systems in one repo:
 | **Off-platform invites** | Invite-creation failures on off-platform bookings surface to the agent (retry UI) instead of being swallowed | DONE |
 | **Backend hardening** | Constant-time secret comparison (`safeEqual`) for internal keys + cron bearer; `set_updated_at()` search_path pinned (clears Supabase advisory); sync wording made accurate | DONE |
 
+**Agency portal — self-serve, no SSO (`/agency/*`):**
+
+Luna-native agencies (non-Travelgenix clients) have no Travelgenix ID, so they
+reach a passwordless portal via a magic link and manage only their own agency.
+
+| Area | What landed | Status |
+|---|---|---|
+| **Passwordless auth** | `lt_agency_session` JWT (jose/HS256 over `JWT_SECRET`) with a fixed `kind:'agency'` claim so it can't be swapped with a traveller `lt_session`. Single-use, sha256-hashed magic-link tokens (`agency_login_tokens`, atomic `used_at is null` consume). Operators mint a link from the SSO admin (agency detail → "Generate access link") | DONE |
+| **App branding** | `/agency/branding` — self-serve name, colours, welcome message, logo, with a **cinematic live phone preview** that re-skins as you type. Writes the Luna override store | DONE |
+| **Trips** | `/agency/trips` — itinerary builder (lead, destination, flights, hotels) that reuses `buildManualBooking`, stores an off-platform booking and opens a pending invite. For bookings not in Travelify | DONE |
+| **Documents** | `/agency/documents` — upload vouchers/tickets/insurance against a booking ref (before or after redemption); Delivered/Waiting state; delete. Traveller documents route now also matches by the session's booking ref (agency-scoped) | DONE |
+| **Send access + invites** | `/agency/access` — create an invite (QR + link) and track every invite sent with a status (Pending / Opened / Installed / Expired / Revoked) + one-tap **revoke** (agency-scoped, pending-only) | DONE |
+| **Traveller home polish** | Cinematic hero (scrim + "{N} days until you fly" pill) and a boarding-pass "Up next" card for flights, bringing the live app up to the branding-preview standard | DONE |
+
+Every `/api/agency/*` route self-gates with `requireAgency` and takes the agency
+id from the session (never the request), so an agency can only ever touch its
+own branding, trips, documents and invites. Verified against the live table:
+session cross-rejection, single-use tokens, and cross-agency revoke / delete /
+document isolation are all blocked.
+
 ---
 
 ## What's real vs mock today
@@ -192,6 +212,7 @@ or toggle theme. Hidden from production unless invoked.
 | `pdf_extraction_profiles` | Per-agency PDF-import training — admin hints + confirmed-correct examples fed back into extraction |
 | `reviews` | Post-trip traveller reviews (rating + text) |
 | `sync_events` | Travelify sync-health feed (per-run + per-booking outcomes) |
+| `agency_login_tokens` | Single-use, sha256-hashed magic-link tokens for the Luna-native agency portal (no SSO) |
 
 RLS is on with no policies, so every table is deny-all except the service-role
 client (`getSupabaseAdmin()`), which is the only path that touches them.
@@ -426,6 +447,12 @@ back); **Luna-native agencies** for non-Travelgenix clients (prefix id scheme,
 source-aware routes, Control-outage-tolerant list); an honest **first-run
 onboarding** screen (no fake demo trip) with `/welcome` and notifications copy
 made truthful; off-platform invite-failure surfacing; and backend hardening
-(constant-time secret compares, `set_updated_at` search_path pinned). New
-tables: `agency_branding`, `reviews`, `sync_events`. See
+(constant-time secret compares, `set_updated_at` search_path pinned).
+
+It also adds the **self-serve agency portal** (`/agency/*`, no SSO): passwordless
+magic-link login for Luna-native agencies, with self-serve app branding (live
+phone preview), Trips (manual itinerary builder), Documents (upload against a
+booking), and Send access with invite tracking + revoke. Plus a cinematic pass
+on the traveller home to match the branding preview. New tables:
+`agency_branding`, `reviews`, `sync_events`, `agency_login_tokens`. See
 `docs/go-live-readiness-2026-07-09.md` for the readiness review and gap log.

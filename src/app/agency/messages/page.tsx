@@ -34,6 +34,7 @@ function MessagesPage() {
   const [travellers, setTravellers] = useState<Traveller[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [unread, setUnread] = useState<Record<string, number>>({});
   const ranInit = useRef(false);
 
   useEffect(() => {
@@ -53,7 +54,15 @@ function MessagesPage() {
       setLoadingList(false);
     }
   }, []);
-  useEffect(() => { void loadList(); }, [loadList]);
+  const loadUnread = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agency/messages', { cache: 'no-store' });
+      if (res.ok) setUnread((await res.json()).unread ?? {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => { void loadList(); void loadUnread(); }, [loadList, loadUnread]);
 
   const selected = travellers.find((t) => t.id === selectedId) || null;
 
@@ -63,7 +72,7 @@ function MessagesPage() {
         travellerId={selectedId}
         name={selected?.name || 'Traveller'}
         subtitle={selected ? [selected.destination, selected.bookingRef].filter(Boolean).join(' · ') : ''}
-        onBack={() => setSelectedId(null)}
+        onBack={() => { setSelectedId(null); void loadUnread(); }}
       />
     );
   }
@@ -103,7 +112,13 @@ function MessagesPage() {
                   {[t.destination, t.bookingRef].filter(Boolean).join(' · ') || 'Tap to open the conversation'}
                 </div>
               </div>
-              <MessageSquare size={16} color={P.ink3} />
+              {unread[t.id] > 0 ? (
+                <span style={{ minWidth: 20, height: 20, borderRadius: 999, background: P.teal, color: '#fff', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px', flexShrink: 0 }} aria-label={`${unread[t.id]} unread`}>
+                  {unread[t.id]}
+                </span>
+              ) : (
+                <MessageSquare size={16} color={P.ink3} />
+              )}
             </button>
           ))}
         </div>

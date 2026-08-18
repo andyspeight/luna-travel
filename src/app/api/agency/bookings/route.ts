@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
-import { getLunaAgency } from '@/lib/agencies';
+import { resolvePortalAgency } from '@/lib/agencies';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
 import type { ControlAgency } from '@/lib/order-to-booking';
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const claims = await requireAgency(req as unknown as Request);
   if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
 
-  const agencyRow = await getLunaAgency(claims.agencyId);
+  const agencyRow = await resolvePortalAgency(claims);
   if (!agencyRow || agencyRow.status !== 'live') {
     return NextResponse.json({ error: 'agency_inactive' }, { status: 403 });
   }
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     experiences: Array.isArray(body.experiences) ? (body.experiences as ManualBookingInput['experiences']) : [],
   };
 
-  const agency: ControlAgency = { name: agencyRow.trading_name || agencyRow.name || '', email: agencyRow.contact_email || '' };
+  const agency: ControlAgency = { name: agencyRow.name, email: agencyRow.email };
 
   const supplied = str(body.reference).toUpperCase();
   let reference = supplied || genRef();

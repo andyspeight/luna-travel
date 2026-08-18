@@ -10,7 +10,8 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { newLunaAgencyId, isLunaAgency } from '@/lib/agency-id';
+import { newLunaAgencyId, isLunaAgency, isControlAgency } from '@/lib/agency-id';
+import type { AgencyClaims } from '@/lib/agency-session';
 
 export type AgencySource = 'control' | 'luna';
 
@@ -118,4 +119,51 @@ export async function listLunaAgencies(): Promise<LunaAgencyRow[]> {
   } catch {
     return [];
   }
+}
+
+/** A source-normalised view of the agency behind a portal session. */
+export interface PortalAgency {
+  id: string;
+  source: AgencySource;
+  name: string; // display / trading name
+  legalName: string;
+  email: string;
+  status: string; // 'live' when the agency may act
+}
+
+/**
+ * Resolve the agency behind an agency-portal session, source-aware. This is the
+ * single place the portal's write routes should call to check the agency is
+ * live — never getLunaAgency directly, which only knows the Luna-native store.
+ *
+ *   - Luna-native (lt…): read luna_travel.agencies; status is the row's status.
+ *   - Control (rec…): the session was minted (agency-sso.ts) only after Control
+ *     confirmed the client is entitled to Luna Travel and not suspended, and the
+ *     JWT is signed by us, so a valid Control-sourced session IS proof of a live
+ *     agency. Its display name/email ride in the claims (Control agencies are
+ *     not in the Luna store). A refreshed visit from Control re-validates.
+ *
+ * Returns null only for a Luna-native agency that no longer exists.
+ */
+export async function resolvePortalAgency(claims: AgencyClaims): Promise<PortalAgency | null> {
+  if (claims.source === 'control' && isControlAgency(claims.agencyId)) {
+    return {
+      id: claims.agencyId,
+      source: 'control',
+      name: claims.agencyName || 'Your agency',
+      legalName: claims.agencyName || '',
+      email: claims.email,
+      status: 'live',
+    };
+  }
+  const row = await getLunaAgency(claims.agencyId);
+  if (!row) return null;
+  return {
+    id: row.id,
+    source: 'luna',
+    name: row.trading_name || row.name || '',
+    legalName: row.name || '',
+    email: row.contact_email || '',
+    status: (row.status || '').toLowerCase(),
+  };
 }

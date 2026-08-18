@@ -58,14 +58,33 @@ export async function GET(req: NextRequest) {
   const claims = await requireAgency(req as unknown as Request);
   if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
 
+  const supabase = getSupabaseAdmin();
   const travellerId = (req.nextUrl.searchParams.get('travellerId') || '').trim();
-  if (!travellerId) return NextResponse.json({ error: 'traveller_required' }, { status: 400 });
+
+  // No traveller → the unread summary: replies not yet read by the agency,
+  // grouped by traveller, for inbox badges and the dashboard count.
+  if (!travellerId) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('sent_by')
+      .eq('agency_id', claims.agencyId)
+      .eq('direction', 'traveller_to_agency')
+      .is('agency_read_at', null);
+    if (error) {
+      console.error('[agency/messages] unread', error.message);
+      return NextResponse.json({ error: 'query_failed' }, { status: 500 });
+    }
+    const unread: Record<string, number> = {};
+    ((data || []) as Array<{ sent_by: string | null }>).forEach((r) => {
+      if (r.sent_by) unread[r.sent_by] = (unread[r.sent_by] || 0) + 1;
+    });
+    const total = Object.values(unread).reduce((a, b) => a + b, 0);
+    return NextResponse.json({ ok: true, unread, total });
+  }
 
   if (!(await ownsTraveller(claims.agencyId, travellerId))) {
     return NextResponse.json({ error: 'traveller_not_found' }, { status: 404 });
   }
-
-  const supabase = getSupabaseAdmin();
 
   // A thread has two link paths:
   //   - agency→traveller messages carry a message_recipients row (which also
@@ -124,6 +143,16 @@ export async function GET(req: NextRequest) {
       };
     })
     .sort((a, b) => (a.sentAt < b.sentAt ? -1 : a.sentAt > b.sentAt ? 1 : 0));
+
+  // Opening the thread marks this traveller's replies read by the agency
+  // (best-effort — never block the read on it).
+  await supabase
+    .from('messages')
+    .update({ agency_read_at: new Date().toISOString() })
+    .eq('agency_id', claims.agencyId)
+    .eq('direction', 'traveller_to_agency')
+    .eq('sent_by', travellerId)
+    .is('agency_read_at', null);
 
   return NextResponse.json({ ok: true, messages });
 }

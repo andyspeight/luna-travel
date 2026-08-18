@@ -169,6 +169,7 @@ export interface Booking {
   leadEmail: string;
   destinationLabel: string; // human-readable, e.g. "Maldives" or "Dubai & Athens"
   primaryCountryCode: string; // ISO-2, used to fetch the destination guide
+  locationSlug?: string; // optional city/region slug within the country, for a location-specific hero
   tripStart: string; // ISO — first event date
   tripEnd: string; // ISO — last event date
   tripStartEvent: TripStartEvent;

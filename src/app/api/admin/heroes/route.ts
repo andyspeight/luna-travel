@@ -27,6 +27,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
 import { HERO_DESTINATION_BY_CODE } from '@/data/hero-destinations';
+import { HERO_LOCATIONS_BY_COUNTRY, isKnownLocation } from '@/data/hero-locations';
 import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
@@ -41,14 +42,23 @@ function isValidCode(code: string): boolean {
   return Object.prototype.hasOwnProperty.call(HERO_DESTINATION_BY_CODE, code);
 }
 
-function objectPath(code: string, variant: string): string {
-  return `${code}/${variant}.webp`;
+/**
+ * Storage object path. Country hero: {CODE}/{variant}.webp. Location hero
+ * (city/region within the country): {CODE}/{slug}/{variant}.webp.
+ */
+function objectPath(code: string, variant: string, slug?: string): string {
+  return slug ? `${code}/${slug}/${variant}.webp` : `${code}/${variant}.webp`;
+}
+
+/** Map key used by the client: country = `CODE-variant`, location = `CODE/slug-variant`. */
+function slotKey(code: string, variant: string, slug?: string): string {
+  return slug ? `${code}/${slug}-${variant}` : `${code}-${variant}`;
 }
 
 /** Public URL for an object in the public bucket. */
-function publicUrl(code: string, variant: string): string {
+function publicUrl(code: string, variant: string, slug?: string): string {
   const supabase = getSupabaseAdmin();
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(objectPath(code, variant));
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(objectPath(code, variant, slug));
   return data.publicUrl;
 }
 
@@ -61,44 +71,65 @@ export async function GET(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
-
-  // List every object under the bucket, per-code folder. Supabase list is
-  // per-prefix, so we list the root to get folders, then can derive URLs.
-  // Simpler + cheaper: list each known code's folder is N calls; instead we
-  // list root with a large limit and reconstruct. The bucket is small
-  // (≤200 objects) so a single deep list is fine.
   const heroes: Record<string, { url: string; updatedAt: string | null }> = {};
+  const single = (req.nextUrl.searchParams.get('code') || '').trim().toUpperCase();
 
-  // List top-level "folders" (one per country code that has any image)
-  const { data: folders, error: folderErr } = await supabase
-    .storage
-    .from(BUCKET)
-    .list('', { limit: 1000 });
+  // Drill-down: one country's own heroes PLUS its location (city/region) heroes.
+  if (single) {
+    if (!isValidCode(single)) return NextResponse.json({ error: 'invalid_code' }, { status: 400 });
 
+    // The country's own two slots.
+    const { data: files } = await supabase.storage.from(BUCKET).list(single, { limit: 100 });
+    for (const f of files || []) {
+      if (!f.name) continue;
+      const variant = f.name.replace(/\.webp$/i, '');
+      if (f.name.includes('.') && VARIANTS.has(variant)) {
+        heroes[slotKey(single, variant)] = {
+          url: publicUrl(single, variant),
+          updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
+        };
+      }
+    }
+
+    // Each known location's slots (one list per location that has any image).
+    for (const loc of HERO_LOCATIONS_BY_COUNTRY[single] || []) {
+      const { data: lfiles } = await supabase.storage.from(BUCKET).list(`${single}/${loc.slug}`, { limit: 10 });
+      for (const f of lfiles || []) {
+        const variant = f.name.replace(/\.webp$/i, '');
+        if (!VARIANTS.has(variant)) continue;
+        heroes[slotKey(single, variant, loc.slug)] = {
+          url: publicUrl(single, variant, loc.slug),
+          updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
+        };
+      }
+    }
+    return NextResponse.json({ heroes });
+  }
+
+  // Default: every country's own heroes (country-level grid). Location heroes
+  // are only loaded on demand when a country is drilled into (above).
+  const { data: folders, error: folderErr } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
   if (folderErr) {
-    // Bucket may not exist yet — treat as empty rather than erroring the UI.
     console.warn('[heroes.GET] list root failed (bucket may be new):', folderErr.message);
     return NextResponse.json({ heroes: {} });
   }
 
   for (const folder of folders || []) {
-    // Folders have no metadata/id in the same way files do; skip stray files
     if (!folder.name || folder.name.includes('.')) continue;
     const code = folder.name;
     if (!isValidCode(code)) continue;
 
-    const { data: files } = await supabase
-      .storage
-      .from(BUCKET)
-      .list(code, { limit: 10 });
-
+    const { data: files } = await supabase.storage.from(BUCKET).list(code, { limit: 100 });
     for (const f of files || []) {
       const variant = f.name.replace(/\.webp$/i, '');
-      if (!VARIANTS.has(variant)) continue;
-      heroes[`${code}-${variant}`] = {
-        url: publicUrl(code, variant),
-        updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
-      };
+      // Only the country's own files (ending .webp); slug SUBFOLDERS are skipped
+      // here and surfaced under the drill-down.
+      if (f.name.includes('.') && VARIANTS.has(variant)) {
+        heroes[`${code}-${variant}`] = {
+          url: publicUrl(code, variant),
+          updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
+        };
+      }
     }
   }
 
@@ -123,6 +154,7 @@ export async function POST(req: NextRequest) {
   const file = form.get('file');
   const code = String(form.get('code') || '').trim().toUpperCase();
   const variant = String(form.get('variant') || '').trim().toLowerCase();
+  const slug = String(form.get('slug') || '').trim() || undefined;
 
   // Validate metadata
   if (!isValidCode(code)) {
@@ -130,6 +162,10 @@ export async function POST(req: NextRequest) {
   }
   if (!VARIANTS.has(variant)) {
     return NextResponse.json({ error: 'invalid_variant', message: 'variant must be portrait or landscape' }, { status: 400 });
+  }
+  // A location hero must name a known city/region within this country.
+  if (slug && !isKnownLocation(code, slug)) {
+    return NextResponse.json({ error: 'invalid_location', message: 'Unknown location for this country' }, { status: 400 });
   }
 
   // Validate file
@@ -150,7 +186,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
-  const path = objectPath(code, variant);
+  const path = objectPath(code, variant, slug);
   const bytes = Buffer.from(await file.arrayBuffer());
 
   const { error: uploadErr } = await supabase
@@ -174,19 +210,24 @@ export async function POST(req: NextRequest) {
   }
 
   const actor = req.headers.get('x-admin-email') || 'system';
+  const label = slug
+    ? `${HERO_DESTINATION_BY_CODE[code]} / ${slug} (${variant})`
+    : `${HERO_DESTINATION_BY_CODE[code]} (${variant})`;
   void logAuditEvent({
     eventType: 'hero.uploaded',
     actor,
-    targetId: `${code}-${variant}`,
-    targetLabel: `${HERO_DESTINATION_BY_CODE[code]} (${variant})`,
-    metadata: { code, variant, sizeBytes: file.size },
+    targetId: slotKey(code, variant, slug),
+    targetLabel: label,
+    metadata: { code, variant, slug: slug ?? null, sizeBytes: file.size },
   });
 
   return NextResponse.json({
     ok: true,
     code,
     variant,
-    url: publicUrl(code, variant),
+    slug: slug ?? null,
+    key: slotKey(code, variant, slug),
+    url: publicUrl(code, variant, slug),
   });
 }
 
@@ -200,6 +241,7 @@ export async function DELETE(req: NextRequest) {
 
   const code = (req.nextUrl.searchParams.get('code') || '').trim().toUpperCase();
   const variant = (req.nextUrl.searchParams.get('variant') || '').trim().toLowerCase();
+  const slug = (req.nextUrl.searchParams.get('slug') || '').trim() || undefined;
 
   if (!isValidCode(code)) {
     return NextResponse.json({ error: 'invalid_code' }, { status: 400 });
@@ -207,9 +249,12 @@ export async function DELETE(req: NextRequest) {
   if (!VARIANTS.has(variant)) {
     return NextResponse.json({ error: 'invalid_variant' }, { status: 400 });
   }
+  if (slug && !isKnownLocation(code, slug)) {
+    return NextResponse.json({ error: 'invalid_location' }, { status: 400 });
+  }
 
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.storage.from(BUCKET).remove([objectPath(code, variant)]);
+  const { error } = await supabase.storage.from(BUCKET).remove([objectPath(code, variant, slug)]);
 
   if (error) {
     console.error('[heroes.DELETE] remove failed:', error.message);
@@ -220,9 +265,9 @@ export async function DELETE(req: NextRequest) {
   void logAuditEvent({
     eventType: 'hero.removed',
     actor,
-    targetId: `${code}-${variant}`,
-    targetLabel: `${HERO_DESTINATION_BY_CODE[code]} (${variant})`,
-    metadata: { code, variant },
+    targetId: slotKey(code, variant, slug),
+    targetLabel: slug ? `${HERO_DESTINATION_BY_CODE[code]} / ${slug} (${variant})` : `${HERO_DESTINATION_BY_CODE[code]} (${variant})`,
+    metadata: { code, variant, slug: slug ?? null },
   });
 
   return NextResponse.json({ ok: true });

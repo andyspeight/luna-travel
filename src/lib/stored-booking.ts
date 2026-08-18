@@ -53,6 +53,7 @@ export interface ManualBookingInput {
   leadEmail: string;
   destinationLabel: string;
   countryCode: string; // ISO-2
+  locationSlug?: string; // optional city/region slug within the country (location hero)
   additionalTravellers?: ManualTravellerInput[];
   flights: ManualFlightInput[];
   hotels: ManualHotelInput[];
@@ -148,6 +149,7 @@ export function buildManualBooking(
 
   // Explicit overrides — these drive the destination guide, hero and weather.
   booking.primaryCountryCode = (input.countryCode || booking.primaryCountryCode || '').toUpperCase();
+  if (input.locationSlug) booking.locationSlug = input.locationSlug;
   if (input.destinationLabel) booking.destinationLabel = input.destinationLabel;
   booking.leadEmail = input.leadEmail;
   booking.travelifyOrderId = undefined; // not a Travelify order

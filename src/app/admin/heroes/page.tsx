@@ -21,8 +21,9 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { ImageIcon, Check, Search, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { ImageIcon, Check, Search, Trash2, Loader2, AlertCircle, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { HERO_DESTINATIONS } from '@/data/hero-destinations';
+import { HERO_LOCATIONS_BY_COUNTRY } from '@/data/hero-locations';
 
 type Variant = 'portrait' | 'landscape';
 
@@ -104,6 +105,9 @@ export default function HeroImagesPage() {
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Drill-down: the country code whose city/region locations we're managing.
+  const [country, setCountry] = useState<string | null>(null);
+  const [locLoading, setLocLoading] = useState(false);
 
   useEffect(() => {
     // Default to LIGHT (no longer falls back to the OS dark preference), and
@@ -165,8 +169,25 @@ export default function HeroImagesPage() {
     });
   }, [query, onlyMissing, heroes]);
 
-  const handleFile = async (code: string, spec: VariantSpec, file: File) => {
-    const slotKey = `${code}-${spec.key}`;
+  // Load a country's own heroes + its location heroes on demand (drill-down).
+  const loadCountry = useCallback(async (code: string) => {
+    setLocLoading(true);
+    try {
+      const res = await fetch(`/api/admin/heroes?code=${code}`, { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok) setHeroes((h) => ({ ...h, ...(data.heroes || {}) }));
+    } catch {
+      /* ignore */
+    } finally {
+      setLocLoading(false);
+    }
+  }, []);
+
+  const openCountry = (code: string) => { setCountry(code); void loadCountry(code); };
+
+  // slug omitted → country hero; slug given → location hero (city/region).
+  const handleFile = async (code: string, spec: VariantSpec, file: File, slug?: string) => {
+    const slotKey = slug ? `${code}/${slug}-${spec.key}` : `${code}-${spec.key}`;
     setErrors((e) => ({ ...e, [slotKey]: '' }));
     setBusy((b) => ({ ...b, [slotKey]: true }));
     try {
@@ -178,6 +199,7 @@ export default function HeroImagesPage() {
       fd.append('file', new File([webp], `${code}-${spec.key}.webp`, { type: 'image/webp' }));
       fd.append('code', code);
       fd.append('variant', spec.key);
+      if (slug) fd.append('slug', slug);
 
       const res = await fetch('/api/admin/heroes', { method: 'POST', body: fd, credentials: 'include' });
       const data = await res.json();
@@ -192,12 +214,13 @@ export default function HeroImagesPage() {
     }
   };
 
-  const handleDelete = async (code: string, spec: VariantSpec) => {
-    const slotKey = `${code}-${spec.key}`;
-    if (!confirm(`Remove the ${spec.label} image for this destination?`)) return;
+  const handleDelete = async (code: string, spec: VariantSpec, slug?: string) => {
+    const slotKey = slug ? `${code}/${slug}-${spec.key}` : `${code}-${spec.key}`;
+    if (!confirm(`Remove the ${spec.label} image?`)) return;
     setBusy((b) => ({ ...b, [slotKey]: true }));
     try {
-      const res = await fetch(`/api/admin/heroes?code=${code}&variant=${spec.key}`, { method: 'DELETE', credentials: 'include' });
+      const q = `code=${code}&variant=${spec.key}${slug ? `&slug=${encodeURIComponent(slug)}` : ''}`;
+      const res = await fetch(`/api/admin/heroes?${q}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Delete failed');
       setHeroes((h) => { const n = { ...h }; delete n[slotKey]; return n; });
     } catch (err) {
@@ -247,7 +270,20 @@ export default function HeroImagesPage() {
         </label>
       </div>
 
-      {loading ? (
+      {country ? (
+        <LocationManager
+          code={country}
+          countryName={HERO_DESTINATIONS.find((d) => d.code === country)?.name || country}
+          heroes={heroes}
+          busy={busy}
+          errors={errors}
+          c={c}
+          loading={locLoading}
+          onBack={() => setCountry(null)}
+          onFile={handleFile}
+          onDelete={handleDelete}
+        />
+      ) : loading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: c.textSecondary, fontSize: 14, padding: 40 }}>
           <Loader2 size={18} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Loading hero images…
         </div>
@@ -289,6 +325,15 @@ export default function HeroImagesPage() {
                   );
                 })}
               </div>
+              {HERO_LOCATIONS_BY_COUNTRY[d.code]?.length ? (
+                <button
+                  type="button"
+                  onClick={() => openCountry(d.code)}
+                  style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', borderRadius: 8, border: `1px solid ${c.border}`, background: c.bgTertiary, color: c.textSecondary, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <MapPin size={13} /> {HERO_LOCATIONS_BY_COUNTRY[d.code].length} location{HERO_LOCATIONS_BY_COUNTRY[d.code].length === 1 ? '' : 's'} <ChevronRight size={14} />
+                </button>
+              ) : null}
             </div>
           ))}
         </div>
@@ -357,6 +402,113 @@ function SlotBox({
         >
           <Trash2 size={13} />
         </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Country drill-down: the country's own fallback hero plus a card per city/region
+ * (from the location roster), each with portrait + landscape slots. Uploads carry
+ * the location slug so they land at {CODE}/{slug}/{variant}.webp.
+ */
+function LocationManager({
+  code, countryName, heroes, busy, errors, c, loading, onBack, onFile, onDelete,
+}: {
+  code: string;
+  countryName: string;
+  heroes: Record<string, { url: string; updatedAt: string | null }>;
+  busy: Record<string, boolean>;
+  errors: Record<string, string>;
+  c: typeof LIGHT;
+  loading: boolean;
+  onBack: () => void;
+  onFile: (code: string, spec: VariantSpec, file: File, slug?: string) => void;
+  onDelete: (code: string, spec: VariantSpec, slug?: string) => void;
+}) {
+  const [q, setQ] = useState('');
+  const locations = HERO_LOCATIONS_BY_COUNTRY[code] || [];
+  const shown = locations.filter((l) => !q.trim() || l.name.toLowerCase().includes(q.trim().toLowerCase()));
+
+  const renderSlots = (slug?: string) => (
+    <div style={{ display: 'flex', gap: 10 }}>
+      {SPECS.map((spec) => {
+        const key = slug ? `${code}/${slug}-${spec.key}` : `${code}-${spec.key}`;
+        const hero = heroes[key];
+        const err = errors[key];
+        return (
+          <div key={spec.key} style={{ flex: 1 }}>
+            <SlotBox
+              c={c}
+              hero={hero?.url}
+              busy={!!busy[key]}
+              portrait={spec.key === 'portrait'}
+              ratioLabel={spec.ratioLabel}
+              onPick={(file) => onFile(code, spec, file, slug)}
+              onDelete={() => onDelete(code, spec, slug)}
+            />
+            <div style={{ fontSize: 11, color: hero ? c.success : c.textTertiary, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {hero ? <><Check size={12} /> {spec.label}</> : spec.label}
+            </div>
+            {err && (
+              <div style={{ fontSize: 11, color: c.danger, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <AlertCircle size={12} /> {err}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onBack}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', color: c.textSecondary, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: 14 }}
+      >
+        <ChevronLeft size={16} /> All destinations
+      </button>
+      <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>{countryName} — locations</h2>
+      <p style={{ fontSize: 13, color: c.textSecondary, margin: '0 0 18px', maxWidth: 560 }}>
+        A location hero shows for bookings to that city or region, falling back to the country hero
+        below, then the gradient. Same 9:16 / 16:9 sizes.
+      </p>
+
+      <div style={{ background: c.bgElevated, border: `1px solid ${c.border}`, borderRadius: 12, padding: 14, marginBottom: 22, maxWidth: 340 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ImageIcon size={15} style={{ color: c.accent }} /> Country hero (fallback)
+        </div>
+        {renderSlots()}
+      </div>
+
+      <div style={{ position: 'relative', maxWidth: 320, marginBottom: 16 }}>
+        <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: c.textTertiary }} />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={`Search ${locations.length} locations…`}
+          style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: 8, border: `1px solid ${c.border}`, background: c.bgElevated, color: c.text, fontSize: 14, outline: 'none' }}
+        />
+      </div>
+
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: c.textSecondary, fontSize: 14, padding: 20 }}>
+          <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Loading locations…
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          {shown.map((l) => (
+            <div key={l.slug} style={{ background: c.bgElevated, border: `1px solid ${c.border}`, borderRadius: 12, padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <MapPin size={14} style={{ color: c.accent }} />
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{l.name}</div>
+              </div>
+              {renderSlots(l.slug)}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

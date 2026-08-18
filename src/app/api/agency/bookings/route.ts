@@ -15,6 +15,7 @@ import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
 import type { ControlAgency } from '@/lib/order-to-booking';
+import { isKnownLocation } from '@/data/hero-locations';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -98,12 +99,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'empty_booking', message: 'Add at least one flight or hotel' }, { status: 400 });
   }
 
+  // Optional city/region within the country — drives a location-specific hero.
+  // Ignored (not an error) if it isn't a known location for this country.
+  const locationSlug = str(body.locationSlug);
+  const validLocation = locationSlug && isKnownLocation(countryCode, locationSlug) ? locationSlug : undefined;
+
   const input: ManualBookingInput = {
     leadFirstName,
     leadLastName,
     leadEmail,
     destinationLabel,
     countryCode,
+    locationSlug: validLocation,
     additionalTravellers: Array.isArray(body.additionalTravellers) ? (body.additionalTravellers as ManualBookingInput['additionalTravellers']) : [],
     flights,
     hotels,

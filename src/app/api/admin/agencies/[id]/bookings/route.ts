@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAdmin } from '@/lib/admin-session';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
+import { isKnownLocation } from '@/data/hero-locations';
 import type { ControlAgency } from '@/lib/order-to-booking';
 import { recordImportCorrection, type ProfileDraft } from '@/lib/pdf-profile';
 import { isAgencyId, isControlAgency } from '@/lib/agency-id';
@@ -111,12 +112,17 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'empty_booking', message: 'Add at least one flight or hotel' }, { status: 400 });
   }
 
+  // Optional city/region within the country — drives a location-specific hero.
+  const locationSlug = str(body.locationSlug);
+  const validLocation = locationSlug && isKnownLocation(countryCode, locationSlug) ? locationSlug : undefined;
+
   const input: ManualBookingInput = {
     leadFirstName,
     leadLastName,
     leadEmail,
     destinationLabel,
     countryCode,
+    locationSlug: validLocation,
     additionalTravellers: Array.isArray(body.additionalTravellers)
       ? (body.additionalTravellers as ManualBookingInput['additionalTravellers'])
       : [],

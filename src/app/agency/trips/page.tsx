@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Plane, BedDouble, Trash2, Check, MapPin } from 'lucide-react';
 import { AgencyShell, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
+import { HERO_LOCATIONS_BY_COUNTRY } from '@/data/hero-locations';
 
 interface Trip {
   reference: string;
@@ -115,6 +116,7 @@ function TripForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r
   const [leadEmail, setLeadEmail] = useState('');
   const [destinationLabel, setDestinationLabel] = useState('');
   const [countryCode, setCountryCode] = useState('');
+  const [locationSlug, setLocationSlug] = useState('');
   const [flights, setFlights] = useState<FlightRow[]>([emptyFlight()]);
   const [hotels, setHotels] = useState<HotelRow[]>([emptyHotel()]);
   const [saving, setSaving] = useState(false);
@@ -130,7 +132,7 @@ function TripForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          leadFirstName, leadLastName, leadEmail, destinationLabel, countryCode,
+          leadFirstName, leadLastName, leadEmail, destinationLabel, countryCode, locationSlug: locationSlug || undefined,
           flights: cleanFlights.map((f) => ({ ...f, departAt: toIso(f.departAt), arriveAt: toIso(f.arriveAt) })),
           hotels: cleanHotels.map((h) => ({ name: h.name, city: h.city, country: h.country || destinationLabel, checkIn: h.checkIn, checkOut: h.checkOut, board: h.board || undefined })),
         }),
@@ -162,8 +164,20 @@ function TripForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r
       </Grid>
       <Grid>
         <Field label="Destination" hint="e.g. Santorini"><input value={destinationLabel} onChange={(e) => setDestinationLabel(e.target.value)} style={inp} /></Field>
-        <Field label="Country code" hint="2 letters, e.g. GR"><input value={countryCode} onChange={(e) => setCountryCode(e.target.value.toUpperCase().slice(0, 2))} maxLength={2} style={inp} /></Field>
+        <Field label="Country code" hint="2 letters, e.g. GR"><input value={countryCode} onChange={(e) => { setCountryCode(e.target.value.toUpperCase().slice(0, 2)); setLocationSlug(''); }} maxLength={2} style={inp} /></Field>
       </Grid>
+      {(HERO_LOCATIONS_BY_COUNTRY[countryCode]?.length ?? 0) > 0 && (
+        <Grid>
+          <Field label="Area (optional)" hint="Sets a city/region hero image on the traveller's app">
+            <select value={locationSlug} onChange={(e) => setLocationSlug(e.target.value)} style={inp}>
+              <option value="">Whole country</option>
+              {HERO_LOCATIONS_BY_COUNTRY[countryCode].map((l) => (
+                <option key={l.slug} value={l.slug}>{l.name}</option>
+              ))}
+            </select>
+          </Field>
+        </Grid>
+      )}
 
       {/* Flights */}
       <Section icon={<Plane size={15} />} title="Flights" onAdd={() => setFlights((f) => [...f, emptyFlight()])}>

@@ -74,7 +74,7 @@ export default function HomePage() {
   const lead = booking.travellers.find((t) => t.isLead) ?? booking.travellers[0];
   const next = nextEvent(booking);
   const upcoming = buildTimeline(booking).filter((e) => !e.past).slice(0, 3);
-  const hero = destinationHero(booking.primaryCountryCode);
+  const hero = destinationHero(booking.primaryCountryCode, booking.locationSlug);
   const hasFlights = booking.flights.length > 0;
   const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
   const inspirations = getInspirations(booking.primaryCountryCode);
@@ -199,6 +199,13 @@ export default function HomePage() {
                 style={{ background: `center/cover no-repeat url("${hero.image}")` }}
               />
             )}
+            {hero.imageLocation && (
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
+              />
+            )}
             <div
               aria-hidden
               className="absolute inset-0"
@@ -316,6 +323,13 @@ export default function HomePage() {
                   aria-hidden
                   className="absolute inset-0"
                   style={{ background: `center/cover no-repeat url("${hero.image}")` }}
+                />
+              )}
+              {hero.imageLocation && (
+                <div
+                  aria-hidden
+                  className="absolute inset-0"
+                  style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
                 />
               )}
               <div

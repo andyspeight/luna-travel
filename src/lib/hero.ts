@@ -22,8 +22,15 @@
 export interface DestinationHero {
   gradient: string;
   glow: string;
-  /** Optional uploaded photo layered over the gradient. Empty if none/unset. */
+  /** Country photo layered over the gradient. Empty if none/unset. */
   image?: string;
+  /**
+   * Location (city/region) photo, layered ON TOP of the country image. When it
+   * fails to load (none uploaded for this location) it is transparent, so the
+   * country image shows through, then the gradient — the location → country →
+   * gradient fallback chain. Empty unless a location slug was supplied.
+   */
+  imageLocation?: string;
 }
 
 const DEFAULT: DestinationHero = {
@@ -59,19 +66,31 @@ const BUCKET = 'destination-heroes';
 
 /**
  * Deterministic public URL for an uploaded hero, or '' when the Supabase
- * public URL env var isn't set. Path matches the admin upload route.
+ * public URL env var isn't set. Path matches the admin upload route:
+ *   country  → {CODE}/{variant}.webp
+ *   location → {CODE}/{slug}/{variant}.webp  (when locationSlug is given)
  */
-export function heroImageUrl(countryCode: string, variant: 'portrait' | 'landscape'): string {
+export function heroImageUrl(
+  countryCode: string,
+  variant: 'portrait' | 'landscape',
+  locationSlug?: string,
+): string {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base || !countryCode) return '';
   const code = countryCode.toUpperCase();
-  return `${base}/storage/v1/object/public/${BUCKET}/${code}/${variant}.webp`;
+  const path = locationSlug ? `${code}/${locationSlug}/${variant}.webp` : `${code}/${variant}.webp`;
+  return `${base}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
-export function destinationHero(countryCode: string): DestinationHero {
+export function destinationHero(countryCode: string, locationSlug?: string): DestinationHero {
   const base = HEROES[countryCode.toUpperCase()] ?? DEFAULT;
   const image = heroImageUrl(countryCode, 'landscape');
-  return image ? { ...base, image } : base;
+  const imageLocation = locationSlug ? heroImageUrl(countryCode, 'landscape', locationSlug) : '';
+  return {
+    ...base,
+    ...(image ? { image } : {}),
+    ...(imageLocation ? { imageLocation } : {}),
+  };
 }
 
 export function countryFlag(cc: string): string {
@@ -134,18 +153,26 @@ const DEFAULT_COVER: CinematicCover = {
  * used as the photo layer (under the legibility gradients) in preference to
  * the bundled static webp. Falls back to the bundled cover, then the default.
  */
-export function cinematicCover(countryCode: string): CinematicCover {
+export function cinematicCover(countryCode: string, locationSlug?: string): CinematicCover {
   const code = countryCode.toUpperCase();
-  const uploaded = heroImageUrl(countryCode, 'portrait');
+  const countryPhoto = heroImageUrl(countryCode, 'portrait');
+  const locationPhoto = locationSlug ? heroImageUrl(countryCode, 'portrait', locationSlug) : '';
 
-  if (uploaded) {
+  if (countryPhoto || locationPhoto) {
     // Reuse the per-destination legibility gradients where we have them, else
-    // a sensible default top/bottom darkening, then the uploaded photo.
+    // a sensible default top/bottom darkening. These sit ON TOP of the photos.
     const topBottom = code === 'AE'
       ? ['linear-gradient(180deg, rgba(15,23,42,0.18) 0%, transparent 25%)', 'linear-gradient(180deg, transparent 50%, rgba(15,23,42,0.55) 100%)']
       : ['linear-gradient(180deg, rgba(15,23,42,0.20) 0%, transparent 22%)', 'linear-gradient(180deg, transparent 55%, rgba(2,32,71,0.45) 100%)'];
+    // Photos most-specific first (location over country); a missing image is a
+    // transparent layer, so the next one shows through. A solid base last means
+    // an all-missing stack degrades to navy, never to transparency.
+    const photos: string[] = [];
+    if (locationPhoto) photos.push(`url("${locationPhoto}") center/cover no-repeat`);
+    if (countryPhoto) photos.push(`url("${countryPhoto}") center/cover no-repeat`);
+    photos.push('linear-gradient(180deg, #1B2B5B 0%, #0F172A 100%)');
     return {
-      background: [...topBottom, `url("${uploaded}") center/cover no-repeat`].join(', '),
+      background: [...topBottom, ...photos].join(', '),
       credit: COVERS[code]?.credit,
     };
   }

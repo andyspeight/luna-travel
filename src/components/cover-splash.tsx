@@ -35,7 +35,7 @@ import { leadTraveller } from '@/lib/booking-helpers';
 export function CoverSplash() {
   const { booking } = useBooking();
   const { dismiss } = useCover();
-  const cover = cinematicCover(booking.primaryCountryCode);
+  const cover = cinematicCover(booking.primaryCountryCode, booking.locationSlug);
   const lead = leadTraveller(booking);
   const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
 

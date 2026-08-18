@@ -14,7 +14,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare } from 'lucide-react';
+import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane } from 'lucide-react';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -137,10 +137,11 @@ export function useAgencyMe() {
   return ctx;
 }
 
-type NavKey = 'overview' | 'travellers' | 'messages' | 'branding' | 'trips' | 'documents' | 'access';
+type NavKey = 'overview' | 'travellers' | 'flights' | 'messages' | 'branding' | 'trips' | 'documents' | 'access';
 const NAV: { key: NavKey; label: string; href: string; icon: typeof LayoutGrid }[] = [
   { key: 'overview', label: 'Overview', href: '/agency', icon: LayoutGrid },
   { key: 'travellers', label: 'Travellers', href: '/agency/travellers', icon: Users },
+  { key: 'flights', label: 'Flights', href: '/agency/flights', icon: Plane },
   { key: 'messages', label: 'Messages', href: '/agency/messages', icon: MessageSquare },
   { key: 'branding', label: 'App branding', href: '/agency/branding', icon: Palette },
   { key: 'trips', label: 'Trips', href: '/agency/trips', icon: Luggage },

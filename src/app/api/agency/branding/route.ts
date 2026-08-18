@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgency } from '@/lib/agency-session';
-import { getLunaAgency } from '@/lib/agencies';
+import { resolvePortalAgency } from '@/lib/agencies';
 import {
   getBrandingOverride,
   setBrandingOverride,
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   // Re-check the agency still exists and is live — the session lasts 30 days, so
   // an offboarded/suspended agency must not keep writing branding travellers see.
-  const agency = await getLunaAgency(claims.agencyId);
+  const agency = await resolvePortalAgency(claims);
   if (!agency || agency.status !== 'live') {
     return NextResponse.json({ error: 'agency_inactive' }, { status: 403 });
   }

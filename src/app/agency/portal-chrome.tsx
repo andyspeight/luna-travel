@@ -153,7 +153,15 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/agency/me', { cache: 'no-store' });
+      let res = await fetch('/api/agency/me', { cache: 'no-store' });
+      // No agency session yet. A Control agent arriving from their dashboard
+      // still carries the central tg_session, so try to exchange it for a portal
+      // session (open access, no magic link) and load again. A Luna-native agent
+      // with no such session simply falls through to the signed-out card.
+      if (res.status === 401) {
+        const sso = await fetch('/api/agency/session/sso', { method: 'POST' });
+        if (sso.ok) res = await fetch('/api/agency/me', { cache: 'no-store' });
+      }
       if (!res.ok) return setState('out');
       setMe((await res.json()) as AgencyMe);
       setState('in');
@@ -196,8 +204,9 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
           </div>
           <div style={{ fontFamily: SERIF, fontSize: 24, color: P.ink }}>Agency portal</div>
           <p style={{ color: P.ink2, fontSize: 14, marginTop: 10, lineHeight: 1.55 }}>
-            You&rsquo;re signed out. Access uses a one-time link — ask your Luna Travel contact to
-            send you a fresh sign-in link.
+            Open Luna Travel from your Travelgenix Control dashboard and you&rsquo;ll be signed in
+            automatically. If your agency doesn&rsquo;t use Control, ask your Luna Travel contact for
+            a one-time sign-in link.
           </p>
         </div>
       </Sky>

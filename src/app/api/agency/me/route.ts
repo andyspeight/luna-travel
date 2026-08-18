@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgency } from '@/lib/agency-session';
-import { getLunaAgency } from '@/lib/agencies';
+import { resolvePortalAgency } from '@/lib/agencies';
 import { getBrandingOverride } from '@/lib/agency-branding';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
 
-  const agency = await getLunaAgency(claims.agencyId);
+  const agency = await resolvePortalAgency(claims);
   if (!agency) {
     return NextResponse.json({ error: 'agency_not_found' }, { status: 404 });
   }
@@ -28,9 +28,9 @@ export async function GET(req: NextRequest) {
     ok: true,
     agency: {
       id: agency.id,
-      name: agency.trading_name || agency.name,
-      legalName: agency.name,
-      contactEmail: agency.contact_email,
+      name: agency.name,
+      legalName: agency.legalName,
+      contactEmail: agency.email || null,
       email: claims.email,
     },
     branding,

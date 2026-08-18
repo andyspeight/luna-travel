@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
-import { getLunaAgency } from '@/lib/agencies';
+import { resolvePortalAgency } from '@/lib/agencies';
 import { logAuditEvent } from '@/lib/audit';
 import { getPlatformSettings } from '@/lib/platform-settings';
 
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
 
   // Re-check the agency is still live before minting live invites on its behalf.
-  const agency = await getLunaAgency(claims.agencyId);
+  const agency = await resolvePortalAgency(claims);
   if (!agency || agency.status !== 'live') {
     return NextResponse.json({ error: 'agency_inactive' }, { status: 403 });
   }

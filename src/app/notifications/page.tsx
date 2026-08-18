@@ -44,6 +44,7 @@ interface AgentMessage {
   priority: string;
   sentAt: string;
   readAt: string | null;
+  mine?: boolean; // true = the traveller's own reply (renders on the right)
 }
 
 export default function NotificationsPage() {
@@ -183,6 +184,9 @@ function msgLink(atts: MsgAttachment[]): { url: string; label?: string } | undef
 
 function AgentMessages() {
   const [messages, setMessages] = useState<AgentMessage[] | null>(null);
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -205,12 +209,38 @@ function AgentMessages() {
     };
   }, []);
 
+  const send = async () => {
+    const text = reply.trim();
+    if (!text || sending) return;
+    setSending(true);
+    setError('');
+    try {
+      const res = await fetch('/api/traveller/messages', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: text }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError('Could not send. Please try again.');
+        return;
+      }
+      setMessages((prev) => [...(prev ?? []), data.message as AgentMessage]);
+      setReply('');
+    } catch {
+      setError('Could not send. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Loading: a quiet placeholder so the screen doesn't jump.
   if (messages === null) {
     return (
       <section className="mt-4">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2 px-1">
-          From your travel agent
+          Your travel agent
         </h2>
         <div className="rounded-2xl bg-surface border border-line-light px-3.5 py-3 text-xs text-ink-3">
           Loading…
@@ -219,22 +249,56 @@ function AgentMessages() {
     );
   }
 
-  // Nothing sent yet: render nothing, keep the screen clean.
+  // Nothing sent yet: render nothing, keep the screen clean. The agent starts
+  // the conversation; once they message, the reply box appears here.
   if (messages.length === 0) return null;
 
   return (
     <section className="mt-4">
       <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2 px-1">
-        From your travel agent
+        Your travel agent
       </h2>
       <ul className="space-y-2.5">
         {messages.map((m) => (
-          <li key={m.id}>
-            <AgentMessageCard m={m} />
-          </li>
+          <li key={m.id}>{m.mine ? <MyMessageBubble m={m} /> : <AgentMessageCard m={m} />}</li>
         ))}
       </ul>
+
+      {/* Reply composer */}
+      <div className="mt-2.5 rounded-2xl bg-surface border border-line-light shadow-sm p-2.5">
+        <textarea
+          value={reply}
+          onChange={(e) => setReply(e.target.value)}
+          rows={2}
+          maxLength={4000}
+          placeholder="Reply to your travel agent…"
+          className="w-full resize-none bg-transparent text-sm text-ink placeholder:text-ink-3 leading-snug px-1.5 py-1 focus:outline-none"
+        />
+        {error && <div className="text-[11px] text-red-600 px-1.5 mt-0.5">{error}</div>}
+        <div className="flex justify-end mt-1">
+          <button
+            type="button"
+            onClick={send}
+            disabled={sending || !reply.trim()}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-navy text-white text-sm font-semibold px-4 py-2 disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
     </section>
+  );
+}
+
+function MyMessageBubble({ m }: { m: AgentMessage }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[82%] rounded-2xl rounded-br-md bg-navy text-white shadow-sm px-3.5 py-2.5">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-white/70 mb-0.5">You</div>
+        <div className="text-sm leading-snug whitespace-pre-wrap break-words">{m.body}</div>
+        <div className="text-[10px] text-white/60 mt-1 text-right">{msgRelTime(m.sentAt)}</div>
+      </div>
+    </div>
   );
 }
 

@@ -46,15 +46,18 @@ async function supabaseOk(): Promise<boolean> {
 }
 
 export async function GET(req: NextRequest) {
-  const claims = await requireAdmin(req as unknown as Request);
-  if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
-
-  const [settings, supabase, ada, control] = await Promise.all([
+  // Run auth alongside the (bounded) health probes rather than before them, so
+  // the route's wall-clock is the slowest single call, not their sum. The
+  // caller is already validated by the edge middleware before this handler
+  // runs; requireAdmin here is defence in depth, so probing in parallel is safe.
+  const [claims, settings, supabase, ada, control] = await Promise.all([
+    requireAdmin(req as unknown as Request),
     getPlatformSettings(),
     supabaseOk(),
     probeAeroDataBox(),
     controlReachable(),
   ]);
+  if (!claims) return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
 
   const env = {
     SUPABASE_URL: !!process.env.SUPABASE_URL,

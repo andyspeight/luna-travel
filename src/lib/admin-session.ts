@@ -74,7 +74,14 @@ export async function verifyAdminSession(
 ): Promise<AdminClaims | null> {
   if (!cookieHeader) return null;
 
+  // Bound the call so a slow/hanging Control can never stall the caller. This
+  // runs in Edge middleware on every admin API request; without a timeout a
+  // stuck /api/auth/me hangs the whole function to Vercel's 25s limit and the
+  // request 504s (observed on /api/admin/settings). 9s comfortably covers a
+  // cold Control (Airtable) response while still failing fast on a real hang.
   let res: Response;
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 9000);
   try {
     res = await fetch(ME_URL, {
       method: 'GET',
@@ -84,11 +91,14 @@ export async function verifyAdminSession(
         Accept: 'application/json'
       },
       // Never cache an auth check.
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: ctrl.signal
     });
   } catch {
-    // Network error reaching id.travelify.io — fail closed.
+    // Network error, or the timeout aborted the request — fail closed.
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (res.status === 401) return null;

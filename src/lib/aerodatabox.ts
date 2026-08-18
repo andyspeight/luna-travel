@@ -15,6 +15,22 @@ function headers() {
   return { 'x-api-market-key': ADA_KEY, Accept: 'application/json' };
 }
 
+/**
+ * fetch with a hard timeout. Used by the health probes so a slow/hanging
+ * AeroDataBox can never stall the admin Settings route (which runs several of
+ * these) into a 25s function timeout. Aborting rejects, which every probe
+ * caller already treats as "not reachable".
+ */
+async function adaFetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export function adaConfigured(): boolean {
   return !!ADA_KEY;
 }
@@ -114,7 +130,7 @@ export async function getBalance(): Promise<{ creditsRemaining: number } | null>
 
 async function probeStatus(path: string): Promise<number | null> {
   try {
-    const res = await fetch(`${ADA_BASE}${path}`, { headers: headers() });
+    const res = await adaFetch(`${ADA_BASE}${path}`, { headers: headers() }, 3500);
     return res.status;
   } catch {
     return null; // network error / DNS / timeout
@@ -147,7 +163,7 @@ export async function probeAeroDataBox(): Promise<{
   //    field), so the pipeline is healthy.
   let status: number | null = null;
   try {
-    const res = await fetch(`${ADA_BASE}/subscriptions/balance`, { headers: headers() });
+    const res = await adaFetch(`${ADA_BASE}/subscriptions/balance`, { headers: headers() }, 3500);
     status = res.status;
     if (res.ok) {
       const data = await res.json().catch(() => null);

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Plane, BedDouble, Compass, Image as ImageIcon, CheckCircle2, Copy, ExternalLink, X, FileUp, Sparkles, AlertTriangle } from 'lucide-react';
 import QRCode from 'qrcode';
+import { HERO_LOCATIONS_BY_COUNTRY } from '@/data/hero-locations';
 
 const C = {
   bg: '#F8FAFC', bgElevated: '#FFFFFF', bgTertiary: '#F1F5F9', border: '#E2E8F0',
@@ -61,6 +62,7 @@ export default function NewBookingPage() {
   const [leadEmail, setLeadEmail] = useState('');
   const [destinationLabel, setDestinationLabel] = useState('');
   const [countryCode, setCountryCode] = useState('');
+  const [locationSlug, setLocationSlug] = useState('');
   const [reference, setReference] = useState('');
   const [flights, setFlights] = useState<FlightRow[]>([emptyFlight()]);
   const [hotels, setHotels] = useState<HotelRow[]>([emptyHotel()]);
@@ -147,7 +149,7 @@ export default function NewBookingPage() {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           reference: reference || undefined, agencyName: agency?.name, agencyEmail: agency?.contact,
-          leadFirstName, leadLastName, leadEmail, destinationLabel, countryCode,
+          leadFirstName, leadLastName, leadEmail, destinationLabel, countryCode, locationSlug: locationSlug || undefined,
           flights: cleanFlights, hotels: cleanHotels, experiences: cleanExps,
           learn,
         }),
@@ -263,8 +265,18 @@ export default function NewBookingPage() {
           <Card title="Trip">
             <Grid>
               <Field label="Destination label" helper="e.g. Mallorca"><Input value={destinationLabel} onChange={setDestinationLabel} /></Field>
-              <Field label="Country code (ISO-2)" helper="e.g. ES — drives guide, weather & hero"><Input value={countryCode} onChange={(v) => setCountryCode(v.toUpperCase().slice(0, 2))} /></Field>
+              <Field label="Country code (ISO-2)" helper="e.g. ES — drives guide, weather & hero"><Input value={countryCode} onChange={(v) => { setCountryCode(v.toUpperCase().slice(0, 2)); setLocationSlug(''); }} /></Field>
             </Grid>
+            {(HERO_LOCATIONS_BY_COUNTRY[countryCode]?.length ?? 0) > 0 && (
+              <Field label="Area (optional)" helper="City/region hero — falls back to the country hero">
+                <select value={locationSlug} onChange={(e) => setLocationSlug(e.target.value)} style={selectStyle}>
+                  <option value="">Whole country</option>
+                  {HERO_LOCATIONS_BY_COUNTRY[countryCode].map((l) => (
+                    <option key={l.slug} value={l.slug}>{l.name}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="Booking reference (optional)" helper="Blank = auto-generate (LT-XXXXXX)."><Input value={reference} onChange={(v) => setReference(v.toUpperCase())} /></Field>
           </Card>
 

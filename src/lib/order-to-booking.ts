@@ -29,6 +29,7 @@ import type {
   Agency,
   TripStartEvent,
 } from '@/types/booking';
+import { matchLocationSlug } from '@/lib/location-match';
 
 // ───────── Loosely-typed view of the trimmed Control/Travelify order ─────────
 // We keep these permissive: the order is sanitised server-side, and we never
@@ -377,6 +378,12 @@ export function orderToBooking(
     primaryCountryCode = '';
   }
 
+  // Best-effort city/region match for a location-specific hero — auto-synced
+  // bookings have no human "pick the area" step. Signals are the hotel cities
+  // and the destination label, scoped to this booking's own country. Returns
+  // undefined (country hero) unless it matches confidently.
+  const locationSlug = matchLocationSlug(primaryCountryCode, [...hotelCities, destinationLabel]);
+
   // ----- Payment -----
   let payment: PaymentBreakdown | undefined;
   const currency = order.currency || items.find((i) => i.currency)?.currency || '';
@@ -409,6 +416,7 @@ export function orderToBooking(
     leadEmail: order.customerEmail || '',
     destinationLabel,
     primaryCountryCode,
+    locationSlug,
     tripStart,
     tripEnd,
     tripStartEvent,

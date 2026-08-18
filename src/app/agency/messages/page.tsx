@@ -8,8 +8,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquare, ChevronLeft, Send, AlertTriangle, ExternalLink } from 'lucide-react';
-import { AgencyShell, Callout, P, SERIF, card, primaryBtn } from '../portal-chrome';
+import { MessageSquare, ChevronLeft, Send, AlertTriangle, ExternalLink, Megaphone, Check } from 'lucide-react';
+import { AgencyShell, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
 
 interface Traveller {
   id: string;
@@ -35,6 +35,7 @@ function MessagesPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [showBroadcast, setShowBroadcast] = useState(false);
   const ranInit = useRef(false);
 
   useEffect(() => {
@@ -79,11 +80,22 @@ function MessagesPage() {
 
   return (
     <div>
-      <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Messages</h1>
-      <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
-        Message a traveller directly in their app. They see it the moment they open their trip, and
-        can reply back to you here.
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Messages</h1>
+          <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
+            Message a traveller directly in their app. They see it the moment they open their trip,
+            and can reply back to you here.
+          </p>
+        </div>
+        {travellers.length > 0 && (
+          <button type="button" onClick={() => setShowBroadcast(true)} style={{ ...ghostBtn, display: 'inline-flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}>
+            <Megaphone size={15} /> Broadcast
+          </button>
+        )}
+      </div>
+
+      {showBroadcast && <BroadcastComposer count={travellers.length} onClose={() => setShowBroadcast(false)} />}
 
       {loadingList ? (
         <p style={{ color: P.ink3, fontSize: 13, marginTop: 18 }}>Loading…</p>
@@ -126,6 +138,110 @@ function MessagesPage() {
     </div>
   );
 }
+
+function BroadcastComposer({ count, onClose }: { count: number; onClose: () => void }) {
+  const [scope, setScope] = useState<'all' | 'upcoming'>('all');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [priority, setPriority] = useState('info');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<number | null>(null);
+  const [error, setError] = useState('');
+
+  const send = async () => {
+    if (!body.trim()) return;
+    setSending(true);
+    setError('');
+    try {
+      const res = await fetch('/api/agency/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope, subject: subject.trim() || undefined, body: body.trim(), priority }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.message || 'Could not send. Please try again.');
+        return;
+      }
+      setSent(data.count ?? 0);
+    } catch {
+      setError('Could not send. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Broadcast a message" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(9,14,32,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...card, width: '100%', maxWidth: 460, padding: 22, margin: 'auto' }}>
+        {sent === null ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Megaphone size={18} color={P.tealDark} />
+              <h2 style={{ fontFamily: SERIF, fontSize: 20, color: P.ink, margin: 0 }}>Broadcast a message</h2>
+            </div>
+            <p style={{ fontSize: 13, color: P.ink2, marginTop: 6, lineHeight: 1.5 }}>
+              Send one message to a group of your {count} travellers at once.
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <ScopeBtn active={scope === 'all'} onClick={() => setScope('all')} label="All travellers" />
+              <ScopeBtn active={scope === 'upcoming'} onClick={() => setScope('upcoming')} label="Departing soon" />
+            </div>
+            <input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={200} placeholder="Subject (optional)" style={{ ...inputStyle, marginTop: 12 }} />
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} maxLength={4000} placeholder="Your message to everyone…" style={{ ...inputStyle, marginTop: 8, resize: 'vertical', lineHeight: 1.5 }} />
+            {error && <p style={{ color: '#dc2626', fontSize: 13, margin: '8px 0 0' }}>{error}</p>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: P.ink2 }}>
+                Priority
+                <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ border: `1px solid ${P.line}`, borderRadius: 8, padding: '7px 9px', fontSize: 13, color: P.ink, background: '#fff' }}>
+                  <option value="info">Normal</option>
+                  <option value="important">Important</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </label>
+              <div style={{ flex: 1 }} />
+              <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
+              <button type="button" onClick={send} disabled={sending || !body.trim()} style={{ ...primaryBtn, display: 'inline-flex', alignItems: 'center', gap: 7, opacity: sending || !body.trim() ? 0.6 : 1 }}>
+                <Send size={15} /> {sending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '10px 0' }}>
+            <span style={{ display: 'inline-flex', width: 48, height: 48, borderRadius: 999, background: '#d1fae5', color: '#047857', alignItems: 'center', justifyContent: 'center' }}>
+              <Check size={24} />
+            </span>
+            <div style={{ fontFamily: SERIF, fontSize: 20, color: P.ink, marginTop: 12 }}>
+              Sent to {sent} {sent === 1 ? 'traveller' : 'travellers'}
+            </div>
+            <p style={{ fontSize: 13, color: P.ink2, marginTop: 6 }}>They&rsquo;ll see it the next time they open their trip.</p>
+            <button type="button" onClick={onClose} style={{ ...primaryBtn, marginTop: 14 }}>Done</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScopeBtn({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button type="button" onClick={onClick} style={{ flex: 1, padding: '9px 10px', borderRadius: 10, border: `1.5px solid ${active ? P.teal : P.line}`, background: active ? `${P.teal}12` : '#fff', color: active ? P.navy : P.ink2, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+      {label}
+    </button>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  border: `1px solid ${P.line}`,
+  borderRadius: 11,
+  padding: '11px 13px',
+  fontSize: 14,
+  color: P.ink,
+  background: '#fff',
+  boxSizing: 'border-box',
+  outlineColor: P.teal,
+};
 
 function Thread({ travellerId, name, subtitle, onBack }: { travellerId: string; name: string; subtitle: string; onBack: () => void }) {
   const [messages, setMessages] = useState<Msg[]>([]);

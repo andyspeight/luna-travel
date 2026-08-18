@@ -8,8 +8,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { Send, Copy, Check, RotateCcw, Ban } from 'lucide-react';
-import { AgencyShell, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
+import { Send, Copy, Check, RotateCcw, Ban, Eye, X } from 'lucide-react';
+import { AgencyShell, useAgencyMe, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
+import { PhonePreview } from '../phone-preview';
 
 interface Invite {
   id: string;
@@ -29,6 +30,8 @@ interface Created {
 }
 
 function AccessPage() {
+  const { me } = useAgencyMe();
+  const [showPreview, setShowPreview] = useState(false);
   const [bookingRef, setBookingRef] = useState('');
   const [email, setEmail] = useState('');
   const [departureDate, setDepartureDate] = useState('');
@@ -114,12 +117,30 @@ function AccessPage() {
     }
   };
 
+  const b = me.branding;
+  const previewName = b.appName?.trim() || me.agency.name || 'Your app';
+  const previewPrimary = b.brandPrimaryColour || '#1b2b5b';
+  const previewAccent = b.brandAccentColour || '#00b4d8';
+  const previewWelcome = b.welcomeMessage?.trim() || '';
+  const previewLogo = b.logoUrl?.trim() || '';
+
   return (
     <div>
-      <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Send app access</h1>
-      <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
-        Create a sign-in link + QR for a booking so your traveller can open their trip in the app.
-      </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Send app access</h1>
+          <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
+            Create a sign-in link + QR for a booking so your traveller can open their trip in the app.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowPreview(true)}
+          style={{ ...ghostBtn, display: 'inline-flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}
+        >
+          <Eye size={15} /> Preview app
+        </button>
+      </div>
 
       <div style={{ marginTop: 16 }}>
         <Callout title="How it works">
@@ -213,6 +234,50 @@ function AccessPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {showPreview && (
+        <PreviewModal
+          name={previewName}
+          primary={previewPrimary}
+          accent={previewAccent}
+          welcome={previewWelcome}
+          logoUrl={previewLogo}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Full-screen preview of the traveller app with the agency's own branding, so
+ * the agency can see exactly what their client will open before sending access.
+ * Reuses the same live PhonePreview as the branding screen — one source of truth.
+ */
+function PreviewModal({
+  name, primary, accent, welcome, logoUrl, onClose,
+}: { name: string; primary: string; accent: string; welcome: string; logoUrl: string; onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="App preview"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(9,14,32,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, maxWidth: '100%', margin: 'auto' }}>
+        <PhonePreview name={name} primary={primary} accent={accent} welcome={welcome} logoUrl={logoUrl} />
+        <div style={{ textAlign: 'center', color: '#fff', fontSize: 13, maxWidth: 300, lineHeight: 1.5 }}>
+          This is how <strong>{name}</strong> opens on your traveller&rsquo;s phone. Change any of it under <strong>App&nbsp;branding</strong>.
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontWeight: 600, padding: '9px 16px', borderRadius: 10, cursor: 'pointer' }}
+        >
+          <X size={15} /> Close
+        </button>
       </div>
     </div>
   );

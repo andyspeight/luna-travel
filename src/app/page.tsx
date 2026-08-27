@@ -39,7 +39,7 @@ import { useCover } from '@/lib/cover-context';
 import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
 
 export default function HomePage() {
-  const { booking, onboarding, liveLoading, demoSelected, source } = useBooking();
+  const { booking, onboarding, liveLoading, source } = useBooking();
   const { coverEnabled, coverDismissed } = useCover();
   const { t } = useI18n();
   const { latest } = useAgentMessages();
@@ -85,9 +85,12 @@ export default function HomePage() {
     return <OnboardingHome />;
   }
 
-  // Still checking for a real booking (and no demo chosen) — show a light
-  // loading state rather than briefly flashing the fallback demo trip.
-  if (liveLoading && !demoSelected && source !== 'live') {
+  // Still checking for a real booking — show a light loading state rather than
+  // flashing a demo trip that a live booking is about to replace. This holds
+  // even when a demo was previously selected on this device: a traveller with
+  // a real session must never glimpse the demo Maldives trip (the bug where
+  // "Take me to my booking" landed on the wrong holiday).
+  if (liveLoading && source !== 'live') {
     return (
       <main className="min-h-[100dvh] flex items-center justify-center" aria-busy="true">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-navy to-teal animate-pulse" />

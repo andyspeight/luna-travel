@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import type { Booking } from '@/types/booking';
 import { BOOKINGS, getDefaultBooking } from '@/data/mock-bookings';
 import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
@@ -35,6 +35,14 @@ interface BookingContextValue {
   onboarding: boolean;
   /** A demo trip was explicitly chosen (deep-link / saved selection / picker). */
   demoSelected: boolean;
+  /**
+   * Re-check /api/traveller/booking for a live booking NOW. Needed after invite
+   * redemption: the provider lives in the root layout, so a client-side
+   * router.push from /install to / does NOT remount it — without this call the
+   * home would render the provider's stale pre-redemption state (the demo trip
+   * or onboarding) instead of the just-unlocked real booking.
+   */
+  refreshLive: () => Promise<void>;
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null);
@@ -76,36 +84,42 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
-  // 2. Additive: attempt a live booking for the current session. If one comes
-  //    back, it takes over. Otherwise we silently remain on mock. Any failure
-  //    is swallowed - the demo must never break because the backend hiccuped.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('/api/traveller/booking', {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (cancelled) return;
-        if (res.status === 200) {
-          const data = await res.json();
-          if (data?.booking && !cancelled) {
-            setBooking(data.booking as Booking);
-            setSource('live');
-          }
+  // 2. Attempt a live booking for the current session. If one comes back, it
+  //    takes over AND permanently clears any saved demo selection on this
+  //    device — a real traveller must never fall back to a demo trip again.
+  //    Otherwise we silently remain on mock. Any failure is swallowed - the
+  //    demo must never break because the backend hiccuped.
+  //
+  //    Exposed as refreshLive so /install can re-run it right after a
+  //    successful redemption (the provider persists across client-side
+  //    navigation, so without this the home would show stale state).
+  const refreshLive = useCallback(async () => {
+    setLiveLoading(true);
+    try {
+      const res = await fetch('/api/traveller/booking', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (res.status === 200) {
+        const data = await res.json();
+        if (data?.booking) {
+          setBooking(data.booking as Booking);
+          setSource('live');
+          setDemoSelected(false);
+          try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
         }
-        // 204 / 502 / anything else -> stay on mock.
-      } catch {
-        /* network error -> stay on mock */
-      } finally {
-        if (!cancelled) setLiveLoading(false);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      // 204 / 502 / anything else -> stay on mock.
+    } catch {
+      /* network error -> stay on mock */
+    } finally {
+      setLiveLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshLive();
+  }, [refreshLive]);
 
   // 3. Engagement ping - record that the traveller opened the app. Fire-and-
   //    forget, gated server-side by the lt_session cookie (no session => 401,
@@ -179,6 +193,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     liveLoading,
     onboarding,
     demoSelected,
+    refreshLive,
   };
 
   // hydrated retained for parity with the original gating pattern.

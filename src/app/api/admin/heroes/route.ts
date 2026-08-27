@@ -27,7 +27,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
 import { HERO_DESTINATION_BY_CODE } from '@/data/hero-destinations';
-import { HERO_LOCATIONS_BY_COUNTRY, isKnownLocation } from '@/data/hero-locations';
+import { isKnownLocation } from '@/data/hero-locations';
 import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
@@ -73,63 +73,47 @@ export async function GET(req: NextRequest) {
   const supabase = getSupabaseAdmin();
   const heroes: Record<string, { url: string; updatedAt: string | null }> = {};
   const single = (req.nextUrl.searchParams.get('code') || '').trim().toUpperCase();
-
-  // Drill-down: one country's own heroes PLUS its location (city/region) heroes.
-  if (single) {
-    if (!isValidCode(single)) return NextResponse.json({ error: 'invalid_code' }, { status: 400 });
-
-    // The country's own two slots.
-    const { data: files } = await supabase.storage.from(BUCKET).list(single, { limit: 100 });
-    for (const f of files || []) {
-      if (!f.name) continue;
-      const variant = f.name.replace(/\.webp$/i, '');
-      if (f.name.includes('.') && VARIANTS.has(variant)) {
-        heroes[slotKey(single, variant)] = {
-          url: publicUrl(single, variant),
-          updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
-        };
-      }
-    }
-
-    // Each known location's slots (one list per location that has any image).
-    for (const loc of HERO_LOCATIONS_BY_COUNTRY[single] || []) {
-      const { data: lfiles } = await supabase.storage.from(BUCKET).list(`${single}/${loc.slug}`, { limit: 10 });
-      for (const f of lfiles || []) {
-        const variant = f.name.replace(/\.webp$/i, '');
-        if (!VARIANTS.has(variant)) continue;
-        heroes[slotKey(single, variant, loc.slug)] = {
-          url: publicUrl(single, variant, loc.slug),
-          updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
-        };
-      }
-    }
-    return NextResponse.json({ heroes });
+  if (single && !isValidCode(single)) {
+    return NextResponse.json({ error: 'invalid_code' }, { status: 400 });
   }
 
-  // Default: every country's own heroes (country-level grid). Location heroes
-  // are only loaded on demand when a country is drilled into (above).
-  const { data: folders, error: folderErr } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
-  if (folderErr) {
-    console.warn('[heroes.GET] list root failed (bucket may be new):', folderErr.message);
-    return NextResponse.json({ heroes: {} });
+  // ONE query for the whole bucket (luna_travel.list_hero_objects). The old
+  // implementation listed each country's storage folder sequentially — with
+  // most of ~250 folders populated that was minutes of wall-clock and the
+  // page sat on "Loading hero images…". Object names encode everything:
+  //   CODE/variant.webp        → country hero
+  //   CODE/slug/variant.webp   → location (city/region) hero
+  const { data, error } = await supabase.rpc('list_hero_objects');
+  if (error) {
+    console.error('[heroes.GET] list_hero_objects failed:', error.message);
+    return NextResponse.json({ heroes: {}, error: 'list_failed' });
   }
 
-  for (const folder of folders || []) {
-    if (!folder.name || folder.name.includes('.')) continue;
-    const code = folder.name;
+  for (const row of (data ?? []) as Array<{ name: string | null; updated_at: string | null }>) {
+    const parts = (row.name || '').split('/');
+    if (parts.length < 2 || parts.length > 3) continue;
+    const code = parts[0];
     if (!isValidCode(code)) continue;
+    if (single && code !== single) continue;
+    const variant = parts[parts.length - 1].replace(/\.webp$/i, '');
+    if (!VARIANTS.has(variant)) continue;
 
-    const { data: files } = await supabase.storage.from(BUCKET).list(code, { limit: 100 });
-    for (const f of files || []) {
-      const variant = f.name.replace(/\.webp$/i, '');
-      // Only the country's own files (ending .webp); slug SUBFOLDERS are skipped
-      // here and surfaced under the drill-down.
-      if (f.name.includes('.') && VARIANTS.has(variant)) {
-        heroes[`${code}-${variant}`] = {
-          url: publicUrl(code, variant),
-          updatedAt: (f.updated_at as string) || (f.created_at as string) || null,
-        };
-      }
+    if (parts.length === 3) {
+      // Location hero — only surfaced in the drill-down payload. At root the
+      // client's "slots filled" counter is countries × 2, so location keys
+      // would inflate it.
+      if (!single) continue;
+      const slug = parts[1];
+      if (!isKnownLocation(code, slug)) continue;
+      heroes[slotKey(code, variant, slug)] = {
+        url: publicUrl(code, variant, slug),
+        updatedAt: row.updated_at,
+      };
+    } else {
+      heroes[slotKey(code, variant)] = {
+        url: publicUrl(code, variant),
+        updatedAt: row.updated_at,
+      };
     }
   }
 

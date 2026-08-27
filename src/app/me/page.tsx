@@ -28,6 +28,7 @@ import {
 } from '@/components/icons';
 import { initials } from '@/lib/format';
 import { APP_VERSION, getLatestVersion, forceAppUpdate } from '@/lib/app-update';
+import { AddToHomeRow } from '@/components/add-to-home';
 
 export default function MePage() {
   const { booking } = useBooking();
@@ -158,6 +159,7 @@ export default function MePage() {
             sub={t('me.notificationsSub')}
           />
           <UpdateRow />
+          <AddToHomeRow />
           <ListLink
             href="/luna"
             icon={<IconHelp size={18} />}

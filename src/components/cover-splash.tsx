@@ -13,6 +13,7 @@ import {
   IconShare,
   IconUser,
   IconPin,
+  IconCheck,
 } from '@/components/icons';
 import { countdownTo, type CountdownParts } from '@/lib/format';
 import { cinematicCover } from '@/lib/hero';
@@ -38,6 +39,34 @@ export function CoverSplash() {
   const cover = cinematicCover(booking.primaryCountryCode, booking.locationSlug);
   const lead = leadTraveller(booking);
   const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
+  const [shared, setShared] = useState(false);
+
+  // Share the countdown moment — text only, no links, nothing private beyond
+  // what the traveller chooses to send. Native share sheet where available,
+  // clipboard fallback elsewhere (brief tick on the button as feedback).
+  const shareTrip = async () => {
+    const dest = booking.destinationLabel;
+    const now = Date.now();
+    const text =
+      now > new Date(booking.tripEnd).getTime()
+        ? `Just home from ${dest} — what a trip! ✈️`
+        : now >= new Date(booking.tripStart).getTime()
+          ? `I'm in ${dest} right now ✈️`
+          : parts.days > 0
+            ? `${parts.days} day${parts.days === 1 ? '' : 's'} until ${dest}! ✈️`
+            : `Flying to ${dest} today ✈️`;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({ text });
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      }
+    } catch {
+      /* user cancelled the share sheet — nothing to do */
+    }
+  };
 
   useEffect(() => {
     setParts(countdownTo(booking.tripStart));
@@ -103,10 +132,11 @@ export function CoverSplash() {
 
         <button
           type="button"
-          aria-label="Share"
+          aria-label="Share your trip"
+          onClick={shareTrip}
           className="w-10 h-10 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-colors"
         >
-          <IconShare size={16} />
+          {shared ? <IconCheck size={16} /> : <IconShare size={16} />}
         </button>
       </header>
 

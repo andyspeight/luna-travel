@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageEnter } from '@/components/page-enter';
 import { IconShare } from '@/components/icons';
+import { useBooking } from '@/lib/booking-context';
 
 /**
  * /install
@@ -136,7 +137,7 @@ function Step({ n, label, icon }: { n: number; label: string; icon?: React.React
 // ─────────────────────────────────────────────────────────────────
 
 type InviteInfo = {
-  status: 'pending' | 'redeemed' | 'expired';
+  status: 'pending' | 'redeemed' | 'expired' | 'revoked';
   prefill: { bookingRef: string | null };
 };
 
@@ -149,6 +150,7 @@ type Trip = {
 
 function RedeemView({ inviteId }: { inviteId: string }) {
   const router = useRouter();
+  const { refreshLive } = useBooking();
   const [info, setInfo] = useState<InviteInfo | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [email, setEmail] = useState('');
@@ -199,7 +201,13 @@ function RedeemView({ inviteId }: { inviteId: string }) {
         setError("We couldn't find a booking with those details. Please check and try again.");
         return;
       }
-      // Success — session cookie is set by the endpoint. Show the reveal.
+      // Success — session cookie is set by the endpoint. Tell the (root-layout)
+      // BookingProvider to load the real booking NOW: "Take me to my booking"
+      // is a client-side navigation, so the provider never remounts — without
+      // this it would still hold its pre-redemption state (demo trip or
+      // onboarding) and the home would show the wrong holiday.
+      void refreshLive();
+      // Show the reveal.
       const data = await res.json().catch(() => ({}));
       setTrip(
         (data && data.trip) || {
@@ -251,19 +259,37 @@ function RedeemView({ inviteId }: { inviteId: string }) {
             title="This invite has expired"
             body="Your travel agent will need to send you a new invite link. Get in touch with them and they'll sort it in a moment."
           />
-        ) : info?.status === 'redeemed' ? (
+        ) : info?.status === 'revoked' ? (
           <StateCard
-            title="This invite has already been used"
-            body="If you've installed Luna Travel on another device, just open the app from your home screen. If you can't find it, ask your agent to resend the invite."
+            title="This invite is no longer active"
+            body="Your travel agent has withdrawn this link. Get in touch with them and they'll send you a fresh one."
           />
         ) : (
           <>
-            <h1 className="font-serif text-[36px] leading-none tracking-tight text-center max-w-[420px] mb-2">
-              Your holiday is <em className="text-teal-light">ready</em>.
-            </h1>
-            <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
-              One quick check it&rsquo;s you, then your whole trip opens up.
-            </p>
+            {/* A redeemed invite is NOT a dead end: the redeem endpoint is
+                idempotent, so the same traveller can re-verify the same details
+                to sign back in (new device, cleared cookies, installed PWA with
+                its own cookie jar). Wrong details still get the generic 404. */}
+            {info?.status === 'redeemed' ? (
+              <>
+                <h1 className="font-serif text-[36px] leading-none tracking-tight text-center max-w-[420px] mb-2">
+                  Welcome <em className="text-teal-light">back</em>.
+                </h1>
+                <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
+                  This invite has been used before. Confirm the same details to open your trip on
+                  this device.
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="font-serif text-[36px] leading-none tracking-tight text-center max-w-[420px] mb-2">
+                  Your holiday is <em className="text-teal-light">ready</em>.
+                </h1>
+                <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
+                  One quick check it&rsquo;s you, then your whole trip opens up.
+                </p>
+              </>
+            )}
 
             <div className="w-full max-w-[420px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 p-5 shadow-2xl">
               <Field label="Booking reference">

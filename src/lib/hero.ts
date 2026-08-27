@@ -70,13 +70,19 @@ const BUCKET = 'destination-heroes';
  *   country  → {CODE}/{variant}.webp
  *   location → {CODE}/{slug}/{variant}.webp  (when locationSlug is given)
  */
+// The project's public Supabase URL, baked in as a fallback so hero photos
+// work even when NEXT_PUBLIC_SUPABASE_URL isn't set in the deployment env.
+// Safe to embed: it's the public anon-read host that every hero <img> URL
+// already exposes; the env var still wins when present.
+const SUPABASE_PUBLIC_URL = 'https://iexryjynfaktfbvzlwlx.supabase.co';
+
 export function heroImageUrl(
   countryCode: string,
   variant: 'portrait' | 'landscape',
   locationSlug?: string,
 ): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!base || !countryCode) return '';
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_PUBLIC_URL;
+  if (!countryCode) return '';
   const code = countryCode.toUpperCase();
   const path = locationSlug ? `${code}/${locationSlug}/${variant}.webp` : `${code}/${variant}.webp`;
   return `${base}/storage/v1/object/public/${BUCKET}/${path}`;

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { PageEnter } from '@/components/page-enter';
 import { IconShare } from '@/components/icons';
 import { useBooking } from '@/lib/booking-context';
+import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
 
 /**
  * /install
@@ -283,7 +284,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
             ) : (
               <>
                 <h1 className="font-serif text-[36px] leading-none tracking-tight text-center max-w-[420px] mb-2">
-                  Your holiday is <em className="text-teal-light">ready</em>.
+                  Your trip is <em className="text-teal-light">ready</em>.
                 </h1>
                 <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
                   One quick check it&rsquo;s you, then your whole trip opens up.
@@ -371,205 +372,34 @@ function RedeemView({ inviteId }: { inviteId: string }) {
 // ─────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────
-// Add to home screen — platform aware.
-//
-// beforeinstallprompt fires ONCE, early, on the /install page load — long
-// before this reveal mounts (the traveller must clear the gate first). So we
-// capture it at MODULE scope and hold it, otherwise it's gone by reveal time.
-//
-//   - Chromium (Android, desktop Chrome/Edge): real one-tap install button.
-//   - iOS Safari (no beforeinstallprompt): a sheet showing the real Share
-//     glyph + the two steps, because iOS only allows a manual add.
-//   - Already installed (standalone): renders nothing.
-//   - Anything else (desktop Safari, Firefox): renders nothing, rather than
-//     an instruction that won't match what the user sees.
+// Add to home screen — platform-aware machinery lives in
+// src/components/add-to-home.tsx (shared with the Me page, so travellers can
+// install the app any time — not only during this one-shot reveal).
 // ─────────────────────────────────────────────────────────────────
-
-type BIPEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: string }>;
-};
-
-let _deferredPrompt: BIPEvent | null = null;
-const _installSubs = new Set<() => void>();
-function _notifyInstall() {
-  _installSubs.forEach((fn) => fn());
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    _deferredPrompt = e as BIPEvent;
-    _notifyInstall();
-  });
-  window.addEventListener('appinstalled', () => {
-    _deferredPrompt = null;
-    _notifyInstall();
-  });
-}
-
-function useInstallState() {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const fn = () => force((n) => n + 1);
-    _installSubs.add(fn);
-    return () => {
-      _installSubs.delete(fn);
-    };
-  }, []);
-
-  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-  const isStandalone =
-    typeof window !== 'undefined' &&
-    (window.matchMedia?.('(display-mode: standalone)').matches ||
-      // iOS Safari exposes this non-standard flag when launched from home screen
-      (navigator as unknown as { standalone?: boolean }).standalone === true);
-  // iPadOS reports as "Macintosh", so a touch check tells it apart from a real Mac.
-  const isIOS =
-    /iPad|iPhone|iPod/.test(ua) ||
-    (ua.includes('Macintosh') &&
-      typeof document !== 'undefined' &&
-      'ontouchend' in document);
-
-  const promptInstall = async () => {
-    if (!_deferredPrompt) return;
-    const p = _deferredPrompt;
-    _deferredPrompt = null;
-    _notifyInstall();
-    try {
-      await p.prompt();
-      await p.userChoice;
-    } catch {
-      /* user dismissed — nothing to do */
-    }
-  };
-
-  return { canPrompt: !!_deferredPrompt, isStandalone, isIOS, promptInstall };
-}
-
-// The iOS Share glyph: a box open at the top with an up-arrow. Matches what
-// the traveller actually sees in Safari, so the instruction is recognisable.
-function ShareGlyph({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v12" />
-      <path d="m8 7 4-4 4 4" />
-      <path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
-    </svg>
-  );
-}
 
 function InstallAffordance() {
   const { canPrompt, isStandalone, isIOS, promptInstall } = useInstallState();
-  const [sheet, setSheet] = useState(false);
+  const [sheet, setSheet] = useState<'ios' | 'menu' | null>(null);
 
   if (isStandalone) return null; // already added — say nothing
-  if (!canPrompt && !isIOS) return null; // can't help cleanly — don't clutter
 
   return (
     <>
       <button
         type="button"
-        onClick={() => (canPrompt ? promptInstall() : setSheet(true))}
+        onClick={() => {
+          if (canPrompt) void promptInstall();
+          else setSheet(isIOS ? 'ios' : 'menu');
+        }}
         className="mt-5 inline-flex items-center gap-2 h-11 px-5 rounded-full border border-white/20 bg-white/5 text-white/85 text-[13px] font-medium hover:bg-white/10 hover:border-white/30 transition-colors"
       >
         <ShareGlyph size={16} />
         Add to home screen
       </button>
 
-      {sheet && <IOSInstallSheet onClose={() => setSheet(false)} />}
+      {sheet === 'ios' && <IOSInstallSheet onClose={() => setSheet(null)} />}
+      {sheet === 'menu' && <MenuInstallSheet onClose={() => setSheet(null)} />}
     </>
-  );
-}
-
-function IOSInstallSheet({ onClose }: { onClose: () => void }) {
-  const [up, setUp] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setUp(true), 10);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      clearTimeout(t);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add Luna Travel to your home screen"
-      onClick={onClose}
-    >
-      <div
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm transition-opacity duration-300"
-        style={{ opacity: up ? 1 : 0 }}
-      />
-      <div
-        className="relative w-full max-w-[420px] m-3 rounded-3xl bg-white text-navy p-6 shadow-2xl"
-        style={{
-          transform: up ? 'none' : 'translateY(16px)',
-          opacity: up ? 1 : 0,
-          transition: 'transform .28s ease-out, opacity .28s ease-out',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between mb-4">
-          <h2 className="font-serif text-[22px] leading-tight tracking-tight pr-6">
-            Keep your trip one tap away
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex-none w-8 h-8 -mt-1 -mr-1 rounded-full hover:bg-black/5 flex items-center justify-center text-navy/50"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M6 6l12 12M18 6 6 18" />
-            </svg>
-          </button>
-        </div>
-
-        <p className="text-[14px] text-navy/65 leading-relaxed mb-5">
-          Add Luna Travel to your home screen and it opens like an app, with
-          your trip, your documents and your agent always to hand.
-        </p>
-
-        <ol className="space-y-3">
-          <li className="flex items-center gap-3">
-            <span className="flex-none w-9 h-9 rounded-xl bg-navy/5 flex items-center justify-center text-teal">
-              <ShareGlyph size={20} />
-            </span>
-            <span className="text-[14px] text-navy/85">
-              Tap the <span className="font-semibold text-navy">Share</span> button
-              <span className="block text-[12px] text-navy/50">
-                Bottom of the screen on iPhone, top right on iPad
-              </span>
-            </span>
-          </li>
-          <li className="flex items-center gap-3">
-            <span className="flex-none w-9 h-9 rounded-xl bg-navy/5 flex items-center justify-center text-teal">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4" y="4" width="16" height="16" rx="4" />
-                <path d="M12 9v6M9 12h6" />
-              </svg>
-            </span>
-            <span className="text-[14px] text-navy/85">
-              Choose <span className="font-semibold text-navy">Add to Home Screen</span>
-            </span>
-          </li>
-        </ol>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-6 w-full h-12 rounded-2xl bg-teal text-white font-semibold text-[15px] hover:bg-teal-dark transition-colors"
-        >
-          Got it
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -586,13 +416,30 @@ function RevealView({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
   const range = fmtRange(trip.departureDate, trip.returnDate);
   const nights = nightsBetween(trip.departureDate, trip.returnDate);
 
-  const headline = dest
-    ? `${leadFirst ? leadFirst + ', ' : ''}your ${dest} holiday is almost here.`
-    : `${leadFirst ? leadFirst + ', ' : ''}your holiday is almost here.`;
+  // Date-aware, and deliberately "trip" not "holiday" — the teaser can't tell
+  // a flight-only booking from a package, and "trip" is right for both.
+  const today = new Date().toISOString().slice(0, 10);
+  const endDate = trip.returnDate || trip.departureDate;
+  const tripPast = !!endDate && endDate < today;
+  const tripUnderWay = !tripPast && !!trip.departureDate && trip.departureDate <= today;
+
+  const who = leadFirst ? leadFirst + ', ' : '';
+  const headline = tripPast
+    ? `${who}welcome back from ${dest || 'your trip'}.`
+    : tripUnderWay
+      ? dest
+        ? `${who}your ${dest} trip is under way.`
+        : `${who}your trip is under way.`
+      : dest
+        ? `${who}your ${dest} trip is almost here.`
+        : `${who}your trip is almost here.`;
 
   let cdNum = '✦';
   let cdLabel = 'enjoy every minute';
-  if (typeof days === 'number') {
+  if (tripPast) {
+    cdNum = '✦';
+    cdLabel = 'we hope it was wonderful';
+  } else if (typeof days === 'number') {
     if (days > 1) { cdNum = String(days); cdLabel = 'days until you fly'; }
     else if (days === 1) { cdNum = '1'; cdLabel = 'day until you fly'; }
     else if (days === 0) { cdNum = 'Today'; cdLabel = 'you fly today'; }
@@ -666,7 +513,7 @@ function RevealView({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
           onClick={onOpen}
           className="w-full max-w-[360px] h-14 rounded-2xl bg-teal text-white font-semibold text-[16px] hover:bg-teal-dark transition-colors flex items-center justify-center gap-2 shadow-2xl"
         >
-          Open my holiday
+          Open my trip
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>

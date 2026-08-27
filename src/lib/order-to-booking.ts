@@ -195,6 +195,12 @@ function inferDocKind(name?: string | null, ext?: string | null): BookingDocumen
 
 // ───────── Main mapper ─────────
 
+/** Normalise a Travelify country value to uppercase ISO-2, or '' if it isn't one. */
+function iso2(v: string | null | undefined): string {
+  const s = (v || '').trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(s) ? s : '';
+}
+
 export function orderToBooking(
   order: TrimmedOrder | null | undefined,
   agency: ControlAgency | null | undefined,
@@ -232,6 +238,7 @@ export function orderToBooking(
           arrCity: '',
           arrTime: seg.arrive || '',
           arrTerminal: seg.destination?.terminal || undefined,
+          arrCountryCode: iso2(seg.destination?.country),
           durationMinutes: typeof seg.duration === 'number' ? seg.duration : 0,
           aircraft: seg.aircraft || undefined,
           baggageAllowance: seg.baggage?.allowance || undefined,
@@ -375,7 +382,11 @@ export function orderToBooking(
   } else if (flights.length) {
     const lastOutbound = flights[flights.length > 1 ? Math.floor(flights.length / 2) - 1 : 0] || flights[0];
     destinationLabel = lastOutbound.arrAirportName || lastOutbound.arrAirport || '';
-    primaryCountryCode = '';
+    // Flights-only booking (no hotel to read the country from): the arrival
+    // airport's country IS the destination country. Without this the booking
+    // had no country code at all, so the destination hero/cover never loaded
+    // and the guide/weather had nothing to key on.
+    primaryCountryCode = lastOutbound.arrCountryCode || '';
   }
 
   // Best-effort city/region match for a location-specific hero — auto-synced

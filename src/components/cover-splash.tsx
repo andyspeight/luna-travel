@@ -122,24 +122,34 @@ export function CoverSplash() {
         </h1>
         <p className="mt-1.5 text-base text-white/85">{lead.firstName}</p>
 
-        {/* Countdown clock */}
-        <div className="mt-9">
-          <div className="font-light text-[44px] leading-none tracking-tight tabular flex items-baseline justify-center gap-1">
-            <span className="min-w-[58px] text-center">{String(parts.days).padStart(2, '0')}</span>
-            <span className="text-white/55 px-0.5">:</span>
-            <span className="min-w-[58px] text-center">{String(parts.hours).padStart(2, '0')}</span>
-            <span className="text-white/55 px-0.5">:</span>
-            <span className="min-w-[58px] text-center">{String(parts.minutes).padStart(2, '0')}</span>
-            <span className="text-white/55 px-0.5">:</span>
-            <span className="min-w-[58px] text-center">{String(parts.seconds).padStart(2, '0')}</span>
+        {/* Countdown clock — only while the trip is still ahead. During or
+            after the trip a ticking zero clock reads as broken, so show a
+            phase-appropriate line instead. */}
+        {Date.now() < new Date(booking.tripStart).getTime() ? (
+          <div className="mt-9">
+            <div className="font-light text-[44px] leading-none tracking-tight tabular flex items-baseline justify-center gap-1">
+              <span className="min-w-[58px] text-center">{String(parts.days).padStart(2, '0')}</span>
+              <span className="text-white/55 px-0.5">:</span>
+              <span className="min-w-[58px] text-center">{String(parts.hours).padStart(2, '0')}</span>
+              <span className="text-white/55 px-0.5">:</span>
+              <span className="min-w-[58px] text-center">{String(parts.minutes).padStart(2, '0')}</span>
+              <span className="text-white/55 px-0.5">:</span>
+              <span className="min-w-[58px] text-center">{String(parts.seconds).padStart(2, '0')}</span>
+            </div>
+            <div className="mt-2.5 grid grid-cols-4 gap-1 max-w-[280px] mx-auto text-[10px] uppercase tracking-[0.18em] text-white/65">
+              <span className="text-center">Days</span>
+              <span className="text-center">Hours</span>
+              <span className="text-center">Mins</span>
+              <span className="text-center">Secs</span>
+            </div>
           </div>
-          <div className="mt-2.5 grid grid-cols-4 gap-1 max-w-[280px] mx-auto text-[10px] uppercase tracking-[0.18em] text-white/65">
-            <span className="text-center">Days</span>
-            <span className="text-center">Hours</span>
-            <span className="text-center">Mins</span>
-            <span className="text-center">Secs</span>
-          </div>
-        </div>
+        ) : (
+          <p className="mt-9 text-[15px] text-white/80">
+            {Date.now() > new Date(booking.tripEnd).getTime()
+              ? 'We hope it was unforgettable.'
+              : 'Enjoy every moment.'}
+          </p>
+        )}
       </div>
 
       {/* ── Dock ── */}
@@ -214,12 +224,20 @@ function DockButton({
 /** Pick a headline appropriate to the trip shape. */
 function tripHeadline(booking: ReturnType<typeof useBooking>['booking']): string {
   const hasFlights = booking.flights.length > 0;
+  const hasHotels = booking.hotels.length > 0;
   const hasChildren = booking.travellers.some((t) => t.type === 'child' || t.type === 'infant');
   const isPremium = booking.flights.some((f) => f.cabin === 'Business' || f.cabin === 'First');
   const dest = booking.destinationLabel;
 
+  // Date-aware first: a trip that's over or under way must not read like an
+  // upcoming one ("almost here" for a past date was a reported bug).
+  const now = Date.now();
+  if (now > new Date(booking.tripEnd).getTime()) return `Welcome home from ${dest}`;
+  if (now >= new Date(booking.tripStart).getTime()) return `Enjoy ${dest}`;
+
   if (isPremium) return `Luxury trip to ${dest}`;
-  if (hasChildren) return `Family holiday in ${dest}`;
+  // "Holiday" only when there's actually a stay — a flight-only booking is a trip.
+  if (hasChildren) return hasHotels ? `Family holiday in ${dest}` : `Family trip to ${dest}`;
   if (!hasFlights) return `Escape to ${dest}`;
   return `Your trip to ${dest}`;
 }

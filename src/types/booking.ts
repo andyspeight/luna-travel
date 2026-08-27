@@ -56,6 +56,7 @@ export interface FlightLeg {
   arrCity: string;
   arrTime: string; // ISO
   arrTerminal?: string;
+  arrCountryCode?: string; // ISO-2 of the arrival airport's country (drives destination fallbacks)
   durationMinutes: number;
   aircraft?: string;
   baggageAllowance?: string;

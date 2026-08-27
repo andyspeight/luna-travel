@@ -381,7 +381,18 @@ function InstallAffordance() {
   const { canPrompt, isStandalone, isIOS, promptInstall } = useInstallState();
   const [sheet, setSheet] = useState<'ios' | 'menu' | null>(null);
 
-  if (isStandalone) return null; // already added — say nothing
+  // Opened from the home-screen app itself: nothing to add — but SAY so.
+  // Silently rendering nothing here looked like a missing button.
+  if (isStandalone) {
+    return (
+      <div className="mt-5 inline-flex items-center gap-2 text-[13px] text-white/60">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+        Already on your home screen
+      </div>
+    );
+  }
 
   return (
     <>

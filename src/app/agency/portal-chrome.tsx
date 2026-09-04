@@ -14,7 +14,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane, Star } from 'lucide-react';
+import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane, Star, BookOpen } from 'lucide-react';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -137,7 +137,7 @@ export function useAgencyMe() {
   return ctx;
 }
 
-type NavKey = 'overview' | 'travellers' | 'flights' | 'messages' | 'reviews' | 'branding' | 'trips' | 'documents' | 'access';
+type NavKey = 'overview' | 'travellers' | 'flights' | 'messages' | 'reviews' | 'branding' | 'trips' | 'content' | 'documents' | 'access';
 const NAV: { key: NavKey; label: string; href: string; icon: typeof LayoutGrid }[] = [
   { key: 'overview', label: 'Overview', href: '/agency', icon: LayoutGrid },
   { key: 'travellers', label: 'Travellers', href: '/agency/travellers', icon: Users },
@@ -146,6 +146,7 @@ const NAV: { key: NavKey; label: string; href: string; icon: typeof LayoutGrid }
   { key: 'reviews', label: 'Reviews', href: '/agency/reviews', icon: Star },
   { key: 'branding', label: 'App branding', href: '/agency/branding', icon: Palette },
   { key: 'trips', label: 'Trips', href: '/agency/trips', icon: Luggage },
+  { key: 'content', label: 'Trip pages', href: '/agency/content', icon: BookOpen },
   { key: 'documents', label: 'Documents', href: '/agency/documents', icon: FileText },
   { key: 'access', label: 'Send access', href: '/agency/access', icon: Send },
 ];

@@ -29,7 +29,8 @@ export type AuditEventType =
   | 'document.uploaded'
   | 'document.deleted'
   | 'hero.uploaded'
-  | 'hero.removed';
+  | 'hero.removed'
+  | 'content.updated';
 
 export type AuditLogInput = {
   eventType: AuditEventType;

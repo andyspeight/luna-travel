@@ -243,7 +243,11 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
 
       {/* Nav */}
       <nav style={{ background: '#fff', borderBottom: `1px solid ${P.line}`, position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 12px', display: 'flex', gap: 2, overflowX: 'auto' }}>
+        {/* flexWrap, not overflowX: with 10 items the tail of the menu sat
+            off-screen with no scroll cue (macOS hides scrollbars) and pages
+            like Trip pages were undiscoverable. Wrapping keeps every item
+            visible; on phones it simply becomes two or three rows. */}
+        <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 12px', display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           {NAV.map((n) => {
             const on = active === n.key;
             const Icon = n.icon;

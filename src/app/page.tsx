@@ -7,6 +7,7 @@ import { BookingPicker } from '@/components/booking-picker';
 import { AgencyLogo } from '@/components/agency-logo';
 import { OnboardingHome } from '@/components/onboarding-home';
 import { SectionHeading } from '@/components/section-heading';
+import { GuideLinks } from '@/components/guide-links';
 import {
   IconPlane,
   IconBed,
@@ -308,6 +309,9 @@ export default function HomePage() {
           </ul>
         </section>
       )}
+
+      {/* Agency-authored guide pages — appear as the agent publishes them */}
+      <GuideLinks />
 
       {/* Destination guide */}
       <section className="mt-6">

@@ -207,6 +207,25 @@ const S: Record<string, Dict> = {
   'me.helpSub': { en: 'Ask Luna, or contact your agent', ro: 'Întreabă Luna sau contactează agentul', fr: 'Demandez à Luna ou contactez votre agence', de: 'Fragen Sie Luna oder Ihr Reisebüro', es: 'Pregunta a Luna o contacta tu agencia', it: 'Chiedi a Luna o contatta la tua agenzia' },
   'me.signOut': { en: 'Sign out', ro: 'Deconectare', fr: 'Déconnexion', de: 'Abmelden', es: 'Cerrar sesión', it: 'Esci' },
   'me.chooseLanguage': { en: 'Choose language', ro: 'Alege limba', fr: 'Choisir la langue', de: 'Sprache wählen', es: 'Elegir idioma', it: 'Scegli la lingua' },
+
+  // ── Agency-authored guide pages ──
+  'guide.section': { en: 'From your travel agent', ro: 'De la agentul tău', fr: 'De votre agence', de: 'Von Ihrem Reisebüro', es: 'De tu agencia', it: 'Dalla tua agenzia' },
+  'guide.from': { en: 'From {agency}', ro: 'De la {agency}', fr: 'De {agency}', de: 'Von {agency}', es: 'De {agency}', it: 'Da {agency}' },
+  'guide.byt': { en: 'Before you travel', ro: 'Înainte de plecare', fr: 'Avant de partir', de: 'Vor der Reise', es: 'Antes de viajar', it: 'Prima di partire' },
+  'guide.bytBlurb': { en: 'Everything to know before you go', ro: 'Tot ce trebuie să știi înainte', fr: 'Tout savoir avant le départ', de: 'Alles Wichtige vor der Abreise', es: 'Todo lo que debes saber antes', it: 'Tutto da sapere prima di partire' },
+  'guide.itinerary': { en: 'Itinerary', ro: 'Itinerar', fr: 'Itinéraire', de: 'Reiseplan', es: 'Itinerario', it: 'Itinerario' },
+  'guide.itinBlurb': { en: 'Your trip, day by day', ro: 'Călătoria ta, zi de zi', fr: 'Votre voyage, jour par jour', de: 'Ihre Reise, Tag für Tag', es: 'Tu viaje, día a día', it: 'Il tuo viaggio, giorno per giorno' },
+  'guide.fyw': { en: 'Find your way around', ro: 'Orientează-te ușor', fr: 'Repérez-vous facilement', de: 'Finden Sie sich zurecht', es: 'Oriéntate fácilmente', it: 'Orientati facilmente' },
+  'guide.fywBlurb': { en: 'Places to know, on the map', ro: 'Locuri de știut, pe hartă', fr: 'Les lieux à connaître, sur la carte', de: 'Wichtige Orte auf der Karte', es: 'Lugares clave, en el mapa', it: 'Luoghi da conoscere, sulla mappa' },
+  'guide.empty': { en: 'Nothing here yet — check back soon.', ro: 'Nimic aici încă — revino curând.', fr: 'Rien ici pour l’instant — revenez bientôt.', de: 'Noch nichts hier — schauen Sie bald wieder vorbei.', es: 'Aún no hay nada — vuelve pronto.', it: 'Ancora niente qui — torna presto.' },
+  'guide.directions': { en: 'Directions', ro: 'Direcții', fr: 'Itinéraire', de: 'Route', es: 'Cómo llegar', it: 'Indicazioni' },
+  'guide.mapAttrib': { en: 'Map data © OpenStreetMap contributors.', ro: 'Date hartă © OpenStreetMap contributors.', fr: 'Données carte © OpenStreetMap contributors.', de: 'Kartendaten © OpenStreetMap-Mitwirkende.', es: 'Datos del mapa © OpenStreetMap contributors.', it: 'Dati mappa © OpenStreetMap contributors.' },
+  'guide.cat.sight': { en: 'Sight', ro: 'Obiectiv', fr: 'À voir', de: 'Sehenswert', es: 'Lugar', it: 'Da vedere' },
+  'guide.cat.food': { en: 'Food & drink', ro: 'Mâncare', fr: 'Restauration', de: 'Essen & Trinken', es: 'Comida', it: 'Cibo' },
+  'guide.cat.beach': { en: 'Beach', ro: 'Plajă', fr: 'Plage', de: 'Strand', es: 'Playa', it: 'Spiaggia' },
+  'guide.cat.shop': { en: 'Shopping', ro: 'Cumpărături', fr: 'Shopping', de: 'Einkaufen', es: 'Compras', it: 'Shopping' },
+  'guide.cat.practical': { en: 'Practical', ro: 'Util', fr: 'Pratique', de: 'Praktisch', es: 'Práctico', it: 'Utile' },
+  'guide.cat.other': { en: 'Place', ro: 'Loc', fr: 'Lieu', de: 'Ort', es: 'Sitio', it: 'Luogo' },
 };
 
 /** Interpolate {var} tokens. */

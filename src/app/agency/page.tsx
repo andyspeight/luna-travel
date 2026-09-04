@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Palette, Send, ArrowRight, Users, MessageSquare, Luggage, FileText, Plane } from 'lucide-react';
+import { Palette, Send, ArrowRight, Users, MessageSquare, Luggage, FileText, Plane, BookOpen } from 'lucide-react';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, card } from './portal-chrome';
 
 interface Stats {
@@ -122,6 +122,7 @@ function Dashboard() {
         <Action href="/agency/travellers" icon={<Users size={20} strokeWidth={1.9} />} title="Travellers" body="Who has access and who's opened the app." />
         <Action href="/agency/branding" icon={<Palette size={20} strokeWidth={1.9} />} title="App branding" body="Your app name, colours, welcome and logo." />
         <Action href="/agency/trips" icon={<Luggage size={20} strokeWidth={1.9} />} title="Trips" body="Build a manual itinerary for off-Travelify bookings." />
+        <Action href="/agency/content" icon={<BookOpen size={20} strokeWidth={1.9} />} title="Trip pages" body="Before you travel, itinerary and map places for a booking." />
         <Action href="/agency/documents" icon={<FileText size={20} strokeWidth={1.9} />} title="Documents" body="Upload documents for a booking." />
       </div>
     </div>

@@ -1,5 +1,7 @@
 /**
- * GET /api/agency/me — the signed-in agency + its current branding override.
+ * GET /api/agency/me — the signed-in agency, its branding override and its
+ * operational settings. The portal loads this on every page, so it is also how
+ * the settings form pre-fills.
  * 401 if there is no valid lt_agency_session.
  */
 
@@ -7,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
 import { getBrandingOverride } from '@/lib/agency-branding';
+import { getAgencySettings } from '@/lib/agency-settings';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -22,7 +25,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'agency_not_found' }, { status: 404 });
   }
 
-  const branding = await getBrandingOverride(claims.agencyId);
+  const [branding, settings] = await Promise.all([
+    getBrandingOverride(claims.agencyId),
+    getAgencySettings(claims.agencyId),
+  ]);
 
   return NextResponse.json({
     ok: true,
@@ -34,5 +40,6 @@ export async function GET(req: NextRequest) {
       email: claims.email,
     },
     branding,
+    settings,
   });
 }

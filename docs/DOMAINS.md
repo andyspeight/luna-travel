@@ -187,6 +187,25 @@ domain stays authenticated and consistent. Agencies that have never set an app
 name in **App branding** fall back to a neutral label rather than a wrong one —
 worth filling that field in per agency.
 
+### Where traveller replies are emailed
+
+When a traveller replies in their app, the agency is emailed. The recipient is
+resolved best-source-first:
+
+1. **Settings → Reply notifications** in the agency portal (`agency_settings.reply_notify_email`)
+2. a Luna-native agency's own `contact_email`
+3. whoever sent that traveller their access link
+4. whoever last sent anyone at that agency an access link
+
+Only the first is a choice; the rest are guesses that follow whoever clicked
+last. Some agencies resolve to **nothing at all** — every invite they have was
+created by the self-service recovery flow, which stamps `trip-access` rather
+than a person. Those agencies get no reply emails until somebody fills the
+setting in, so it is worth setting per agency at onboarding.
+
+A successful send logs its masked recipient as `[agent-notify] reply email sent`,
+which is the quickest way to answer "where did that go".
+
 ## Push notifications (Web Push / VAPID)
 
 Notifications go through the browser's Push API, not APNs/FCM directly. The

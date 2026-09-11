@@ -12,6 +12,7 @@ import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
 import { logAuditEvent } from '@/lib/audit';
+import { actingAsMeta } from '@/lib/act-as';
 import { getPlatformSettings } from '@/lib/platform-settings';
 import { travellerUrl } from '@/lib/origins';
 
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
     actor: claims.email,
     targetId: row.id,
     targetLabel: `${claims.agencyId}${bookingRef ? ' / ' + bookingRef : ''}`,
-    metadata: { agencyId: claims.agencyId, bookingRef, hasEmail: !!email, via: 'agency_portal' },
+    metadata: { agencyId: claims.agencyId, bookingRef, hasEmail: !!email, via: 'agency_portal', ...actingAsMeta(claims.actingAs) },
   });
 
   const qrUrl = travellerUrl(`/install?invite=${row.id}`, req.nextUrl.origin);

@@ -41,5 +41,10 @@ export async function GET(req: NextRequest) {
     },
     branding,
     settings,
+    // Present only while a staff member is acting as this agency. Drives the
+    // banner; absent means the caller is the agency itself.
+    actingAs: claims.actingAs
+      ? { agencyName: claims.actingAs.agencyName, staffEmail: claims.actingAs.staffEmail }
+      : null,
   });
 }

@@ -15,6 +15,8 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane, Star, BookOpen, Settings } from 'lucide-react';
+import { installActAsFetch } from '@/lib/act-as-client';
+import { ActAsBanner, ActAsPicker } from './act-as';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -131,6 +133,8 @@ export interface AgencyMe {
     /** Where traveller replies are emailed. Absent means "work it out". */
     replyNotifyEmail?: string;
   };
+  /** Present only while a Travelgenix staff member is acting as this agency. */
+  actingAs?: { agencyName: string; staffEmail: string } | null;
 }
 
 const AgencyContext = createContext<{ me: AgencyMe; refresh: () => Promise<void> } | null>(null);
@@ -158,6 +162,14 @@ const NAV: { key: NavKey; label: string; href: string; icon: typeof LayoutGrid }
 
 export function AgencyShell({ active, children }: { active: NavKey; children: React.ReactNode }) {
   const router = useRouter();
+  // Lazy state initialiser, not useEffect: the very first thing this shell does
+  // is fetch /api/agency/me, and for a staff member acting as an agency that
+  // call is the one that must already carry the grant. An effect runs too late
+  // and the first load would come back signed-out.
+  useState(() => {
+    installActAsFetch();
+    return 0;
+  });
   const [state, setState] = useState<'loading' | 'out' | 'in'>('loading');
   const [me, setMe] = useState<AgencyMe | null>(null);
   // Unread traveller replies. Previously only the Overview showed these, so an
@@ -244,6 +256,11 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
             automatically. If your agency doesn&rsquo;t use Control, ask your Luna Travel contact for
             a one-time sign-in link.
           </p>
+          {/* Travelgenix staff have no agency session of their own, so this is
+              their way in. It renders for nobody else. */}
+          <div style={{ marginTop: 18 }}>
+            <ActAsPicker />
+          </div>
         </div>
       </Sky>
     );
@@ -262,6 +279,7 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
             </div>
             <div style={{ fontSize: 11, color: P.tealLight }}>Agency portal</div>
           </div>
+          {!me.actingAs && <ActAsPicker />}
           <button
             type="button"
             onClick={signOut}
@@ -271,6 +289,10 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
           </button>
         </div>
       </header>
+
+      {me.actingAs && (
+        <ActAsBanner agencyName={me.actingAs.agencyName} staffEmail={me.actingAs.staffEmail} />
+      )}
 
       {/* Nav */}
       <nav style={{ background: '#fff', borderBottom: `1px solid ${P.line}`, position: 'sticky', top: 0, zIndex: 10 }}>

@@ -97,6 +97,10 @@ export interface ValidatedBooking {
   departureDate: string | null;
   returnDate: string | null;
   destination: string | null;
+  /** ISO-2 of the destination country — the key for the hero photograph. */
+  countryCode: string | null;
+  /** Optional city/region within that country, for a more specific photo. */
+  locationSlug: string | null;
 }
 
 /**
@@ -142,6 +146,8 @@ export async function validateAgencyBooking(input: {
         departureDate: mapped.tripStart ? mapped.tripStart.slice(0, 10) : null,
         returnDate: mapped.tripEnd ? mapped.tripEnd.slice(0, 10) : null,
         destination: mapped.destinationLabel || null,
+        countryCode: mapped.primaryCountryCode || null,
+        locationSlug: mapped.locationSlug || null,
       },
     };
   }
@@ -164,6 +170,9 @@ export async function validateAgencyBooking(input: {
       departureDate: b.departureDate,
       returnDate: b.returnDate,
       destination: b.destination,
+      // The legacy demo lookup carries no structured destination keys.
+      countryCode: null,
+      locationSlug: null,
     },
   };
 }

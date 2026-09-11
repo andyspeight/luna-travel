@@ -280,3 +280,78 @@ export function AddToHomeRow() {
     </>
   );
 }
+
+/**
+ * Home-screen banner. The Me-page row is easy to miss, and the reveal shows the
+ * prompt exactly once — so a traveller who skipped it there had no obvious way
+ * back. This sits at the top of the home dashboard until they either install or
+ * dismiss it.
+ *
+ * Dismissal is remembered per device in localStorage. That is the right storage
+ * for it: it is a per-device convenience (the app may genuinely be installed on
+ * one phone and not another), and it must never become a reason to nag someone
+ * who has already said no.
+ */
+const DISMISS_KEY = 'luna-travel.installBannerDismissed';
+
+export function AddToHomeBanner() {
+  const { canPrompt, isStandalone, isIOS, promptInstall } = useInstallState();
+  const [sheet, setSheet] = useState<'ios' | 'menu' | null>(null);
+  const [dismissed, setDismissed] = useState(true); // assume hidden until we've checked
+
+  useEffect(() => {
+    try {
+      setDismissed(window.localStorage.getItem(DISMISS_KEY) === '1');
+    } catch {
+      setDismissed(false); // storage blocked — show it rather than hide it
+    }
+  }, []);
+
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      window.localStorage.setItem(DISMISS_KEY, '1');
+    } catch {
+      /* nothing to remember it with — it will reappear next launch */
+    }
+  };
+
+  if (isStandalone || dismissed) return null;
+
+  return (
+    <>
+      <section className="mt-4 rounded-2xl overflow-hidden bg-gradient-to-br from-navy to-teal-dark text-white p-4 flex items-center gap-3.5">
+        <span className="flex-none w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center">
+          <ShareGlyph size={20} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[15px] font-semibold leading-tight">Keep your trip one tap away</div>
+          <div className="text-[12.5px] text-white/75 mt-0.5 leading-snug">
+            Add it to your home screen — it opens like an app.
+          </div>
+          <div className="mt-2.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (canPrompt) void promptInstall();
+                else setSheet(isIOS ? 'ios' : 'menu');
+              }}
+              className="h-9 px-4 rounded-xl bg-white text-navy text-[13px] font-bold active:scale-[0.98] transition-transform"
+            >
+              Add to home screen
+            </button>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="h-9 px-3 rounded-xl text-[13px] font-medium text-white/70"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      </section>
+      {sheet === 'ios' && <IOSInstallSheet onClose={() => setSheet(null)} />}
+      {sheet === 'menu' && <MenuInstallSheet onClose={() => setSheet(null)} />}
+    </>
+  );
+}

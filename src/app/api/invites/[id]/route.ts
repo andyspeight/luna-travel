@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { getBrandingOverride } from '@/lib/agency-branding';
 
 function notFound() {
   return NextResponse.json({ error: 'not_found' }, { status: 404 });
@@ -58,11 +59,30 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     derivedStatus = 'expired';
   }
 
+  // The agency's own branding, so the very first screen a traveller sees wears
+  // their agent's identity rather than ours. This discloses nothing new: the
+  // agency id is already in this response, and the branding is what the app
+  // shows anyone holding the link. Trip details stay behind the knowledge
+  // check — see the prefill note below.
+  let branding: Record<string, string | undefined> = {};
+  try {
+    const b = await getBrandingOverride(invite.agency_id as string);
+    branding = {
+      appName: b.appName,
+      logoUrl: b.logoUrl,
+      brandPrimaryColour: b.brandPrimaryColour,
+      brandAccentColour: b.brandAccentColour,
+    };
+  } catch {
+    // Branding is decoration — never fail the invite lookup over it.
+  }
+
   return NextResponse.json({
     inviteId: invite.id,
     agencyId: invite.agency_id,
     status: derivedStatus,
     expiresAt: invite.expires_at,
+    branding,
     prefill: {
       // ⚠️ Security: we only pre-fill the booking reference, never the
       // email or departure date.

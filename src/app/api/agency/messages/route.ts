@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
+import { sendPushToTraveller } from '@/lib/push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -245,6 +246,16 @@ export async function POST(req: NextRequest) {
     await supabase.from('messages').delete().eq('id', messageId);
     return NextResponse.json({ error: 'send_failed' }, { status: 500 });
   }
+
+  // Push it to the traveller's devices. Fire-and-forget and never awaited into
+  // the response: a notification failing must not fail the send — the message
+  // is already delivered in-app, push is the nudge to go and read it.
+  void sendPushToTraveller(travellerId, {
+    title: agency.name || 'Your travel agent',
+    body: (m.subject as string | null)?.trim() || (m.body as string).slice(0, 120),
+    url: '/notifications',
+    tag: `message-${messageId}`,
+  });
 
   return NextResponse.json(
     {

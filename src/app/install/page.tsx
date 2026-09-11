@@ -7,6 +7,7 @@ import { IconShare } from '@/components/icons';
 import { useBooking } from '@/lib/booking-context';
 import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
 import { cinematicCover } from '@/lib/hero';
+import { NotificationsOptIn } from '@/components/notifications-optin';
 
 /**
  * /install
@@ -580,6 +581,14 @@ function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Brandin
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
         </button>
+
+        {/* Trip alerts. Deliberately directly under the primary CTA: this is
+            the one ask the browser will not let us repeat, and check-in and
+            flight changes are worthless if they arrive only when the traveller
+            happens to open the app. */}
+        <div className="w-full max-w-[360px] mt-6">
+          <NotificationsOptIn tone="onDark" />
+        </div>
 
         {/* Add to home screen — platform aware, see InstallAffordance */}
         <InstallAffordance />

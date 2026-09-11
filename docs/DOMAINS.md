@@ -187,6 +187,51 @@ domain stays authenticated and consistent. Agencies that have never set an app
 name in **App branding** fall back to a neutral label rather than a wrong one —
 worth filling that field in per agency.
 
+## Push notifications (Web Push / VAPID)
+
+Notifications go through the browser's Push API, not APNs/FCM directly. The
+server signs an encrypted payload with a VAPID key pair and posts it to the
+endpoint the browser issued; the platform's push service wakes the app's
+service worker (`worker/index.js`), which draws the notification.
+
+Generate the key pair once and add all three to Vercel (Production):
+
+```
+npx web-push generate-vapid-keys
+```
+
+```
+NEXT_PUBLIC_VAPID_PUBLIC_KEY = <the PUBLIC key>
+VAPID_PUBLIC_KEY             = <the same public key>
+VAPID_PRIVATE_KEY            = <the PRIVATE key — secret, server only>
+VAPID_SUBJECT                = mailto:ops@travelgenix.io
+```
+
+The public key is needed in both forms: `NEXT_PUBLIC_` for the browser to
+subscribe with, plain for the server to sign with. **A redeploy is required** —
+`NEXT_PUBLIC_*` inlines at build time. With no keys set, every send is a logged
+no-op and the app works normally; it simply cannot notify.
+
+**Rotating the keys invalidates every existing subscription.** Travellers would
+silently stop receiving notifications and would each have to opt in again, so
+treat the private key as permanent unless it leaks.
+
+### Two things that are not obvious
+
+- **On iPhone and iPad, push only works once the app is on the home screen.**
+  iOS supports web push from 16.4, but never from a Safari tab. So for iOS
+  travellers "add to home screen" is a hard prerequisite for notifications, not
+  a nicety — which is why the install prompt is pushed as hard as it is.
+- **The permission ask is one-shot.** A traveller who declines cannot be
+  prompted again by the page; only they can reverse it in browser settings.
+  That is why the opt-in explains check-in, flight changes and agent messages
+  *before* triggering the prompt, and never fires on page load.
+
+Subscriptions live in `luna_travel.push_subscriptions`, one row per device. A
+push service answering 404/410 means the subscription is dead and the row is
+deleted automatically. (The legacy `travellers.push_token` column is unused —
+a subscription is an endpoint plus two keys, not a token.)
+
 ## Notes
 
 - **Reinstall the PWA.** Anyone who added the app to their home screen from

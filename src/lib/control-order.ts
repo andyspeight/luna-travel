@@ -38,8 +38,16 @@ export async function retrieveOrderByClient(input: {
   departDate: string;
 }): Promise<ControlOrderResult> {
   const key = process.env.TG_INTERNAL_KEY;
-  if (!key) return { ok: false, status: 0 };
+  if (!key) {
+    console.warn('[control-order] TG_INTERNAL_KEY is not set — falling back to the legacy demo lookup, which does not know real bookings');
+    return { ok: false, status: 0 };
+  }
   if (!REC_ID_RE.test(input.recordId) || !input.orderRef || !input.email) {
+    console.warn('[control-order] rejected before calling Control', {
+      recordIdValid: REC_ID_RE.test(input.recordId),
+      hasOrderRef: !!input.orderRef,
+      hasEmail: !!input.email,
+    });
     return { ok: false, status: 0 };
   }
 
@@ -56,12 +64,30 @@ export async function retrieveOrderByClient(input: {
       cache: 'no-store',
       signal: AbortSignal.timeout(14_000),
     });
-    if (res.status === 404) return { ok: false, status: 404 };
-    if (!res.ok) return { ok: false, status: res.status };
+    if (res.status === 404) {
+      // Control reached Travelify, but nothing matched the ref/email/date trio.
+      // This is the "traveller mistyped something" case. No body logged: a
+      // not-found response can echo the details that were searched for.
+      console.warn('[control-order] no matching order', { recordId: input.recordId, orderRef: input.orderRef });
+      return { ok: false, status: 404 };
+    }
+    if (!res.ok) {
+      // Anything else is a Control or credentials problem rather than a
+      // traveller typo, and the body carries the reason — e.g. the client
+      // having no Travelify App ID, which cost us hours to find the first time
+      // precisely because this status was being discarded.
+      const detail = await res.text().catch(() => '');
+      console.error('[control-order] Control call failed', res.status, detail.slice(0, 200));
+      return { ok: false, status: res.status };
+    }
     const json = (await res.json()) as { order?: TrimmedOrder; agency?: ControlAgency | null };
-    if (!json?.order?.id) return { ok: false, status: 404 };
+    if (!json?.order?.id) {
+      console.warn('[control-order] Control returned 200 with no order', { recordId: input.recordId, orderRef: input.orderRef });
+      return { ok: false, status: 404 };
+    }
     return { ok: true, status: 200, order: json.order, agency: json.agency ?? null };
-  } catch {
+  } catch (e) {
+    console.error('[control-order] Control call threw', e instanceof Error ? e.message : e);
     return { ok: false, status: 502 };
   }
 }
@@ -92,9 +118,22 @@ export async function validateAgencyBooking(input: {
       email: input.email,
       departDate: input.departureDate,
     });
-    if (!r.ok || !r.order) return { ok: false };
+    if (!r.ok || !r.order) {
+      console.warn('[validate-booking] no order from Control', {
+        agencyId: input.agencyId,
+        bookingRef: input.bookingRef,
+        status: r.status,
+      });
+      return { ok: false };
+    }
     const mapped = orderToBooking(r.order, r.agency ?? null, input.bookingRef);
-    if (!mapped) return { ok: false };
+    if (!mapped) {
+      console.warn('[validate-booking] order found but could not be mapped', {
+        agencyId: input.agencyId,
+        bookingRef: input.bookingRef,
+      });
+      return { ok: false };
+    }
     const lead = mapped.travellers.find((t) => t.isLead) ?? mapped.travellers[0];
     return {
       ok: true,
@@ -113,7 +152,10 @@ export async function validateAgencyBooking(input: {
     email: input.email,
     departureDate: input.departureDate,
   });
-  if (!lookup.ok) return { ok: false };
+  if (!lookup.ok) {
+    console.warn('[validate-booking] legacy demo lookup found nothing', { bookingRef: input.bookingRef });
+    return { ok: false };
+  }
   const b = lookup.booking;
   return {
     ok: true,

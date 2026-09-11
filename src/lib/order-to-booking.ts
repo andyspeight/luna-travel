@@ -24,6 +24,8 @@ import type {
   Hotel,
   BoardBasis,
   AirportExtra,
+  Experience,
+  ExperienceKind,
   Document as BookingDocument,
   PaymentBreakdown,
   Agency,
@@ -52,6 +54,57 @@ interface RawRoute { legID?: number | null; direction?: string | null; duration?
 interface RawUnit { name?: string | null; roomType?: string | null; checkin?: string | null; nights?: number | null; rates?: Array<{ board?: string | null }> }
 interface RawLocation { city?: string | null; state?: string | null; country?: string | null; latitude?: number | null; longitude?: number | null }
 interface RawPerson { type?: string | null; title?: string | null; firstname?: string | null; surname?: string | null }
+
+/** Shared shape for every pickup/dropoff/venue point Control trims. */
+interface RawPoint {
+  dateTime?: string | null;
+  name?: string | null;
+  address1?: string | null;
+  iataCode?: string | null;
+  country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+interface RawMedia { url?: string | null }
+interface RawTickets {
+  name?: string | null;
+  ticketType?: string | null;
+  location?: { city?: string | null; country?: string | null; address1?: string | null; latitude?: number | null; longitude?: number | null } | null;
+  categories?: Array<string | null>;
+  selectedOption?: {
+    name?: string | null;
+    scheduledDateTime?: string | null;
+    scheduledLabel?: string | null;
+    subOption?: { name?: string | null } | null;
+  } | null;
+  media?: RawMedia[];
+}
+interface RawTransfers {
+  type?: string | null;
+  vehicle?: string | null;
+  company?: string | null;
+  journeyDuration?: string | null;
+  outPickup?: RawPoint | null;
+  outDropoff?: RawPoint | null;
+  returnPickup?: RawPoint | null;
+  returnDropoff?: RawPoint | null;
+  media?: RawMedia[];
+}
+interface RawCarRental {
+  name?: string | null;
+  className?: string | null;
+  transmission?: string | null;
+  seats?: number | null;
+  rentalOperator?: { name?: string | null } | null;
+  pickup?: RawPoint | null;
+  dropoff?: RawPoint | null;
+  media?: RawMedia[];
+}
+interface RawExtraGroup {
+  name?: string | null;
+  extras?: Array<{ name?: string | null; description?: string | null; qty?: number | null }>;
+}
+
 interface RawItem {
   id?: number | null;
   status?: string | null;
@@ -64,6 +117,12 @@ interface RawItem {
   accommodation?: { name?: string | null; rating?: number | null; location?: RawLocation | null; units?: RawUnit[] } | null;
   flights?: { routes?: RawRoute[] } | null;
   airportExtras?: { type?: string | null; name?: string | null; subTitle?: string | null; startDateTime?: string | null; endDateTime?: string | null; location?: { iataCode?: string | null } | null; travellers?: RawPerson[] } | null;
+  // Control has always trimmed these four; Luna simply never read them, so
+  // every transfer, hire car, attraction ticket and add-on was dropped.
+  ticketsAttractions?: RawTickets | null;
+  transfers?: RawTransfers | null;
+  carRental?: RawCarRental | null;
+  extras?: RawExtraGroup[] | null;
 }
 interface RawSummary { totalPrice?: number | null; earliestStart?: string | null; latestEnd?: string | null; travellers?: RawPerson[] }
 interface RawDocument { name?: string | null; ext?: string | null; size?: number | null; url?: string | null; created?: string | null }
@@ -196,6 +255,44 @@ function inferDocKind(name?: string | null, ext?: string | null): BookingDocumen
 // ───────── Main mapper ─────────
 
 /** Normalise a Travelify country value to uppercase ISO-2, or '' if it isn't one. */
+/** Whatever the supplier called this place, in preference order. */
+function pointPlace(p?: RawPoint | null): string {
+  if (!p) return '';
+  return (p.name || p.address1 || p.iataCode || '').trim();
+}
+
+function pointCountry(...points: Array<RawPoint | null | undefined>): string {
+  for (const p of points) {
+    const cc = iso2(p?.country);
+    if (cc) return cc;
+  }
+  return '';
+}
+
+function photoUrls(media?: RawMedia[] | null): string[] | undefined {
+  const urls = (Array.isArray(media) ? media : [])
+    .map((m) => (m?.url || '').trim())
+    .filter(Boolean)
+    .slice(0, 6);
+  return urls.length ? urls : undefined;
+}
+
+/** Join the parts of a subtitle that actually exist. */
+function joinNotes(...parts: Array<string | null | undefined>): string | undefined {
+  const kept = parts.map((x) => (x || '').trim()).filter(Boolean);
+  return kept.length ? kept.join(' · ') : undefined;
+}
+
+/**
+ * A guided tour and a museum ticket are both attractions to Travelify but read
+ * very differently on an itinerary, so split them on the supplier's own words
+ * rather than showing everything as a generic activity.
+ */
+function attractionKind(t: RawTickets): ExperienceKind {
+  const words = [t.ticketType || '', ...(t.categories || []).map((c) => c || '')].join(' ').toLowerCase();
+  return /tour|excursion|safari|cruise|day trip|sightseeing/.test(words) ? 'excursion' : 'activity';
+}
+
 function iso2(v: string | null | undefined): string {
   const s = (v || '').trim().toUpperCase();
   return /^[A-Z]{2}$/.test(s) ? s : '';
@@ -302,6 +399,112 @@ export function orderToBooking(
     });
   });
 
+  // ----- Experiences: attraction tickets, transfers, car hire, add-ons -----
+  // Control trims all four; until now none was read, so a booking made of them
+  // rendered as an empty trip. They all land in `experiences`, which already
+  // has a timeline entry and a detail page.
+  const experiences: Experience[] = [];
+  items.forEach((item) => {
+    const ref = item.bookingReference || undefined;
+    const itemDate = dateOnly(item.startDate);
+    const key = item.id ?? 'x';
+
+    const t = item.ticketsAttractions;
+    if (t) {
+      const loc = t.location || {};
+      const opt = t.selectedOption || null;
+      // The scheduled date is the one the customer booked; item.startDate is
+      // only a fallback for suppliers that leave the option unscheduled.
+      const when = opt?.scheduledDateTime || item.startDate || '';
+      experiences.push({
+        id: `tkt-${key}`,
+        kind: attractionKind(t),
+        title: t.name || opt?.name || 'Attraction ticket',
+        location: (loc.city || loc.address1 || '').trim() || undefined,
+        startDate: dateOnly(when) || itemDate,
+        time: timePart(when),
+        notes: joinNotes(opt?.scheduledLabel, opt?.subOption?.name, t.ticketType),
+        reference: ref,
+        photos: photoUrls(t.media),
+        lat: typeof loc.latitude === 'number' ? loc.latitude : undefined,
+        lng: typeof loc.longitude === 'number' ? loc.longitude : undefined,
+        countryCode: iso2(loc.country),
+      });
+    }
+
+    const tr = item.transfers;
+    if (tr) {
+      // A return transfer is a second journey on a different day, so it gets
+      // its own entry rather than being folded into the outbound one.
+      const journeys: Array<{ from?: RawPoint | null; to?: RawPoint | null; suffix: string }> = [
+        { from: tr.outPickup, to: tr.outDropoff, suffix: 'out' },
+        { from: tr.returnPickup, to: tr.returnDropoff, suffix: 'ret' },
+      ];
+      journeys.forEach(({ from, to, suffix }) => {
+        if (!from && !to) return;
+        const dest = pointPlace(to);
+        experiences.push({
+          id: `trf-${key}-${suffix}`,
+          kind: 'transfer',
+          title: dest ? `Transfer to ${dest}` : tr.vehicle || 'Transfer',
+          supplier: tr.company || undefined,
+          location: pointPlace(from) || undefined,
+          startDate: dateOnly(from?.dateTime || item.startDate || '') || itemDate,
+          time: timePart(from?.dateTime),
+          notes: joinNotes(tr.vehicle, tr.type, tr.journeyDuration),
+          reference: ref,
+          photos: photoUrls(tr.media),
+          lat: typeof from?.latitude === 'number' ? from.latitude : undefined,
+          lng: typeof from?.longitude === 'number' ? from.longitude : undefined,
+          countryCode: pointCountry(to, from),
+        });
+      });
+    }
+
+    const cr = item.carRental;
+    if (cr) {
+      experiences.push({
+        id: `car-${key}`,
+        kind: 'car-hire',
+        title: cr.name || cr.className || 'Car hire',
+        supplier: cr.rentalOperator?.name || undefined,
+        location: pointPlace(cr.pickup) || undefined,
+        startDate: dateOnly(cr.pickup?.dateTime || item.startDate || '') || itemDate,
+        endDate: dateOnly(cr.dropoff?.dateTime || '') || undefined,
+        time: timePart(cr.pickup?.dateTime),
+        notes: joinNotes(
+          cr.className,
+          cr.transmission,
+          typeof cr.seats === 'number' && cr.seats > 0 ? `${cr.seats} seats` : '',
+        ),
+        reference: ref,
+        photos: photoUrls(cr.media),
+        lat: typeof cr.pickup?.latitude === 'number' ? cr.pickup.latitude : undefined,
+        lng: typeof cr.pickup?.longitude === 'number' ? cr.pickup.longitude : undefined,
+        countryCode: pointCountry(cr.pickup, cr.dropoff),
+      });
+    }
+
+    // Extras are the one product whose dataObject is an array of groups, each
+    // holding several bookable add-ons. Each add-on is its own line.
+    (item.extras || []).forEach((group, gi) => {
+      (group?.extras || []).forEach((extra, ei) => {
+        const name = (extra?.name || '').trim();
+        if (!name) return;
+        const qty = typeof extra?.qty === 'number' && extra.qty > 1 ? `×${extra.qty}` : '';
+        experiences.push({
+          id: `xtr-${key}-${gi}-${ei}`,
+          kind: 'other',
+          title: qty ? `${name} ${qty}` : name,
+          location: undefined,
+          startDate: itemDate,
+          notes: joinNotes(extra?.description, group?.name),
+          reference: ref,
+        });
+      });
+    });
+  });
+
   // ----- Travellers (summary list is already de-duped server-side) -----
   const leadFirst = (order.customerFirstname || '').toLowerCase();
   const leadLast = (order.customerSurname || '').toLowerCase();
@@ -338,11 +541,22 @@ export function orderToBooking(
     .filter((d) => d.url);
 
   // ----- Dates -----
-  const tripStart = summary.earliestStart || items.find((i) => i.startDate)?.startDate || '';
+  let tripStart = summary.earliestStart || items.find((i) => i.startDate)?.startDate || '';
   const endCandidates: string[] = [];
   hotels.forEach((h) => { if (h.checkOut) endCandidates.push(dateOnly(h.checkOut)); });
   flights.forEach((f) => { if (f.arrTime) endCandidates.push(dateOnly(f.arrTime)); });
   airportExtras.forEach((x) => { if (x.date) endCandidates.push(dateOnly(x.date)); });
+  // An attraction is scheduled for the date the customer picked, which can sit
+  // outside the item's own start date, so the window has to stretch to it or
+  // the entry lands off the end of the itinerary.
+  experiences.forEach((x) => {
+    const start = dateOnly(x.startDate);
+    if (start) {
+      endCandidates.push(start);
+      if (!tripStart || start < dateOnly(tripStart)) tripStart = start;
+    }
+    if (x.endDate) endCandidates.push(dateOnly(x.endDate));
+  });
   if (summary.latestEnd) endCandidates.push(dateOnly(summary.latestEnd));
   let tripEnd = '';
   endCandidates.forEach((d) => { if (d && (!tripEnd || d > tripEnd)) tripEnd = d; });
@@ -436,6 +650,7 @@ export function orderToBooking(
     flights,
     hotels,
     airportExtras,
+    experiences,
     documents,
     payment,
     agency: ag,
@@ -460,6 +675,14 @@ export function orderToBooking(
  */
 export function fillTripSummaryGaps(booking: Booking): void {
   const experiences = booking.experiences ?? [];
+
+  // Country first — the hero, the destination guide and the weather all key on
+  // it, and on a booking of attraction tickets an experience is the only thing
+  // carrying one.
+  if (!booking.primaryCountryCode) {
+    const cc = experiences.map((e) => e.countryCode || '').find(Boolean);
+    if (cc) booking.primaryCountryCode = cc;
+  }
 
   if (!booking.destinationLabel) {
     const places = Array.from(

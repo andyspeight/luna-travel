@@ -143,6 +143,25 @@ export function buildTripMap(booking: Booking): TripMapModel {
     }
   });
 
+  // ── Experience nodes (attractions, transfers, car hire) ──
+  // They reuse the existing 'extra' kind, which already renders as a generic
+  // pin, so no map component changes are needed. On an attractions-only
+  // booking these are the only pins there are.
+  const experienceNodes: MapNode[] = [];
+  (booking.experiences ?? []).forEach((x) => {
+    if (typeof x.lat !== 'number' || typeof x.lng !== 'number') return;
+    experienceNodes.push({
+      id: `experience-${x.id}`,
+      kind: 'extra',
+      order: 0,
+      lng: x.lng,
+      lat: x.lat,
+      title: x.title,
+      subtitle: [x.location, x.supplier].filter(Boolean).join(' · ') || undefined,
+      href: `/experience/${x.id}`,
+    });
+  });
+
   // ── Order numbers: walk the timeline, numbering first appearances ──
   // Build a chronological list of (time, node) for every plotted thing.
   type Stamped = { t: number; node: MapNode };
@@ -157,6 +176,11 @@ export function buildTripMap(booking: Booking): TripMapModel {
     const node = hotelNodes.find((n) => n.id === `hotel-${h.id}`);
     if (node) stamped.push({ t: new Date(h.checkIn).getTime(), node });
   }
+  for (const x of booking.experiences ?? []) {
+    const node = experienceNodes.find((n) => n.id === `experience-${x.id}`);
+    const t = new Date(x.startDate).getTime();
+    if (node && !Number.isNaN(t)) stamped.push({ t, node });
+  }
   stamped.sort((a, b) => a.t - b.t);
 
   let order = 0;
@@ -169,7 +193,7 @@ export function buildTripMap(booking: Booking): TripMapModel {
 
   // Assemble final node list (airports first registered, then hotels), then
   // sort by the chronological order number for a stable, readable sequence.
-  nodes.push(...Array.from(airportSeen.values()), ...hotelNodes);
+  nodes.push(...Array.from(airportSeen.values()), ...hotelNodes, ...experienceNodes);
   nodes.sort((a, b) => a.order - b.order);
 
   for (const n of nodes) points.push({ lng: n.lng, lat: n.lat });

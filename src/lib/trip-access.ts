@@ -166,7 +166,33 @@ export async function findTripsForEmail(email: string): Promise<Map<string, Trip
     });
   }
 
-  const sorted = [...byKey.values()].sort((a, b) =>
+  // Drop anything we know cannot be redeemed, so the email never promises
+  // access it cannot deliver. A Luna-native agency's bookings live in
+  // luna_travel.bookings; an invite pointing at one that is not there is
+  // orphaned (typically leftover seed data) and its link would dead-end on the
+  // verification screen. Control-sourced agencies are left alone — confirming
+  // those would mean a Travelify call per trip, and the invite existing is
+  // reasonable evidence on its own.
+  const redeemable: TripMatch[] = [];
+  for (const t of byKey.values()) {
+    if (isLunaAgency(t.agencyId)) {
+      const stored = await supabase
+        .from('bookings')
+        .select('reference', { count: 'exact', head: true })
+        .eq('agency_id', t.agencyId)
+        .eq('reference', t.bookingRef);
+      if (!stored.count) {
+        console.warn('[trip-access] skipping orphaned booking', {
+          agencyId: t.agencyId,
+          bookingRef: t.bookingRef,
+        });
+        continue;
+      }
+    }
+    redeemable.push(t);
+  }
+
+  const sorted = redeemable.sort((a, b) =>
     (b.departureDate || '').localeCompare(a.departureDate || ''),
   );
 

@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { validateAgencyBooking, type ValidatedBooking } from '@/lib/control-order';
 import { getStoredBooking } from '@/lib/stored-booking';
+import { isLunaAgency } from '@/lib/agency-id';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
 import { getPlatformSettings } from '@/lib/platform-settings';
@@ -212,6 +213,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       countryCode: stored.payload?.primaryCountryCode || null,
       locationSlug: stored.payload?.locationSlug || null,
     };
+  } else if (isLunaAgency(invite.agency_id as string)) {
+    // A Luna-native agency's bookings are created in the portal and stored in
+    // luna_travel.bookings. If there is no stored booking, there is nothing to
+    // validate against — Control only knows Control (rec...) agencies, so
+    // falling through to it produces a confusing "rejected before calling
+    // Control" rather than the truth: this invite points at a booking that
+    // does not exist any more (typically leftover seed data).
+    console.warn('[redeem] luna-native agency has no stored booking:', {
+      agencyId: invite.agency_id,
+      bookingRef,
+    });
+    return notFound();
   } else {
     const validation = await validateAgencyBooking({
       agencyId: invite.agency_id as string,

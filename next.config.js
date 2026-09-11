@@ -7,6 +7,10 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === 'development',
   workboxOptions: {
     skipWaiting: true,
+    // Stable path, deliberately not next-pwa's hashed custom worker — see the
+    // note at the top of public/push-sw.js. A hashed name breaks push for any
+    // device still holding the previous sw.js.
+    importScripts: ['/push-sw.js'],
     runtimeCaching: [
       {
         urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
@@ -43,6 +47,17 @@ const withPWA = withPWAInit({
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  async headers() {
+    return [
+      {
+        // The push handler must never be served stale: the service worker
+        // imports it by a fixed path, so a cached copy would pin old behaviour
+        // on a device indefinitely.
+        source: '/push-sw.js',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }],
+      },
+    ];
+  },
 };
 
 module.exports = withPWA(nextConfig);

@@ -1,6 +1,17 @@
 /**
- * Custom service-worker additions, compiled by @ducanh2912/next-pwa and
- * imported into the generated sw.js.
+ * Push handling for the service worker.
+ *
+ * A PLAIN STATIC FILE WITH A STABLE NAME, imported by the generated sw.js via
+ * workbox's importScripts. It used to be next-pwa's "custom worker", which
+ * compiles to a CONTENT-HASHED filename — and that quietly broke push on every
+ * deploy that changed it: a phone still holding the previous sw.js would
+ * importScripts a hash that no longer existed, the import would 404, and a
+ * service worker whose importScripts fails does not start AT ALL. The server
+ * would report the push as sent and the device would silently drop it.
+ *
+ * A stable path cannot go stale: an older sw.js still resolves it, and picks up
+ * the current contents while it is at it. Served no-cache (see next.config.js)
+ * so a change here reaches devices promptly.
  *
  * This is the half of push that runs ON THE DEVICE, with the app closed. The
  * server posts an encrypted payload to the push service; the OS wakes this

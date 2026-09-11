@@ -16,6 +16,7 @@ import { resolvePortalAgency } from '@/lib/agencies';
 import { buildManualBooking, type ManualBookingInput } from '@/lib/stored-booking';
 import type { ControlAgency } from '@/lib/order-to-booking';
 import { isKnownLocation } from '@/data/hero-locations';
+import { travellerUrl } from '@/lib/origins';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -184,6 +185,6 @@ export async function POST(req: NextRequest) {
     inviteError = true;
   }
 
-  const qrUrl = inviteId ? `${req.nextUrl.origin}/install?invite=${inviteId}` : null;
+  const qrUrl = inviteId ? travellerUrl(`/install?invite=${inviteId}`, req.nextUrl.origin) : null;
   return NextResponse.json({ ok: true, reference, inviteId, qrUrl, inviteError }, { status: 201 });
 }

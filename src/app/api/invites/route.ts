@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
 import { getPlatformSettings } from '@/lib/platform-settings';
+import { travellerUrl } from '@/lib/origins';
 
 // Dynamic — this route hits the database, no caching
 export const dynamic = 'force-dynamic';
@@ -137,11 +138,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Construct the QR URL
-  // We use the request's origin so it works on luna-travel-seven.vercel.app,
-  // any preview deployment, and (eventually) a custom domain.
-  const origin = req.nextUrl.origin;
-  const qrUrl = `${origin}/install?invite=${row.id}`;
+  // Construct the QR URL on the TRAVELLER domain — this link is what the
+  // customer receives, so it must never carry the portal hostname. Falls back
+  // to the request's origin (preview deployments, and before the split is
+  // configured), which is the old behaviour.
+  const qrUrl = travellerUrl(`/install?invite=${row.id}`, req.nextUrl.origin);
 
   return NextResponse.json(
     {

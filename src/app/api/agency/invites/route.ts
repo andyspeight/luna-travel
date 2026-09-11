@@ -13,6 +13,7 @@ import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
 import { logAuditEvent } from '@/lib/audit';
 import { getPlatformSettings } from '@/lib/platform-settings';
+import { travellerUrl } from '@/lib/origins';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
       redeemedAt: r.redeemed_at,
       expiresAt: r.expires_at,
       createdAt: r.created_at,
-      qrUrl: `${req.nextUrl.origin}/install?invite=${r.id}`,
+      qrUrl: travellerUrl(`/install?invite=${r.id}`, req.nextUrl.origin),
     };
   });
 
@@ -140,6 +141,6 @@ export async function POST(req: NextRequest) {
     metadata: { agencyId: claims.agencyId, bookingRef, hasEmail: !!email, via: 'agency_portal' },
   });
 
-  const qrUrl = `${req.nextUrl.origin}/install?invite=${row.id}`;
+  const qrUrl = travellerUrl(`/install?invite=${row.id}`, req.nextUrl.origin);
   return NextResponse.json({ inviteId: row.id, qrUrl, expiresAt: row.expires_at }, { status: 201 });
 }

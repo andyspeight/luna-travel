@@ -125,6 +125,16 @@ export interface Experience {
   notes?: string;
   reference?: string;
   photos?: string[];
+  /** Coordinates where the supplier gave them — plots a pin on the trip map. */
+  lat?: number;
+  lng?: number;
+  /**
+   * ISO-2 of where this happens. On a booking with no hotel and no flight —
+   * attraction tickets, a transfer on its own — this is the only thing that can
+   * say which country the trip is in, and the hero, guide and weather all need
+   * a country.
+   */
+  countryCode?: string;
 }
 
 export interface Document {

@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { getLunaAgency } from '@/lib/agencies';
 import { isLunaAgency } from '@/lib/agency-id';
 import { getBrandingOverride } from '@/lib/agency-branding';
+import { getAgencySettings, isEmail } from '@/lib/agency-settings';
 import { portalUrl } from '@/lib/origins';
 import { sendEmail } from '@/lib/email';
 
@@ -35,53 +36,71 @@ function maskEmail(email: string): string {
 }
 
 /**
- * Who to tell at the agency.
+ * Who to tell at the agency, best source first:
  *
- * A Luna-native agency has a contact email on its own record. A Control-sourced
- * one does not — its details live in Control and only reach us inside a session
- * — so we fall back to the agent who actually sent this traveller their access.
- * That is arguably the better address anyway: it is the person who owns the
- * relationship rather than a generic inbox.
+ *   1. the address the agency set in the portal
+ *   2. a Luna-native agency's own contact email
+ *   3. whoever sent this traveller their access link
+ *   4. whoever last sent anyone at that agency an access link
+ *
+ * Everything below the first is a guess. They are decent guesses — an agent who
+ * sent the access link owns that relationship, which beats a generic inbox — but
+ * they follow whoever happened to click last, which is why the portal setting
+ * exists and why it wins.
+ *
+ * A Control-sourced agency has no contact email here at all: its details live in
+ * Control and only reach us inside a session, so for those agencies the choice is
+ * between the portal setting and a guess.
  */
 export async function resolveAgentEmail(
   agencyId: string,
   bookingRef: string | null,
 ): Promise<string | null> {
   try {
+    // An address the agency chose themselves beats anything we can infer.
+    const { replyNotifyEmail } = await getAgencySettings(agencyId);
+    if (replyNotifyEmail) return replyNotifyEmail;
+
     if (isLunaAgency(agencyId)) {
       const row = await getLunaAgency(agencyId);
       const email = (row?.contact_email || '').trim();
       if (email) return email;
     }
 
-    const supabase = getSupabaseAdmin();
-    let q = supabase
-      .from('invites')
-      .select('created_by, created_at')
-      .eq('agency_id', agencyId)
-      // created_by is not always a person. Several paths stamp a sentinel:
-      // 'trip-access' (self-service recovery), 'manual-booking', 'demo-seed'.
-      // None of them contain an @, so the database can rule them out — and it
-      // has to, because taking the single most recent row and then rejecting
-      // it meant one recovery email permanently shadowed the real agent. That
-      // row is always the newest, so the agency would silently stop being
-      // told about replies from the moment a traveller first recovered a trip.
-      .like('created_by', '%@%')
-      .order('created_at', { ascending: false })
-      .limit(5);
-    if (bookingRef) q = q.eq('booking_ref', bookingRef);
-
-    const { data } = await q;
-    for (const row of (data ?? []) as { created_by?: string }[]) {
-      const candidate = (row.created_by || '').trim();
-      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return candidate;
-    }
-
-    // Booking-specific lookup found nothing — try the agency's most recent
-    // invite from any booking before giving up.
-    if (bookingRef) return resolveAgentEmail(agencyId, null);
+    // Whoever sent this traveller their access link, preferring the one for
+    // this booking, then anyone at the agency.
+    return (
+      (bookingRef ? await lastInviteSender(agencyId, bookingRef) : null) ??
+      (await lastInviteSender(agencyId, null))
+    );
   } catch (e) {
     console.error('[agent-notify] could not resolve agent email', e instanceof Error ? e.message : e);
+  }
+  return null;
+}
+
+/** The most recent invite for this agency that a real person actually sent. */
+async function lastInviteSender(agencyId: string, bookingRef: string | null): Promise<string | null> {
+  let q = getSupabaseAdmin()
+    .from('invites')
+    .select('created_by, created_at')
+    .eq('agency_id', agencyId)
+    // created_by is not always a person. Several paths stamp a sentinel:
+    // 'trip-access' (self-service recovery), 'manual-booking', 'demo-seed'.
+    // None of them contain an @, so the database can rule them out — and it
+    // has to, because taking the single most recent row and then rejecting it
+    // meant one recovery invite permanently shadowed the real agent. That row
+    // is always the newest, so the agency would silently stop being told about
+    // replies from the moment a traveller first recovered their own trip.
+    .like('created_by', '%@%')
+    .order('created_at', { ascending: false })
+    .limit(5);
+  if (bookingRef) q = q.eq('booking_ref', bookingRef);
+
+  const { data } = await q;
+  for (const row of (data ?? []) as { created_by?: string }[]) {
+    const candidate = (row.created_by || '').trim();
+    if (isEmail(candidate)) return candidate;
   }
   return null;
 }

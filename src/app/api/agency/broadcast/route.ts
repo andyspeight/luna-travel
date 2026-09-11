@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
     // One tag for the whole broadcast, so a traveller sees one row, not one
     // per device-wake.
     tag: `broadcast-${messageId}`,
+    urgent: priority === 'urgent' || priority === 'important',
   });
   console.log('[agency/broadcast] push', { messageId, recipients: travellerIds.length, sent: pushed.sent });
 

@@ -73,9 +73,33 @@ Vercel project **`luna-travel`** (team `agendasgroup`), Settings → Domains.
 Add both:
 
 - `my-booking.co`
-- `www.my-booking.co` — set it to redirect to the apex
+- `www.my-booking.co`
 
 Vercel will display the exact DNS records to create. Use what it shows.
+
+> ### ⚠️ Point the apex/www redirect the right way
+>
+> Vercel's default when you add both is often **apex → www**, which is the
+> opposite of what this app is configured for. `NEXT_PUBLIC_TRAVELLER_ORIGIN`
+> is the **apex** (`https://my-booking.co`), so invite links are generated as
+> `my-booking.co/install?...` — and an apex→www rule turns every one of those
+> into an extra redirect hop, landing the traveller (and their session cookie)
+> on `www`.
+>
+> **Set `my-booking.co` as the primary domain, and `www.my-booking.co` to
+> redirect to it.**
+>
+> If you would rather keep `www` as the canonical host, that is fine — but then
+> change `NEXT_PUBLIC_TRAVELLER_ORIGIN` to `https://www.my-booking.co` so the
+> two agree, and redeploy.
+>
+> The app tolerates either way round: `hostMatches()` in `lib/origins.ts`
+> treats `www.x` and `x` as the same site, so `/agency` and `/admin` are
+> redirected off the consumer domain whichever of the pair the request lands
+> on. Without that tolerance, an unconfigured `www` looks like an unknown host
+> and quietly serves the portal and admin on the consumer domain. Getting the
+> redirect direction right still matters for the extra hop and for keeping
+> session cookies on one host.
 
 ### 2. Point DNS at Vercel (Cloudflare)
 
@@ -123,6 +147,8 @@ deployment. Redeploy from the Vercel dashboard, or push any commit.
 | `lunatravel.travelify.io/install?invite=X` | redirect → `my-booking.co/install?invite=X`, query intact |
 | Create an invite in the portal | the copied link starts `https://my-booking.co/install?...` |
 | Click through from Control | still signs straight into `/agency` |
+| `my-booking.co/` | serves the app **directly** — a 308 to `www` here means the apex/www redirect is the wrong way round (see the warning above) |
+| `www.my-booking.co/agency` | redirect → portal, **never** the portal itself |
 
 ### Rollback
 

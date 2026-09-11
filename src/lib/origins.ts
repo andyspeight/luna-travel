@@ -64,6 +64,29 @@ function hostOf(origin: string): string {
 export const TRAVELLER_HOST = hostOf(TRAVELLER_ORIGIN);
 export const PORTAL_HOST = hostOf(PORTAL_ORIGIN);
 
+function stripWww(host: string): string {
+  return host.startsWith('www.') ? host.slice(4) : host;
+}
+
+/**
+ * Does an incoming Host header belong to this configured site? `www.` is
+ * ignored on both sides, so `www.my-booking.co` counts as the traveller host
+ * even though the configured origin is the apex.
+ *
+ * This matters because the apex/www redirect is a DOMAIN-level Vercel rule that
+ * runs before middleware. Without this, whichever of the pair is not configured
+ * looks like an unknown host, falls through to "serve everything", and quietly
+ * exposes /agency and /admin on the consumer domain.
+ *
+ * Deliberately no canonical www→apex redirect here: Vercel already owns that
+ * direction, and adding our own would bounce the request between the two hosts
+ * forever.
+ */
+export function hostMatches(requestHost: string, configuredHost: string): boolean {
+  if (!requestHost || !configuredHost) return false;
+  return stripWww(requestHost.toLowerCase()) === stripWww(configuredHost);
+}
+
 /**
  * Both configured AND genuinely different → the split is live. One alone is
  * ignored, and identical hosts are rejected because the redirect rules would

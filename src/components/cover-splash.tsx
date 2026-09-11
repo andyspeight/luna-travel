@@ -45,16 +45,20 @@ export function CoverSplash() {
   // what the traveller chooses to send. Native share sheet where available,
   // clipboard fallback elsewhere (brief tick on the button as feedback).
   const shareTrip = async () => {
-    const dest = booking.destinationLabel;
+    const dest = booking.destinationLabel.trim();
     const now = Date.now();
+    // The plane is only honest when there is a flight — an attractions booking
+    // sharing "Flying to…" is the same class of bug as calling a flight-only
+    // booking a holiday.
+    const sign = booking.flights.length ? '✈️' : '✨';
     const text =
       now > new Date(booking.tripEnd).getTime()
-        ? `Just home from ${dest} — what a trip! ✈️`
+        ? `Just home${dest ? ` from ${dest}` : ''} — what a trip! ${sign}`
         : now >= new Date(booking.tripStart).getTime()
-          ? `I'm in ${dest} right now ✈️`
+          ? `${dest ? `I'm in ${dest}` : "I'm away"} right now ${sign}`
           : parts.days > 0
-            ? `${parts.days} day${parts.days === 1 ? '' : 's'} until ${dest}! ✈️`
-            : `Flying to ${dest} today ✈️`;
+            ? `${parts.days} day${parts.days === 1 ? '' : 's'} until ${dest || 'my trip'}! ${sign}`
+            : `${dest ? `Off to ${dest}` : 'My trip starts'} today ${sign}`;
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({ text });
@@ -251,23 +255,37 @@ function DockButton({
   );
 }
 
-/** Pick a headline appropriate to the trip shape. */
+/**
+ * Pick a headline appropriate to the trip shape.
+ *
+ * Every line has a form that works without a destination. Some bookings simply
+ * have no place attached — an attraction ticket carries neither a hotel city
+ * nor an arrival airport — and "Escape to " with nothing after it is far worse
+ * than a shorter headline.
+ */
 function tripHeadline(booking: ReturnType<typeof useBooking>['booking']): string {
   const hasFlights = booking.flights.length > 0;
   const hasHotels = booking.hotels.length > 0;
   const hasChildren = booking.travellers.some((t) => t.type === 'child' || t.type === 'infant');
   const isPremium = booking.flights.some((f) => f.cabin === 'Business' || f.cabin === 'First');
-  const dest = booking.destinationLabel;
+  const dest = booking.destinationLabel.trim();
 
   // Date-aware first: a trip that's over or under way must not read like an
   // upcoming one ("almost here" for a past date was a reported bug).
   const now = Date.now();
-  if (now > new Date(booking.tripEnd).getTime()) return `Welcome home from ${dest}`;
-  if (now >= new Date(booking.tripStart).getTime()) return `Enjoy ${dest}`;
+  if (now > new Date(booking.tripEnd).getTime()) {
+    return dest ? `Welcome home from ${dest}` : 'Welcome home';
+  }
+  if (now >= new Date(booking.tripStart).getTime()) {
+    return dest ? `Enjoy ${dest}` : 'Enjoy every moment';
+  }
 
-  if (isPremium) return `Luxury trip to ${dest}`;
+  if (isPremium) return dest ? `Luxury trip to ${dest}` : 'Your luxury trip';
   // "Holiday" only when there's actually a stay — a flight-only booking is a trip.
-  if (hasChildren) return hasHotels ? `Family holiday in ${dest}` : `Family trip to ${dest}`;
-  if (!hasFlights) return `Escape to ${dest}`;
-  return `Your trip to ${dest}`;
+  if (hasChildren) {
+    if (hasHotels) return dest ? `Family holiday in ${dest}` : 'Your family holiday';
+    return dest ? `Family trip to ${dest}` : 'Your family trip';
+  }
+  if (!hasFlights) return dest ? `Escape to ${dest}` : 'Your trip';
+  return dest ? `Your trip to ${dest}` : 'Your trip';
 }

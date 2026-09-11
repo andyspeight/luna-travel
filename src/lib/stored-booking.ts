@@ -10,7 +10,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
+import { orderToBooking, fillTripSummaryGaps, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
 import type { Booking, ExperienceKind } from '@/types/booking';
 
 export interface ManualFlightInput {
@@ -188,6 +188,12 @@ export function buildManualBooking(
     const maxExp = expDates[expDates.length - 1];
     if (!curEnd || maxExp > curEnd) booking.tripEnd = maxExp;
   }
+
+  // Experiences arrive after orderToBooking has already derived the summary,
+  // and they may be the only thing on the booking — so re-run the gap filler
+  // now that they are attached. It only touches fields that are still empty,
+  // which leaves the explicit admin overrides above untouched.
+  fillTripSummaryGaps(booking);
 
   return booking;
 }

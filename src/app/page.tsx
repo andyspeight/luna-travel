@@ -181,7 +181,9 @@ export default function HomePage() {
                   <em>{t('next.whereNext')}</em>
                 </h2>
                 <p className="text-xs opacity-90 mt-0.5">
-                  {t('next.lovedX', { dest: booking.destinationLabel, agency: booking.agency.name })}
+                  {booking.destinationLabel
+                    ? t('next.lovedX', { dest: booking.destinationLabel, agency: booking.agency.name })
+                    : t('next.lovedIt', { agency: booking.agency.name })}
                 </p>
               </div>
               <IconChevR size={20} className="ml-auto flex-shrink-0 opacity-90" />
@@ -240,7 +242,7 @@ export default function HomePage() {
                 </span>
               )}
               <h2 className="font-serif text-[32px] leading-none mb-1.5 drop-shadow-sm">
-                <em>{booking.destinationLabel}</em>
+                <em>{booking.destinationLabel || t('home.yourTrip')}</em>
               </h2>
               <p className="text-sm opacity-95 truncate">
                 {booking.hotels[0]?.name ?? 'Custom itinerary'} · {booking.durationLabel} ·{' '}
@@ -317,7 +319,11 @@ export default function HomePage() {
       {/* Agency-authored guide pages — appear as the agent publishes them */}
       <GuideLinks />
 
-      {/* Destination guide */}
+      {/* Destination guide — needs a country to have anything to show. A
+          booking of attraction tickets has no hotel city and no arrival
+          airport, so it has no country, and the card rendered as a blank
+          title over an empty gradient. */}
+      {booking.primaryCountryCode && (
       <section className="mt-6">
         <SectionHeading title={t('home.getToKnow')} />
         <Link
@@ -366,6 +372,7 @@ export default function HomePage() {
           </div>
         </Link>
       </section>
+      )}
 
       {/* Inspiration teaser — discoverable before the trip, prominent after.
           The dedicated /inspiration route carries the full collection. */}

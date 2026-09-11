@@ -441,5 +441,48 @@ export function orderToBooking(
     agency: ag,
   };
 
+  fillTripSummaryGaps(booking);
+
   return booking;
+}
+
+/**
+ * Fill in trip summary fields that the hotel/flight derivation above could not
+ * produce.
+ *
+ * It exists for bookings made of neither: attraction tickets, a day excursion,
+ * a transfer on its own. Everything upstream reads the destination off a hotel
+ * city or a flight arrival airport, so those bookings came out with no
+ * destination, no duration and no hero — a blank trip that still rendered.
+ *
+ * Only ever fills gaps. Anything already derived, or set explicitly by an
+ * agent on a manual booking, is left exactly as it is.
+ */
+export function fillTripSummaryGaps(booking: Booking): void {
+  const experiences = booking.experiences ?? [];
+
+  if (!booking.destinationLabel) {
+    const places = Array.from(
+      new Set(experiences.map((e) => (e.location || '').trim()).filter(Boolean)),
+    );
+    // Two at most, matching how multi-city hotel bookings are labelled.
+    if (places.length) {
+      booking.destinationLabel = places.length > 1 ? places.slice(0, 2).join(' & ') : places[0];
+    }
+  }
+
+  // A location hero is matched within a country, so this can only run once
+  // something has supplied a country code. An experience carries a free-text
+  // place, never an ISO code, so it cannot supply one itself.
+  if (!booking.locationSlug && booking.primaryCountryCode) {
+    const signals = [...experiences.map((e) => e.location || ''), booking.destinationLabel];
+    booking.locationSlug = matchLocationSlug(booking.primaryCountryCode, signals);
+  }
+
+  // A day trip spans no nights and no whole days, so the label came out empty
+  // and the trip read as having no length at all.
+  if (!booking.durationLabel && booking.tripStart) {
+    const days = daysBetween(booking.tripStart, booking.tripEnd || booking.tripStart);
+    booking.durationLabel = days > 0 ? `${days} day${days === 1 ? '' : 's'}` : '1 day';
+  }
 }

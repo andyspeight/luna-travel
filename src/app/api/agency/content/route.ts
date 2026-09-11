@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { logAuditEvent } from '@/lib/audit';
+import { actingAsMeta } from '@/lib/act-as';
 import {
   EMPTY_TRIP_CONTENT,
   isTripContentPage,
@@ -119,7 +120,7 @@ export async function PUT(req: NextRequest) {
     actor: claims.agencyId,
     targetId: `${bookingRef || 'default'}/${page}`,
     targetLabel: `${bookingRef || 'Agency default'} — ${page}`,
-    metadata: { bookingRef: bookingRef || null, page, itemCount: items.length },
+    metadata: { bookingRef: bookingRef || null, page, itemCount: items.length, ...actingAsMeta(claims.actingAs) },
   });
 
   return NextResponse.json({ ok: true, page, itemCount: items.length });

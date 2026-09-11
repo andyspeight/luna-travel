@@ -13,6 +13,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { categoriseFromFilename, type DocumentCategory } from '@/lib/categorise-document';
 import { logAuditEvent } from '@/lib/audit';
+import { actingAsMeta } from '@/lib/act-as';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
     actor: claims.email,
     targetId: row.id as string,
     targetLabel: `${claims.agencyId} / ${bookingRef} / ${filename}`,
-    metadata: { agencyId: claims.agencyId, bookingRef, category, filename, sizeBytes: file.size, via: 'agency_portal' },
+    metadata: { agencyId: claims.agencyId, bookingRef, category, filename, sizeBytes: file.size, via: 'agency_portal', ...actingAsMeta(claims.actingAs) },
   });
 
   return NextResponse.json({

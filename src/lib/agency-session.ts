@@ -22,6 +22,7 @@
 
 import { SignJWT, jwtVerify } from 'jose';
 import { isControlAgency } from '@/lib/agency-id';
+import { resolveActAs, type ActingAs } from '@/lib/act-as';
 
 const ALG = 'HS256';
 const EXPIRY = '30d';
@@ -45,6 +46,12 @@ export type AgencyClaims = {
   source: AgencySource;
   /** Display name — carried for Control agencies (not in the Luna store). */
   agencyName?: string;
+  /**
+   * Set only when a Travelgenix staff member is acting as this agency. NEVER
+   * part of the signed token — it is resolved per request, so it cannot be
+   * replayed or persisted into a session.
+   */
+  actingAs?: ActingAs;
 };
 
 /**
@@ -111,6 +118,26 @@ function readAgencyCookie(cookieHeader: string | null | undefined): string | nul
  * or null if there is no valid agency session. Callers treat null as 401.
  */
 export async function requireAgency(req: Request): Promise<AgencyClaims | null> {
+  // Act-as is resolved first and wins, so a staff member with a stale agency
+  // cookie of their own still gets the agency they chose. It costs nothing
+  // when nobody is acting — no header means no network call.
+  //
+  // A staff member acting as an agency needs no agency session at all, which
+  // is the whole point: they were never issued one, and minting them a real
+  // lt_agency_session would be indistinguishable from the agency signing in.
+  const acting = await resolveActAs(req);
+  if (acting) {
+    return {
+      kind: 'agency',
+      agencyId: acting.agencyId,
+      // The REAL person, so anything written while acting is attributable.
+      email: acting.staffEmail,
+      source: 'control',
+      agencyName: acting.agencyName,
+      actingAs: acting,
+    };
+  }
+
   const token = readAgencyCookie(req.headers.get('cookie'));
   if (!token) return null;
   return verifyAgencySession(token);

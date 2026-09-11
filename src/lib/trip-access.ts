@@ -23,7 +23,7 @@ import QRCode from 'qrcode';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { getBrandingOverride } from '@/lib/agency-branding';
 import { getLunaAgency } from '@/lib/agencies';
-import { isLunaAgency } from '@/lib/agency-id';
+import { isControlAgency, isLunaAgency } from '@/lib/agency-id';
 import { travellerUrl } from '@/lib/origins';
 import { sendEmail, type EmailAttachment } from '@/lib/email';
 
@@ -167,15 +167,21 @@ export async function findTripsForEmail(email: string): Promise<Map<string, Trip
   }
 
   // Drop anything we know cannot be redeemed, so the email never promises
-  // access it cannot deliver. A Luna-native agency's bookings live in
-  // luna_travel.bookings; an invite pointing at one that is not there is
-  // orphaned (typically leftover seed data) and its link would dead-end on the
-  // verification screen. Control-sourced agencies are left alone — confirming
-  // those would mean a Travelify call per trip, and the invite existing is
-  // reasonable evidence on its own.
+  // access it cannot deliver.
+  //
+  // A Control (rec...) agency is kept: Control resolves its Travelify
+  // credentials and can fetch the booking. Confirming that here would mean a
+  // Travelify call per trip, and the invite existing is reasonable evidence.
+  //
+  // Anything else needs a stored booking in luna_travel.bookings — a
+  // Luna-native (lt...) agency, or a LEGACY id (agc_...) from before the
+  // current scheme. Without one the link dead-ends on the verification screen,
+  // which is worse than not offering it. Note this says nothing about whether
+  // the booking is real: the same reference can be perfectly retrievable via a
+  // different agency that does hold the right credentials.
   const redeemable: TripMatch[] = [];
   for (const t of byKey.values()) {
-    if (isLunaAgency(t.agencyId)) {
+    if (!isControlAgency(t.agencyId)) {
       const stored = await supabase
         .from('bookings')
         .select('reference', { count: 'exact', head: true })

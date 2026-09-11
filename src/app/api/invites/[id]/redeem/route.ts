@@ -29,7 +29,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { validateAgencyBooking, type ValidatedBooking } from '@/lib/control-order';
 import { getStoredBooking } from '@/lib/stored-booking';
-import { isLunaAgency } from '@/lib/agency-id';
+import { isControlAgency } from '@/lib/agency-id';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
 import { getPlatformSettings } from '@/lib/platform-settings';
@@ -213,16 +213,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       countryCode: stored.payload?.primaryCountryCode || null,
       locationSlug: stored.payload?.locationSlug || null,
     };
-  } else if (isLunaAgency(invite.agency_id as string)) {
-    // A Luna-native agency's bookings are created in the portal and stored in
-    // luna_travel.bookings. If there is no stored booking, there is nothing to
-    // validate against — Control only knows Control (rec...) agencies, so
-    // falling through to it produces a confusing "rejected before calling
-    // Control" rather than the truth: this invite points at a booking that
-    // does not exist any more (typically leftover seed data).
-    console.warn('[redeem] luna-native agency has no stored booking:', {
+  } else if (!isControlAgency(invite.agency_id as string)) {
+    // Only a Control (rec...) agency can be validated against Travelify, because
+    // Control resolves the Travelify credentials from its own client record.
+    // Everything else must have a stored booking, and we already know there
+    // isn't one:
+    //   - a Luna-native (lt...) agency whose portal booking has been deleted
+    //   - a LEGACY id (e.g. agc_...) pre-dating the rec.../lt... scheme, which
+    //     resolves to no agency at all
+    // Falling through to Control produced a misleading "rejected before calling
+    // Control { recordIdValid: false }" — which describes the id format rather
+    // than the real problem: this invite is attached to an agency that cannot
+    // retrieve the booking, even when the booking itself is perfectly real.
+    console.warn('[redeem] invite agency cannot retrieve bookings:', {
       agencyId: invite.agency_id,
       bookingRef,
+      reason: 'not a Control agency and no stored booking',
     });
     return notFound();
   } else {

@@ -155,12 +155,15 @@ export async function sendPushToTravellers(
 ): Promise<{ sent: number }> {
   if (!ensureConfigured() || !travellerIds.length) return { sent: 0 };
   let sent = 0;
-  // Sequential on purpose: a broadcast to a few hundred travellers should not
-  // open a few hundred simultaneous TLS connections from one serverless
-  // invocation. Each send already fans out across that traveller's devices.
-  for (const id of travellerIds) {
-    const r = await sendPushToTraveller(id, payload);
-    sent += r.sent;
+  // Bounded concurrency. Fully sequential would make a broadcast to a few
+  // hundred travellers take longer than the function is allowed to run; fully
+  // parallel would open a few hundred simultaneous TLS connections from one
+  // invocation. Ten at a time keeps a large broadcast to a couple of seconds.
+  const CONCURRENCY = 10;
+  for (let i = 0; i < travellerIds.length; i += CONCURRENCY) {
+    const batch = travellerIds.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map((id) => sendPushToTraveller(id, payload)));
+    for (const r of results) sent += r.sent;
   }
   return { sent };
 }

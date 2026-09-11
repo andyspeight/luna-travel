@@ -44,6 +44,7 @@ import {
   PORTAL_ORIGIN,
   TRAVELLER_HOST,
   TRAVELLER_ORIGIN,
+  hostMatches,
   isPortalPath,
 } from '@/lib/origins';
 
@@ -98,10 +99,13 @@ export async function middleware(req: NextRequest) {
     const host = (req.headers.get('host') || '').toLowerCase();
     const wantsPortal = isPortalPath(pathname);
 
-    if (wantsPortal && host === TRAVELLER_HOST) {
+    // hostMatches treats www.x and x as the same site — the apex/www redirect
+    // is a Vercel domain rule that runs before middleware, so whichever half of
+    // the pair is not the configured origin still has to be recognised here.
+    if (wantsPortal && hostMatches(host, TRAVELLER_HOST)) {
       return NextResponse.redirect(new URL(pathname + req.nextUrl.search, PORTAL_ORIGIN), 307);
     }
-    if (!wantsPortal && host === PORTAL_HOST) {
+    if (!wantsPortal && hostMatches(host, PORTAL_HOST)) {
       return NextResponse.redirect(new URL(pathname + req.nextUrl.search, TRAVELLER_ORIGIN), 307);
     }
     // Any other host (vercel.app previews, localhost) serves everything, which

@@ -1,72 +1,57 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useBooking } from '@/lib/booking-context';
 import { PageEnter } from '@/components/page-enter';
 import { ActionButton } from '@/components/action-button';
-import { BOOKINGS } from '@/data/mock-bookings';
-import {
-  IconLock,
-  IconHelp,
-  IconCheck,
-  IconChat,
-} from '@/components/icons';
+import { IconLock, IconHelp, IconCheck, IconMail } from '@/components/icons';
 
 /**
- * Onboarding flow — booking-ref lookup.
+ * "Email me my trip" — self-service access recovery.
  *
- * For the prototype the "lookup" matches against the four mock bookings.
- * In production this hits Travelify with the reference + a verification value
- * (last name or email) and loads the real booking. The shape of the API
- * response is intentionally what mock-bookings.ts already provides.
+ * Replaces the old booking-reference lookup, which only ever matched the four
+ * mock bookings and so was a dead end for a real traveller (and could show a
+ * stranger a demo trip). A reference on its own is also ambiguous across
+ * agencies, whereas an email address resolves to rows that already carry the
+ * agency — and doubles as the delivery channel, so nothing is granted here.
+ *
+ * The server never tells us whether the address matched, so this screen must
+ * not pretend to know: success and no-match render the identical confirmation.
  */
 export default function WelcomePage() {
-  const router = useRouter();
-  const { setBookingByRef } = useBooking();
-  const [ref, setRef] = useState('');
-  const [verifier, setVerifier] = useState('');
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const trimmedRef = ref.trim().toUpperCase();
-    const trimmedVerifier = verifier.trim().toLowerCase();
-
-    if (!trimmedRef || !trimmedVerifier) {
-      setError('Please enter both your booking reference and last name.');
+    const value = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setError('Please enter a valid email address.');
       return;
     }
 
     setSubmitting(true);
-
-    // Simulate a network look-up
-    window.setTimeout(() => {
-      const match = BOOKINGS.find((b) => {
-        if (b.reference.toUpperCase() !== trimmedRef) return false;
-        const lead = b.travellers.find((t) => t.isLead) ?? b.travellers[0];
-        return lead.lastName.toLowerCase() === trimmedVerifier;
+    try {
+      const res = await fetch('/api/trip-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: value }),
       });
-
-      if (match) {
-        setBookingByRef(match.reference);
-        router.replace('/');
-      } else {
-        setError(
-          'We couldn\'t find a trip with those details. Check your booking confirmation email, or get in touch with your agent.'
-        );
-        setSubmitting(false);
-      }
-    }, 700);
+      if (!res.ok) throw new Error('request_failed');
+      setSent(true);
+    } catch {
+      setError('Something went wrong sending that. Please try again in a moment.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <PageEnter>
       <main className="min-h-[100dvh] flex flex-col px-6 pt-10 pb-6">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-navy to-teal text-white font-bold text-2xl flex items-center justify-center shadow-lg mb-4">
             L
@@ -74,104 +59,94 @@ export default function WelcomePage() {
           <h1 className="font-serif text-[34px] leading-tight text-ink text-center">
             <em>Welcome</em>.
           </h1>
-          <p className="text-sm text-ink-2 text-center mt-2 max-w-[280px]">
-            Add your trip to Luna Travel and we&rsquo;ll keep everything in one place.
+          <p className="text-sm text-ink-2 text-center mt-2 max-w-[290px]">
+            {sent
+              ? 'Check your inbox to open your trip.'
+              : 'Lost your link? Pop in your email address and we’ll send it again.'}
           </p>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3 max-w-md mx-auto w-full">
-          <Field
-            label="Booking reference"
-            value={ref}
-            onChange={setRef}
-            placeholder="e.g. ABC12345"
-            autoCapitalize="characters"
-            autoComplete="off"
-            name="booking-reference"
-            enterKeyHint="next"
-          />
-          <Field
-            label="Lead traveller last name"
-            value={verifier}
-            onChange={setVerifier}
-            placeholder="e.g. Smith"
-            autoCapitalize="words"
-            autoComplete="family-name"
-            name="last-name"
-            enterKeyHint="go"
-          />
-
-          {error && (
-            <div
-              role="alert"
-              className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-3 py-2.5 leading-relaxed"
-            >
-              {error}
+        {sent ? (
+          <div className="max-w-md mx-auto w-full">
+            <div className="p-5 rounded-2xl bg-surface border border-line-light text-center">
+              <span className="w-11 h-11 rounded-2xl bg-teal/10 text-teal-dark dark:text-teal-light inline-flex items-center justify-center mb-3">
+                <IconCheck size={20} />
+              </span>
+              <p className="text-sm text-ink leading-relaxed">
+                If that address has a trip with us, we&rsquo;ve just sent the link to it.
+              </p>
+              <p className="text-xs text-ink-2 mt-2.5 leading-relaxed">
+                It can take a minute to arrive. Do check your junk folder — and if nothing
+                turns up, your travel agent can send your access again.
+              </p>
             </div>
-          )}
-
-          <div className="pt-2">
-            <ActionButton type="submit" disabled={submitting} icon={<IconCheck size={18} />}>
-              {submitting ? 'Looking up your trip…' : 'Find my trip'}
-            </ActionButton>
+            <button
+              type="button"
+              onClick={() => {
+                setSent(false);
+                setEmail('');
+              }}
+              className="mt-4 w-full text-center text-[13px] font-semibold text-teal-dark dark:text-teal-light"
+            >
+              Try a different address
+            </button>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-3 max-w-md mx-auto w-full">
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-1.5 block">
+                Email address
+              </span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect="off"
+                spellCheck={false}
+                name="email"
+                enterKeyHint="go"
+                className="w-full h-12 px-4 rounded-xl bg-surface border border-line text-ink placeholder-ink-3 focus:outline-none focus:border-teal text-sm font-medium"
+              />
+            </label>
+
+            <p className="text-xs text-ink-3 leading-relaxed">
+              Use the address your travel agent has for you.
+            </p>
+
+            {error && (
+              <div
+                role="alert"
+                className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-3 py-2.5 leading-relaxed"
+              >
+                {error}
+              </div>
+            )}
+
+            <div className="pt-2">
+              <ActionButton type="submit" disabled={submitting} icon={<IconMail size={18} />}>
+                {submitting ? 'Sending…' : 'Email me my trip'}
+              </ActionButton>
+            </div>
+          </form>
+        )}
 
         <div className="mt-8 text-center max-w-md mx-auto w-full space-y-3">
           <div className="text-[11px] text-ink-3 inline-flex items-center gap-1.5 justify-center">
             <IconLock size={11} />
-            Your details are encrypted end-to-end.
+            We only ever send your trip to the address your agent holds.
           </div>
           <p className="text-xs text-ink-3 leading-relaxed max-w-[300px] mx-auto inline-flex items-start gap-1.5">
             <IconHelp size={13} className="mt-0.5 flex-shrink-0" />
             <span>
-              Can&rsquo;t find your reference? Your travel agent sent you a booking link —
-              open that to add your trip, or ask them to resend it.
+              Your travel agent sent you a booking link when they set your trip up — opening
+              that adds it straight away, and they can always send it again.
             </span>
           </p>
         </div>
       </main>
     </PageEnter>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  autoCapitalize,
-  autoComplete,
-  name,
-  enterKeyHint,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  autoComplete?: string;
-  name?: string;
-  enterKeyHint?: 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send';
-}) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-1.5 block">
-        {label}
-      </span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoCapitalize={autoCapitalize}
-        autoComplete={autoComplete}
-        autoCorrect="off"
-        spellCheck={false}
-        name={name}
-        enterKeyHint={enterKeyHint}
-        className="w-full h-12 px-4 rounded-xl bg-surface border border-line text-ink placeholder-ink-3 focus:outline-none focus:border-teal text-sm font-medium"
-      />
-    </label>
   );
 }

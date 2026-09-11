@@ -158,6 +158,35 @@ changes, nothing to migrate.
 
 ---
 
+## Email (SendGrid, sending as my-booking.co)
+
+Transactional mail — currently the "email me my trip link" recovery flow —
+sends from the **traveller** domain, so the address the customer sees matches
+the app they are being sent to.
+
+Environment variables (Production):
+
+```
+SENDGRID_API_KEY        = <a key with the Mail Send permission ONLY>
+TRIP_ACCESS_FROM_EMAIL  = trips@my-booking.co   (optional; this is the default)
+```
+
+**Single Sender Verification is not enough.** Verifying one address gets mail
+*accepted* by SendGrid, but the message is then signed for `sendgrid.net`
+rather than `my-booking.co`, so it fails DMARC alignment and Gmail/Outlook will
+treat it as suspicious — spam folder at best. For mail that reliably lands,
+complete **Domain Authentication** for `my-booking.co` in SendGrid
+(Settings → Sender Authentication) and add the CNAMEs it issues to Cloudflare.
+
+Same Cloudflare gotcha as the web records: those CNAMEs must be **"DNS only"
+(grey cloud)**. A proxied record breaks the verification.
+
+The agency's name is used as the email's *display name* and their address as
+*reply-to*, so it reads as from the agency in the inbox while the sending
+domain stays authenticated and consistent. Agencies that have never set an app
+name in **App branding** fall back to a neutral label rather than a wrong one —
+worth filling that field in per agency.
+
 ## Notes
 
 - **Reinstall the PWA.** Anyone who added the app to their home screen from

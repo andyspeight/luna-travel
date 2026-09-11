@@ -171,15 +171,40 @@ SENDGRID_API_KEY        = <a key with the Mail Send permission ONLY>
 TRIP_ACCESS_FROM_EMAIL  = trips@my-booking.co   (optional; this is the default)
 ```
 
-**Single Sender Verification is not enough.** Verifying one address gets mail
-*accepted* by SendGrid, but the message is then signed for `sendgrid.net`
-rather than `my-booking.co`, so it fails DMARC alignment and Gmail/Outlook will
-treat it as suspicious — spam folder at best. For mail that reliably lands,
-complete **Domain Authentication** for `my-booking.co` in SendGrid
-(Settings → Sender Authentication) and add the CNAMEs it issues to Cloudflare.
+### Authentication — done, verified 2026-09-11
 
-Same Cloudflare gotcha as the web records: those CNAMEs must be **"DNS only"
-(grey cloud)**. A proxied record breaks the verification.
+**Domain Authentication is in place.** Verified from DNS:
+
+| Record | State |
+|---|---|
+| `s1._domainkey.my-booking.co` | CNAME → `s1.domainkey.u18218195.wl196.sendgrid.net`, key resolves |
+| `s2._domainkey.my-booking.co` | CNAME → `s2.domainkey.u18218195.wl196.sendgrid.net` |
+| `_dmarc.my-booking.co` | `v=DMARC1; p=none;` |
+| SPF TXT on the apex | none, and none needed — see below |
+
+So mail is DKIM-signed **as `my-booking.co`**, which is what makes it align for
+DMARC and land in inboxes. This has been confirmed in practice: a recovery
+email reached a Google Workspace inbox, not spam.
+
+Why no SPF record on the apex is fine: SendGrid's automated security puts the
+return-path on its own `em####.my-booking.co` subdomain, which carries its own
+SPF. DMARC passes on **either** aligned SPF or aligned DKIM, and DKIM aligns.
+Adding an apex SPF record would do nothing for this path.
+
+> Single Sender Verification alone would **not** have been enough. It gets mail
+> accepted by SendGrid, but signs it for `sendgrid.net`, so it fails DMARC
+> alignment and lands in spam. That is not the setup here; do not "simplify"
+> back to it, and if the DKIM CNAMEs are ever removed, deliverability goes with
+> them.
+
+Cloudflare gotcha, same as the web records: those CNAMEs must be **"DNS only"
+(grey cloud)**. A proxied record breaks verification.
+
+**Worth tightening later, not urgent.** `p=none` is monitor-only: it protects
+nothing against someone spoofing `my-booking.co`, and no reports are being
+collected. Once the volume is steady, add a `rua=` address and move to
+`p=quarantine`. Do it in that order — collect reports first, so you can see
+what a stricter policy would have blocked before it starts blocking.
 
 The agency's name is used as the email's *display name* and their address as
 *reply-to*, so it reads as from the agency in the inbox while the sending

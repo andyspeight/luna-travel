@@ -34,6 +34,12 @@ export interface PushPayload {
   url?: string;
   /** Collapses same-tag notifications so five flight updates aren't five rows. */
   tag?: string;
+  /**
+   * Escalates how insistently the device presents it. A gate change and a
+   * "hope you're having a lovely time" should not look identical on a lock
+   * screen: urgent ones vibrate and stay put until dismissed.
+   */
+  urgent?: boolean;
 }
 
 let configured: boolean | null = null;

@@ -27,6 +27,11 @@ self.addEventListener('push', (event) => {
     // Same tag collapses repeats — five gate changes are one row, not five.
     tag: data.tag || 'luna-travel',
     renotify: true,
+    // Urgent ones (a gate change, a delay) buzz and stay on screen until
+    // acknowledged. Ordinary ones behave like any other message, because a
+    // product that treats everything as urgent gets muted.
+    requireInteraction: !!data.urgent,
+    vibrate: data.urgent ? [200, 100, 200] : undefined,
     data: { url: data.url || '/' },
   };
 

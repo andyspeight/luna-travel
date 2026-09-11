@@ -260,6 +260,7 @@ export async function POST(req: NextRequest) {
     body: (m.subject as string | null)?.trim() || (m.body as string).slice(0, 120),
     url: '/notifications',
     tag: `message-${messageId}`,
+    urgent: priority === 'urgent' || priority === 'important',
   });
   console.log('[agency/messages] push', { messageId, sent: pushed.sent, removed: pushed.removed });
 

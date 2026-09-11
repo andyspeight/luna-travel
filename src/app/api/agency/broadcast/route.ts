@@ -116,9 +116,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'send_failed' }, { status: 500 });
   }
 
-  // Same as the single send: nudge every device, but never let a push failure
-  // undo a broadcast that has already been delivered in-app.
-  void sendPushToTravellers(travellerIds, {
+  // Awaited for the same reason as the single send — a fire-and-forget promise
+  // does not survive the response on serverless. sendPushToTravellers never
+  // throws and runs ten at a time, so a large broadcast stays quick.
+  const pushed = await sendPushToTravellers(travellerIds, {
     title: agency.name || 'Your travel agent',
     body: subjectIn || bodyText.slice(0, 120),
     url: '/notifications',
@@ -126,6 +127,7 @@ export async function POST(req: NextRequest) {
     // per device-wake.
     tag: `broadcast-${messageId}`,
   });
+  console.log('[agency/broadcast] push', { messageId, recipients: travellerIds.length, sent: pushed.sent });
 
   return NextResponse.json({ ok: true, count: travellerIds.length }, { status: 201 });
 }

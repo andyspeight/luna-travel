@@ -247,15 +247,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'send_failed' }, { status: 500 });
   }
 
-  // Push it to the traveller's devices. Fire-and-forget and never awaited into
-  // the response: a notification failing must not fail the send — the message
-  // is already delivered in-app, push is the nudge to go and read it.
-  void sendPushToTraveller(travellerId, {
+  // AWAIT this. It was fire-and-forget, which silently did nothing: Vercel
+  // freezes the serverless invocation the moment the response is returned, so
+  // a promise left pending is killed before it runs — no notification, and not
+  // even a log line to say so.
+  //
+  // Awaiting is safe because sendPushToTraveller never throws: it catches per
+  // subscription and returns counts. The message is already committed above, so
+  // the worst case is a slower response, never a failed send.
+  const pushed = await sendPushToTraveller(travellerId, {
     title: agency.name || 'Your travel agent',
     body: (m.subject as string | null)?.trim() || (m.body as string).slice(0, 120),
     url: '/notifications',
     tag: `message-${messageId}`,
   });
+  console.log('[agency/messages] push', { messageId, sent: pushed.sent, removed: pushed.removed });
 
   return NextResponse.json(
     {

@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
+import { sendPushToTravellers } from '@/lib/push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -114,6 +115,17 @@ export async function POST(req: NextRequest) {
     await supabase.from('messages').delete().eq('id', messageId);
     return NextResponse.json({ error: 'send_failed' }, { status: 500 });
   }
+
+  // Same as the single send: nudge every device, but never let a push failure
+  // undo a broadcast that has already been delivered in-app.
+  void sendPushToTravellers(travellerIds, {
+    title: agency.name || 'Your travel agent',
+    body: subjectIn || bodyText.slice(0, 120),
+    url: '/notifications',
+    // One tag for the whole broadcast, so a traveller sees one row, not one
+    // per device-wake.
+    tag: `broadcast-${messageId}`,
+  });
 
   return NextResponse.json({ ok: true, count: travellerIds.length }, { status: 201 });
 }

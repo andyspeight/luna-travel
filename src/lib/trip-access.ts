@@ -376,9 +376,20 @@ export async function sendTripAccessEmail(
           <p style="margin:0 0 6px;font-size:15px;line-height:1.6;color:#475569;">
             Tap below to open <strong style="color:#0f172a;">${escapeHtml(tripLine(primary.trip))}</strong> on your phone — your flights, documents and everything else in one place.
           </p>
-          <p style="margin:0 0 24px;font-size:13px;line-height:1.6;color:#64748b;">
-            Once it opens you can add it to your home screen, so it's one tap away for the whole trip.
+          <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#64748b;">
+            Once it opens, add it to your home screen so it&rsquo;s one tap away for the whole trip.
           </p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;">
+            <tr><td style="padding:14px 16px;">
+              <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#9a3412;">Please say yes to alerts</p>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#7c2d12;">
+                When you open your trip, your phone will ask whether to allow notifications. Please
+                allow them &mdash; it&rsquo;s how we tell you when <strong>check-in opens</strong>, if your
+                <strong>flight time, gate or terminal changes</strong>, and when your travel agent
+                messages you. If you say no, your phone won&rsquo;t let us ask again.
+              </p>
+            </td></tr>
+          </table>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 26px;">
             <tr><td style="border-radius:12px;background:#00b4d8;">
               <a href="${escapeHtml(primaryUrl)}" style="display:inline-block;padding:14px 30px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:12px;">Open my trip</a>
@@ -406,6 +417,12 @@ export async function sendTripAccessEmail(
     `Here's your trip: ${tripLine(primary.trip)}`,
     '',
     `Open it here: ${primaryUrl}`,
+    '',
+    'PLEASE SAY YES TO ALERTS',
+    'When you open your trip your phone will ask whether to allow notifications.',
+    'Please allow them - it is how we tell you when check-in opens, if your flight',
+    'time, gate or terminal changes, and when your travel agent messages you.',
+    'If you say no, your phone will not let us ask again.',
     '',
     ...(others.length
       ? ['Your other trips:', ...others.map((o) => `- ${tripLine(o.trip)}: ${travellerUrl(`/install?invite=${o.inviteId}`, '')}`), '']

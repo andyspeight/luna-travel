@@ -29,6 +29,7 @@ import {
 import { initials } from '@/lib/format';
 import { APP_VERSION, getLatestVersion, forceAppUpdate } from '@/lib/app-update';
 import { AddToHomeRow } from '@/components/add-to-home';
+import { NotificationsOptIn } from '@/components/notifications-optin';
 
 export default function MePage() {
   const { booking } = useBooking();
@@ -160,6 +161,12 @@ export default function MePage() {
           />
           <UpdateRow />
           <AddToHomeRow />
+          {/* Trip alerts live here permanently: the reveal asks once, and a
+              traveller who skipped it then needs somewhere obvious to change
+              their mind before the flight changes without them. */}
+          <div className="p-4">
+            <NotificationsOptIn />
+          </div>
           <ListLink
             href="/luna"
             icon={<IconHelp size={18} />}

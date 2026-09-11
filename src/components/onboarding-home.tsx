@@ -38,13 +38,13 @@ export function OnboardingHome() {
             <div className="text-sm font-semibold text-ink">Add your trip</div>
             <p className="text-[13px] text-ink-2 mt-1 leading-relaxed">
               Open the booking link your travel agent sent you — it adds your trip
-              automatically. Or find it with your booking reference.
+              automatically. Lost it? We can email it to you.
             </p>
             <Link
               href="/welcome"
               className="mt-3 inline-flex items-center justify-center gap-1.5 w-full h-12 rounded-xl bg-navy text-white dark:bg-teal dark:text-navy-dark font-semibold text-[15px] active:scale-[0.98] transition-transform"
             >
-              Find my trip
+              Email me my trip
               <IconChevR size={18} />
             </Link>
           </div>

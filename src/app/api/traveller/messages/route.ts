@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
+import { notifyAgentOfReply } from '@/lib/agent-notify';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -135,10 +136,16 @@ export async function POST(req: NextRequest) {
   // The reply belongs to the traveller's own agency.
   const { data: trav, error: travErr } = await supabase
     .from('travellers')
-    .select('agency_id')
+    .select('agency_id, booking_ref, destination, lead_passenger_name')
     .eq('id', travellerId)
     .maybeSingle();
-  const agencyId = (trav as { agency_id: string | null } | null)?.agency_id ?? null;
+  const travRow = trav as {
+    agency_id: string | null;
+    booking_ref: string | null;
+    destination: string | null;
+    lead_passenger_name: string | null;
+  } | null;
+  const agencyId = travRow?.agency_id ?? null;
   if (travErr || !agencyId) {
     return NextResponse.json({ error: 'no_agency' }, { status: 400 });
   }
@@ -162,6 +169,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'send_failed' }, { status: 500 });
   }
   const m = msg as Record<string, unknown>;
+
+  // Tell the agent. The traveller side is instant now, so leaving the inbound
+  // direction on "whenever someone next opens the portal" is the weak link —
+  // an airport problem at 9pm needs to reach a person.
+  //
+  // Awaited, for the same reason the push sends are: a promise left pending
+  // does not survive the response on serverless. notifyAgentOfReply never
+  // throws and the reply is already committed, so the cost is latency at worst.
+  await notifyAgentOfReply({
+    agencyId,
+    travellerName: travRow?.lead_passenger_name ?? null,
+    bookingRef: travRow?.booking_ref ?? null,
+    destination: travRow?.destination ?? null,
+    body,
+  });
 
   return NextResponse.json(
     {

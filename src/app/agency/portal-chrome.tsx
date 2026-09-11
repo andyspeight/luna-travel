@@ -155,6 +155,11 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
   const router = useRouter();
   const [state, setState] = useState<'loading' | 'out' | 'in'>('loading');
   const [me, setMe] = useState<AgencyMe | null>(null);
+  // Unread traveller replies. Previously only the Overview showed these, so an
+  // agent working anywhere else in the portal had no idea a customer was
+  // waiting. Polled rather than pushed: the portal is an ordinary web page and
+  // a minute's latency on a badge is not worth a socket.
+  const [unread, setUnread] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -178,6 +183,27 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (state !== 'in') return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/agency/messages', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setUnread(Number(json.total) || 0);
+      } catch {
+        /* a failed poll just leaves the badge as it was */
+      }
+    };
+    void poll();
+    const id = setInterval(poll, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [state]);
 
   const signOut = async () => {
     try {
@@ -264,6 +290,18 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
                 }}
               >
                 <Icon size={16} strokeWidth={2} /> {n.label}
+                {n.key === 'messages' && unread > 0 && (
+                  <span
+                    aria-label={`${unread} unread ${unread === 1 ? 'reply' : 'replies'}`}
+                    style={{
+                      minWidth: 18, height: 18, borderRadius: 999, background: P.teal,
+                      color: '#fff', fontSize: 11, fontWeight: 800, padding: '0 5px',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
               </Link>
             );
           })}

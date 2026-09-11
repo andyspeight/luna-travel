@@ -6,6 +6,7 @@ import { PageEnter } from '@/components/page-enter';
 import { IconShare } from '@/components/icons';
 import { useBooking } from '@/lib/booking-context';
 import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
+import { cinematicCover } from '@/lib/hero';
 
 /**
  * /install
@@ -137,9 +138,18 @@ function Step({ n, label, icon }: { n: number; label: string; icon?: React.React
 // State 2: Redemption — gate then reveal
 // ─────────────────────────────────────────────────────────────────
 
+/** The agency's own branding, so the traveller sees their agent, not us. */
+type Branding = {
+  appName?: string;
+  logoUrl?: string;
+  brandPrimaryColour?: string;
+  brandAccentColour?: string;
+};
+
 type InviteInfo = {
   status: 'pending' | 'redeemed' | 'expired' | 'revoked';
   prefill: { bookingRef: string | null };
+  branding?: Branding;
 };
 
 type Trip = {
@@ -147,7 +157,38 @@ type Trip = {
   departureDate: string | null; // YYYY-MM-DD
   returnDate: string | null;
   leadName: string | null;
+  /** Hero photograph keys — the reveal opens on the destination itself. */
+  countryCode?: string | null;
+  locationSlug?: string | null;
 };
+
+/**
+ * Agency wordmark. Falls back to the Luna mark when an agency has set no
+ * branding, so a blank App branding screen never leaves a traveller looking at
+ * an unbranded box.
+ */
+function AgencyMark({ branding, size = 'md' }: { branding?: Branding; size?: 'sm' | 'md' }) {
+  const name = branding?.appName?.trim() || 'Luna Travel';
+  const logo = branding?.logoUrl?.trim();
+  const box = size === 'sm' ? 'w-8 h-8 rounded-lg text-xs' : 'w-9 h-9 rounded-xl text-sm';
+  const label = size === 'sm' ? 'text-sm text-white/90' : 'text-base';
+  return (
+    <>
+      {logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={logo} alt="" className={`${box} object-cover bg-white/10 shadow-md flex-shrink-0`} />
+      ) : (
+        <span
+          className={`${box} bg-gradient-to-br from-navy to-teal text-white font-bold flex items-center justify-center shadow-md flex-shrink-0`}
+          style={branding?.brandPrimaryColour ? { background: branding.brandPrimaryColour } : undefined}
+        >
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className={`${label} font-semibold tracking-tight`}>{name}</span>
+    </>
+  );
+}
 
 function RedeemView({ inviteId }: { inviteId: string }) {
   const router = useRouter();
@@ -176,6 +217,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
         setInfo({
           status: data.status,
           prefill: data.prefill || { bookingRef: null },
+          branding: data.branding || undefined,
         });
         if (data.prefill?.bookingRef) setBookingRef(data.prefill.bookingRef);
       } catch {
@@ -216,6 +258,8 @@ function RedeemView({ inviteId }: { inviteId: string }) {
           departureDate: departureDate.trim() || null,
           returnDate: null,
           leadName: null,
+          countryCode: null,
+          locationSlug: null,
         },
       );
     } catch {
@@ -233,7 +277,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
 
   // ── Reveal phase ────────────────────────────────────────────────
   if (trip) {
-    return <RevealView trip={trip} onOpen={() => router.push('/')} />;
+    return <RevealView trip={trip} branding={info?.branding} onOpen={() => router.push('/')} />;
   }
 
   // ── Gate phase ──────────────────────────────────────────────────
@@ -244,10 +288,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
     >
       <header className="px-6 pt-10 text-center">
         <div className="inline-flex items-center gap-3 mb-2">
-          <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center shadow-md">
-            L
-          </span>
-          <span className="text-base font-semibold tracking-tight">Luna Travel</span>
+          <AgencyMark branding={info?.branding} />
         </div>
         <p className="text-xs text-white/55 uppercase tracking-[0.18em]">
           Your trip companion
@@ -402,11 +443,14 @@ function InstallAffordance() {
           if (canPrompt) void promptInstall();
           else setSheet(isIOS ? 'ios' : 'menu');
         }}
-        className="mt-5 inline-flex items-center gap-2 h-11 px-5 rounded-full border border-white/20 bg-white/5 text-white/85 text-[13px] font-medium hover:bg-white/10 hover:border-white/30 transition-colors"
+        className="mt-5 w-full max-w-[320px] inline-flex items-center justify-center gap-2.5 h-14 px-7 rounded-2xl bg-white text-navy text-[16px] font-bold shadow-xl active:scale-[0.98] transition-transform"
       >
-        <ShareGlyph size={16} />
+        <ShareGlyph size={18} />
         Add to home screen
       </button>
+      <p className="mt-2.5 text-[12.5px] text-white/70 text-center max-w-[300px]">
+        One tap and your trip sits on your home screen like an app — no app store, no password.
+      </p>
 
       {sheet === 'ios' && <IOSInstallSheet onClose={() => setSheet(null)} />}
       {sheet === 'menu' && <MenuInstallSheet onClose={() => setSheet(null)} />}
@@ -414,8 +458,18 @@ function InstallAffordance() {
   );
 }
 
-function RevealView({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
+function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Branding; onOpen: () => void }) {
   const [shown, setShown] = useState(false);
+
+  // The reveal is the moment the trip becomes real, so it opens on the
+  // destination's own photograph rather than a flat gradient. cinematicCover
+  // layers the legibility gradients over the photo and falls back to the
+  // crafted gradient for a country with no image yet.
+  //
+  // Deliberately only HERE, never on the verification screen before it: the
+  // point of the knowledge check is that someone holding a leaked link learns
+  // nothing about the trip, and a photo of the destination would give it away.
+  const cover = trip.countryCode ? cinematicCover(trip.countryCode, trip.locationSlug || undefined) : null;
   useEffect(() => {
     const t = setTimeout(() => setShown(true), 30);
     return () => clearTimeout(t);
@@ -460,17 +514,14 @@ function RevealView({ trip, onOpen }: { trip: Trip; onOpen: () => void }) {
   return (
     <main
       className="fixed inset-0 flex flex-col text-white overflow-y-auto"
-      style={{ background: OCEAN_BG }}
+      style={{ background: cover ? cover.background : OCEAN_BG }}
     >
       <div
         className="flex-1 flex flex-col items-center justify-center px-6 py-10 transition-all duration-700 ease-out"
         style={{ opacity: shown ? 1 : 0, transform: shown ? 'none' : 'translateY(12px)' }}
       >
         <div className="inline-flex items-center gap-2.5 mb-8">
-          <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-navy to-teal text-white font-bold text-xs flex items-center justify-center shadow-md">
-            L
-          </span>
-          <span className="text-sm font-semibold tracking-tight text-white/90">Luna Travel</span>
+          <AgencyMark branding={branding} size="sm" />
         </div>
 
         <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight text-center max-w-[440px] mb-9">

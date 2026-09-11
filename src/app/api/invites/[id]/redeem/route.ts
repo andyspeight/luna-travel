@@ -27,7 +27,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { validateAgencyBooking } from '@/lib/control-order';
+import { validateAgencyBooking, type ValidatedBooking } from '@/lib/control-order';
 import { getStoredBooking } from '@/lib/stored-booking';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
@@ -67,6 +67,9 @@ type TripTeaser = {
   departureDate: string | null;
   returnDate: string | null;
   leadName: string | null;
+  /** Hero photograph keys, so the reveal opens on the destination, not a gradient. */
+  countryCode: string | null;
+  locationSlug: string | null;
 };
 
 function tripFromTravellerRow(row: Record<string, unknown> | null): TripTeaser {
@@ -75,13 +78,15 @@ function tripFromTravellerRow(row: Record<string, unknown> | null): TripTeaser {
     departureDate: (row?.departure_date as string) ?? null,
     returnDate: (row?.return_date as string) ?? null,
     leadName: (row?.lead_passenger_name as string) ?? null,
+    countryCode: (row?.country_code as string) ?? null,
+    locationSlug: (row?.location_slug as string) ?? null,
   };
 }
 
 // Columns selected whenever we surface an existing traveller (idempotent /
 // reuse paths) so the reveal has the same teaser as a fresh redemption.
 const TRAVELLER_TEASER_COLS =
-  'id, agency_id, booking_ref, email, destination, departure_date, return_date, lead_passenger_name';
+  'id, agency_id, booking_ref, email, destination, departure_date, return_date, lead_passenger_name, country_code, location_slug';
 
 // ───────── Generic 404 helper (no info leak) ─────────
 
@@ -192,7 +197,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // 4. Validate the booking. An off-platform booking (stored, not in Travelify)
   //    is confirmed by matching its lead email; otherwise validate against the
   //    agency's own Travelify credentials via Control.
-  let validated: { leadName: string | null; departureDate: string | null; returnDate: string | null; destination: string | null };
+  let validated: ValidatedBooking;
   const stored = await getStoredBooking(invite.agency_id as string, bookingRef);
   if (stored) {
     if (!stored.leadEmail || stored.leadEmail.toLowerCase() !== email) {
@@ -204,6 +209,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       departureDate: stored.departureDate,
       returnDate: stored.returnDate,
       destination: stored.destination,
+      countryCode: stored.payload?.primaryCountryCode || null,
+      locationSlug: stored.payload?.locationSlug || null,
     };
   } else {
     const validation = await validateAgencyBooking({
@@ -242,6 +249,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       departure_date: validated.departureDate || departureDate,
       return_date: validated.returnDate,
       destination: validated.destination,
+      country_code: validated.countryCode,
+      location_slug: validated.locationSlug,
       created_at: now,
     })
     .select('id')
@@ -354,6 +363,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     departureDate: validated.departureDate || departureDate,
     returnDate: validated.returnDate ?? null,
     leadName,
+    countryCode: validated.countryCode ?? null,
+    locationSlug: validated.locationSlug ?? null,
   };
 
   return jsonWithCookie({ session: token, trip }, token);

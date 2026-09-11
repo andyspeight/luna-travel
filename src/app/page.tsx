@@ -8,6 +8,7 @@ import { AgencyLogo } from '@/components/agency-logo';
 import { OnboardingHome } from '@/components/onboarding-home';
 import { SectionHeading } from '@/components/section-heading';
 import { GuideLinks } from '@/components/guide-links';
+import { AddToHomeBanner } from '@/components/add-to-home';
 import {
   IconPlane,
   IconBed,
@@ -309,6 +310,9 @@ export default function HomePage() {
           </ul>
         </section>
       )}
+
+      {/* Add to home screen — until installed or dismissed on this device */}
+      <AddToHomeBanner />
 
       {/* Agency-authored guide pages — appear as the agent publishes them */}
       <GuideLinks />

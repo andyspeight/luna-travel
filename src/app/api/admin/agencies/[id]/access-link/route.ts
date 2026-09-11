@@ -17,6 +17,7 @@ import { requireAdmin } from '@/lib/admin-session';
 import { isLunaAgency } from '@/lib/agency-id';
 import { getLunaAgency } from '@/lib/agencies';
 import { createLoginToken } from '@/lib/agency-login';
+import { portalUrl } from '@/lib/origins';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -47,7 +48,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'mint_failed' }, { status: 500 });
   }
 
-  const url = `${req.nextUrl.origin}/agency/login?token=${encodeURIComponent(created.token)}`;
+  // Agent-facing sign-in link → PORTAL domain (the traveller domain has no
+  // /agency routes once the split is live).
+  const url = portalUrl(`/agency/login?token=${encodeURIComponent(created.token)}`, req.nextUrl.origin);
   return NextResponse.json({
     ok: true,
     url,

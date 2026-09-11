@@ -67,6 +67,9 @@ const S: Record<string, Dict> = {
   // ── Home sections ──
   'home.upNext': { en: 'Up next', ro: 'Urmează', fr: 'À suivre', de: 'Als Nächstes', es: 'A continuación', it: 'Prossimo' },
   'home.comingUp': { en: 'Coming up', ro: 'În curând', fr: 'À venir', de: 'Demnächst', es: 'Próximamente', it: 'Prossimamente' },
+  // Stands in for the destination on a booking that has no place attached,
+  // such as attraction tickets with no hotel city and no arrival airport.
+  'home.yourTrip': { en: 'Your trip', ro: 'Călătoria ta', fr: 'Votre voyage', de: 'Deine Reise', es: 'Tu viaje', it: 'Il tuo viaggio' },
   'home.getToKnow': { en: 'Get to know it', ro: 'Cunoaște-l', fr: 'À découvrir', de: 'Kennenlernen', es: 'Conócelo', it: 'Da scoprire' },
   'home.destGuide': { en: 'Destination guide', ro: 'Ghid destinație', fr: 'Guide destination', de: 'Reiseführer', es: 'Guía del destino', it: 'Guida destinazione' },
   'home.destBlurb': {
@@ -92,6 +95,16 @@ const S: Record<string, Dict> = {
   // ── Where next? / Inspirations ──
   'next.whereNext': { en: 'Where next?', ro: 'Unde mergem?', fr: 'Et après ?', de: 'Wohin als Nächstes?', es: '¿A dónde ahora?', it: 'E adesso?' },
   'next.welcomeHome': { en: 'Welcome home', ro: 'Bun venit acasă', fr: 'Bon retour', de: 'Willkommen zurück', es: 'Bienvenido a casa', it: 'Bentornato' },
+  // Used when the booking has no destination to name — "Loved ?" is worse than
+  // dropping the place entirely.
+  'next.lovedIt': {
+    en: 'Loved it? {agency} has more.',
+    ro: 'Ți-a plăcut? {agency} are mai multe.',
+    fr: 'Vous avez aimé ? {agency} en a d’autres.',
+    de: 'Gefallen? {agency} hat mehr.',
+    es: '¿Te encantó? {agency} tiene más.',
+    it: 'Ti è piaciuta? {agency} ha molto altro.',
+  },
   'next.lovedX': {
     en: 'Loved {dest}? {agency} has more.',
     ro: 'Ți-a plăcut {dest}? {agency} are mai multe.',

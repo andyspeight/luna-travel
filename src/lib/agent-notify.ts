@@ -24,6 +24,17 @@ function escapeHtml(s: string): string {
 }
 
 /**
+ * Enough of an address to recognise in a log, not enough to be a mailing list.
+ * Worth having: a send that succeeds is otherwise completely silent, so there
+ * is no way to tell "went to the wrong agent" from "never ran".
+ */
+function maskEmail(email: string): string {
+  const [local = '', domain = ''] = email.split('@');
+  const head = local.slice(0, 2);
+  return `${head}${'*'.repeat(Math.max(local.length - head.length, 1))}@${domain}`;
+}
+
+/**
  * Who to tell at the agency.
  *
  * A Luna-native agency has a contact email on its own record. A Control-sourced
@@ -48,14 +59,23 @@ export async function resolveAgentEmail(
       .from('invites')
       .select('created_by, created_at')
       .eq('agency_id', agencyId)
-      .not('created_by', 'is', null)
+      // created_by is not always a person. Several paths stamp a sentinel:
+      // 'trip-access' (self-service recovery), 'manual-booking', 'demo-seed'.
+      // None of them contain an @, so the database can rule them out — and it
+      // has to, because taking the single most recent row and then rejecting
+      // it meant one recovery email permanently shadowed the real agent. That
+      // row is always the newest, so the agency would silently stop being
+      // told about replies from the moment a traveller first recovered a trip.
+      .like('created_by', '%@%')
       .order('created_at', { ascending: false })
-      .limit(1);
+      .limit(5);
     if (bookingRef) q = q.eq('booking_ref', bookingRef);
 
     const { data } = await q;
-    const createdBy = ((data ?? [])[0] as { created_by?: string } | undefined)?.created_by;
-    if (createdBy && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createdBy)) return createdBy;
+    for (const row of (data ?? []) as { created_by?: string }[]) {
+      const candidate = (row.created_by || '').trim();
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return candidate;
+    }
 
     // Booking-specific lookup found nothing — try the agency's most recent
     // invite from any booking before giving up.
@@ -140,6 +160,12 @@ export async function notifyAgentOfReply(input: ReplyNotification): Promise<void
       text,
       html,
       fromName: branding.appName?.trim() || 'Luna Travel',
+    });
+
+    console.log('[agent-notify] reply email sent', {
+      to: maskEmail(to),
+      agencyId: input.agencyId,
+      bookingRef: input.bookingRef,
     });
   } catch (e) {
     console.error('[agent-notify] reply email failed', e instanceof Error ? e.message : e);

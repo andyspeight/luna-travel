@@ -4,7 +4,7 @@
  * Luna Travel is a PWA, so notifications go through the W3C Push API rather
  * than APNs/FCM directly. We encrypt a payload, sign it with our VAPID private
  * key, and POST it to the endpoint the browser gave us; the platform's push
- * service wakes the device and hands it to our service worker (worker/index.js),
+ * service wakes the device and hands it to our service worker (public/push-sw.js),
  * which is what actually draws the notification. That worker runs with the app
  * closed — which is the whole point.
  *

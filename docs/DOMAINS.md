@@ -192,7 +192,16 @@ worth filling that field in per agency.
 Notifications go through the browser's Push API, not APNs/FCM directly. The
 server signs an encrypted payload with a VAPID key pair and posts it to the
 endpoint the browser issued; the platform's push service wakes the app's
-service worker (`worker/index.js`), which draws the notification.
+service worker (`public/push-sw.js`), which draws the notification.
+
+> **That filename must stay stable — do not move it back into `worker/`.**
+> next-pwa's "custom worker" compiles to a *content-hashed* name, so any deploy
+> that changed the worker changed the hash. A phone still holding the previous
+> `sw.js` would then `importScripts` a filename that no longer exists, the
+> import would 404, and **a service worker whose `importScripts` fails does not
+> start at all** — so it drops push events silently while the server happily
+> reports them as sent. It is served `max-age=0, must-revalidate` so an update
+> is picked up rather than cached.
 
 Generate the key pair once and add all three to Vercel (Production):
 

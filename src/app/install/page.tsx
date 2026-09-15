@@ -153,6 +153,14 @@ type InviteInfo = {
   branding?: Branding;
 };
 
+/** One person on the booking, offered when several share it. */
+type PartyOption = {
+  ref: string;
+  name: string;
+  type: 'adult' | 'child' | 'infant';
+  isLead: boolean;
+};
+
 type Trip = {
   destination: string | null;
   departureDate: string | null; // YYYY-MM-DD
@@ -202,6 +210,9 @@ function RedeemView({ inviteId }: { inviteId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null); // set on success → switches to reveal
+  // The booking's other passengers, once the details check has passed. Only
+  // ever set for a booking with more than one of them.
+  const [party, setParty] = useState<PartyOption[] | null>(null);
 
   // Fetch invite info on mount to pre-fill any fields the agency set.
   useEffect(() => {
@@ -228,7 +239,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
     return () => { cancelled = true; };
   }, [inviteId]);
 
-  const submit = async () => {
+  const submit = async (paxRef?: string) => {
     setSubmitting(true);
     setError(null);
     try {
@@ -239,20 +250,29 @@ function RedeemView({ inviteId }: { inviteId: string }) {
           email: email.trim(),
           departureDate: departureDate.trim(),
           bookingRef: bookingRef.trim(),
+          ...(paxRef ? { paxRef } : {}),
         }),
       });
       if (!res.ok) {
         setError("We couldn't find a booking with those details. Please check and try again.");
         return;
       }
+      const data = await res.json().catch(() => ({}));
+
+      // The details were right, but this booking has several people on it and
+      // we do not yet know which one is holding the phone. Nothing has been
+      // written and no session issued — they pick, and we post again.
+      if (data?.needsIdentity && Array.isArray(data.passengers)) {
+        setParty(data.passengers as PartyOption[]);
+        return;
+      }
+
       // Success — session cookie is set by the endpoint. Tell the (root-layout)
       // BookingProvider to load the real booking NOW: "Take me to my booking"
       // is a client-side navigation, so the provider never remounts — without
       // this it would still hold its pre-redemption state (demo trip or
       // onboarding) and the home would show the wrong holiday.
       void refreshLive();
-      // Show the reveal.
-      const data = await res.json().catch(() => ({}));
       const teaser: Partial<Trip> = (data && data.trip) || {};
       setTrip({
         destination: teaser.destination ?? null,
@@ -282,6 +302,21 @@ function RedeemView({ inviteId }: { inviteId: string }) {
   // ── Reveal phase ────────────────────────────────────────────────
   if (trip) {
     return <RevealView trip={trip} branding={info?.branding} onOpen={() => router.push('/')} />;
+  }
+
+  // ── Identity phase ──────────────────────────────────────────────
+  // Only for a booking with more than one traveller on it. Nothing has been
+  // written yet, so going back costs nothing.
+  if (party) {
+    return (
+      <PartyPickerView
+        party={party}
+        branding={info?.branding}
+        busy={submitting}
+        onPick={(ref) => void submit(ref)}
+        onBack={() => setParty(null)}
+      />
+    );
   }
 
   // ── Gate phase ──────────────────────────────────────────────────
@@ -322,8 +357,8 @@ function RedeemView({ inviteId }: { inviteId: string }) {
                   Welcome <em className="text-teal-light">back</em>.
                 </h1>
                 <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
-                  This invite has been used before. Confirm the same details to open your trip on
-                  this device.
+                  Someone on this booking has used this link already. Confirm the booking details to
+                  open the trip on this device &mdash; everyone travelling can use the same link.
                 </p>
               </>
             ) : (
@@ -382,7 +417,9 @@ function RedeemView({ inviteId }: { inviteId: string }) {
 
               <button
                 type="button"
-                onClick={submit}
+                // Not `onClick={submit}`: that hands the click event to submit's
+                // first argument, which is now the chosen passenger.
+                onClick={() => void submit()}
                 disabled={!canSubmit}
                 className="w-full mt-4 h-12 rounded-xl bg-teal text-white font-semibold text-[15px] disabled:opacity-50 disabled:cursor-not-allowed enabled:hover:bg-teal-dark transition-colors flex items-center justify-center gap-2"
               >
@@ -642,6 +679,88 @@ function Field({
       {children}
       {hint && <div className="text-[11px] text-white/45 mt-1.5">{hint}</div>}
     </div>
+  );
+}
+
+/**
+ * "Which of you is this?"
+ *
+ * Shown once the booking reference, email and departure date have checked out,
+ * and only when the booking carries more than one passenger. The names come
+ * from the order's own manifest — we never ask someone to type who they are,
+ * because a typed name is not an identity and would not match the booking.
+ *
+ * It exists because a booking used to hold exactly ONE traveller record.
+ * Whoever opened the link first owned it, and everyone else in the party was
+ * handed that person's record: replies to the agent all came from one name, and
+ * access could only be withdrawn from the whole family at once.
+ */
+function PartyPickerView({
+  party, branding, busy, onPick, onBack,
+}: {
+  party: PartyOption[];
+  branding?: Branding;
+  busy: boolean;
+  onPick: (ref: string) => void;
+  onBack: () => void;
+}) {
+  return (
+    <main
+      className="fixed inset-0 flex flex-col text-white overflow-y-auto"
+      style={{ background: OCEAN_BG }}
+    >
+      <header className="px-6 pt-10 text-center">
+        <div className="inline-flex items-center gap-3 mb-2">
+          <AgencyMark branding={branding} />
+        </div>
+        <p className="text-xs text-white/55 uppercase tracking-[0.18em]">Your trip companion</p>
+      </header>
+
+      <div className="flex-1 flex flex-col items-center justify-center px-5 py-8">
+        <h1 className="font-serif text-[36px] leading-none tracking-tight text-center max-w-[420px] mb-2">
+          Who&rsquo;s <em className="text-teal-light">travelling</em>?
+        </h1>
+        <p className="text-sm text-white/70 text-center max-w-[360px] leading-relaxed mb-7">
+          Tap your name so we can set the app up for you. Everyone on the booking can use this same
+          link and get their own.
+        </p>
+
+        <div className="w-full max-w-[420px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 p-3 shadow-2xl">
+          {party.map((m) => (
+            <button
+              key={m.ref}
+              type="button"
+              disabled={busy}
+              onClick={() => onPick(m.ref)}
+              className="w-full text-left px-4 py-3.5 rounded-xl hover:bg-white/10 active:bg-white/15 disabled:opacity-50 flex items-center gap-3"
+            >
+              <span className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                {m.name.charAt(0).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-medium truncate">{m.name}</span>
+                {(m.isLead || m.type !== 'adult') && (
+                  <span className="block text-[11px] text-white/55">
+                    {[m.isLead ? 'Lead traveller' : null, m.type !== 'adult' ? m.type : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={busy}
+          className="mt-5 text-xs text-white/55 hover:text-white/80 disabled:opacity-50"
+        >
+          Back
+        </button>
+      </div>
+    </main>
   );
 }
 

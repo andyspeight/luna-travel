@@ -15,6 +15,7 @@
 
 import { lookupBooking } from '@/lib/travelify';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
+import { partyFromBooking, type PartyMember } from '@/lib/party';
 
 const CONTROL_HOST = 'https://id.travelify.io';
 const REC_ID_RE = /^rec[A-Za-z0-9]{14}$/;
@@ -101,6 +102,14 @@ export interface ValidatedBooking {
   countryCode: string | null;
   /** Optional city/region within that country, for a more specific photo. */
   locationSlug: string | null;
+  /**
+   * Everyone on the booking, from the order's own passenger manifest.
+   *
+   * Redemption offers this so a party member can say which of them they are
+   * rather than inheriting the first redeemer's identity. Empty when the source
+   * carries no manifest — see partyOrFallback.
+   */
+  passengers: PartyMember[];
 }
 
 /**
@@ -168,6 +177,7 @@ export async function validateAgencyBooking(input: {
         destination: mapped.destinationLabel || null,
         countryCode: mapped.primaryCountryCode || null,
         locationSlug: mapped.locationSlug || null,
+        passengers: partyFromBooking(mapped),
       },
     };
   }
@@ -193,6 +203,9 @@ export async function validateAgencyBooking(input: {
       // The legacy demo lookup carries no structured destination keys.
       countryCode: null,
       locationSlug: null,
+      // …nor a passenger manifest. partyOrFallback turns this into a party of
+      // one, so a demo booking never asks who is redeeming.
+      passengers: [],
     },
   };
 }

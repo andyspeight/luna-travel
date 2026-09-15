@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio, Route } from 'lucide-react';
+import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio, Route, Database, Play } from 'lucide-react';
 import { FlightHero, LiveNowPanel, AircraftPanel } from '@/components/flight-card';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
 
@@ -502,6 +502,214 @@ function RouteProbePanel() {
   );
 }
 
+interface RouteStats {
+  configured: boolean;
+  pairs: number;
+  rows: number;
+  airports: number;
+  covered: number;
+  monthsCovered: number[];
+  monthNames: string[];
+  monthsRemaining: number;
+  earliest: string | null;
+  latest: string | null;
+}
+
+interface BackfillPlan {
+  market: string;
+  months: number;
+  airports: number;
+  windows: string[];
+  billedCalls: number;
+}
+
+/**
+ * The route database — what we have banked, and the backfill that fills it.
+ *
+ * The weekly cron keeps this current from here on. The backfill is the one-off
+ * that buys a year of seasons now instead of waiting a year for them, which is
+ * the only way a July question about a February ski charter gets an answer any
+ * time soon.
+ *
+ * It walks one window per request. A year across every airport is 504 billed
+ * calls and the best part of ten minutes, which no serverless function
+ * survives, so the loop lives here and each request does one month. Stopping
+ * half way is safe: the finished windows are already banked, and re-running
+ * overwrites the same windows rather than making new ones.
+ */
+function RouteDatabasePanel() {
+  const [stats, setStats] = useState<RouteStats | null>(null);
+  const [plan, setPlan] = useState<BackfillPlan | null>(null);
+  const [market, setMarket] = useState('');
+  const [months, setMonths] = useState(12);
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(0);
+  const [log, setLog] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/routes/status', { credentials: 'include', cache: 'no-store' });
+      if (res.ok) setStats((await res.json()) as RouteStats);
+    } catch { /* the panel is diagnostic; a failed refresh is not worth shouting about */ }
+  }, []);
+
+  const loadPlan = useCallback(async () => {
+    try {
+      const qs = new URLSearchParams({ market, months: String(months) });
+      const res = await fetch(`/api/admin/routes/backfill?${qs}`, { credentials: 'include', cache: 'no-store' });
+      if (res.ok) setPlan((await res.json()) as BackfillPlan);
+    } catch { /* same */ }
+  }, [market, months]);
+
+  useEffect(() => { void loadStats(); }, [loadStats]);
+  useEffect(() => { void loadPlan(); }, [loadPlan]);
+
+  const run = useCallback(async () => {
+    if (!plan?.windows.length) return;
+    setRunning(true);
+    setError(null);
+    setDone(0);
+    setLog([]);
+    for (let i = 0; i < plan.windows.length; i++) {
+      const date = plan.windows[i];
+      try {
+        const res = await fetch('/api/admin/routes/backfill', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date, market }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          setError(body.hint || body.error || `Window ${date} failed (${res.status})`);
+          break;
+        }
+        setLog((l) => [
+          ...l,
+          `${date} — ${body.rowsWritten} rows from ${body.covered}/${body.airports} covered airports` +
+            (body.failures?.length ? `, ${body.failures.length} failed` : ''),
+        ]);
+        // A plan that will not reach this far back fails every airport the same
+        // way. Stop rather than spend the remaining windows finding out again.
+        if (body.planLimited === 'all') {
+          setError(`Your plan will not look back as far as ${date}. Stopped after ${i} window${i === 1 ? '' : 's'}; everything before this point is banked.`);
+          break;
+        }
+      } catch {
+        setError(`Window ${date} could not be reached.`);
+        break;
+      }
+      setDone(i + 1);
+    }
+    setRunning(false);
+    void loadStats();
+  }, [plan, market, loadStats]);
+
+  const pct = plan?.windows.length ? Math.round((done / plan.windows.length) * 100) : 0;
+
+  return (
+    <section className="mb-8 rounded-xl border border-tg-border bg-tg-bg-elevated overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-tg-border">
+        <Database size={16} className="text-tg-accent" />
+        <h2 className="text-[15px] font-semibold text-tg-text-primary">Route database</h2>
+        <button
+          onClick={() => { void loadStats(); }}
+          className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-medium text-tg-text-secondary hover:text-tg-text-primary cursor-pointer"
+        >
+          <RefreshCw size={13} /> Refresh
+        </button>
+      </div>
+
+      <div className="p-5">
+        {stats && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <Stat icon={<Route size={13} />} label="Route pairs" value={String(stats.pairs)} />
+              <Stat icon={<Plane size={13} />} label="Airline rows" value={String(stats.rows)} />
+              <Stat icon={<Radio size={13} />} label="Airports covered" value={`${stats.covered} / ${stats.airports}`} />
+              <Stat
+                icon={<CreditCard size={13} />}
+                label="Months banked"
+                value={`${stats.monthsCovered.length} / 12`}
+                warn={stats.monthsCovered.length < 12}
+              />
+            </div>
+            <p className="text-[13px] text-tg-text-secondary mb-4">
+              {stats.monthsCovered.length === 0
+                ? 'Nothing swept yet. The weekly cron runs on Mondays, or backfill below to bank a year of seasons now.'
+                : `Months seen: ${stats.monthNames.join(', ')}. ` +
+                  (stats.monthsRemaining > 0
+                    ? `${stats.monthsRemaining} still missing, so a question about those months has no answer yet.`
+                    : 'A full year, so a July question about a February route can be answered.') +
+                  (stats.earliest ? ` Oldest window ${stats.earliest}, newest ${stats.latest}.` : '')}
+            </p>
+          </>
+        )}
+
+        <div className="flex flex-wrap items-end gap-3 pt-4 border-t border-tg-border">
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-1">Market</label>
+            <select
+              value={market}
+              onChange={(e) => setMarket(e.target.value)}
+              disabled={running}
+              className="px-3 py-2 rounded-lg border border-tg-border bg-tg-bg-secondary text-[14px] text-tg-text-primary"
+            >
+              <option value="">All markets</option>
+              <option value="GB">Great Britain</option>
+              <option value="IE">Ireland</option>
+              <option value="RO">Romania</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-1">Months back</label>
+            <select
+              value={months}
+              onChange={(e) => setMonths(Number(e.target.value))}
+              disabled={running}
+              className="px-3 py-2 rounded-lg border border-tg-border bg-tg-bg-secondary text-[14px] text-tg-text-primary"
+            >
+              {[1, 3, 6, 12].map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={run}
+            disabled={running || !plan?.windows.length}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-tg-accent text-white text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
+          >
+            {running ? <RefreshCw size={15} className="animate-spin" /> : <Play size={15} />}
+            {running ? `Backfilling ${done}/${plan?.windows.length}…` : 'Run backfill'}
+          </button>
+          {plan && (
+            <span className="text-[12px] text-tg-text-tertiary pb-2">
+              {plan.airports} airports x {plan.windows.length} windows = <strong>{plan.billedCalls} billed calls</strong>
+            </span>
+          )}
+        </div>
+
+        {running && (
+          <div className="mt-3 h-1.5 rounded-full bg-tg-bg-secondary overflow-hidden">
+            <div className="h-full bg-tg-accent transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-[13px] text-amber-900">
+            {error}
+          </div>
+        )}
+
+        {!!log.length && (
+          <ul className="mt-4 space-y-1 text-[13px] text-tg-text-secondary font-mono">
+            {log.map((l) => <li key={l}>{l}</li>)}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function FlightTestPage() {
   const [flight, setFlight] = useState('');
   const [date, setDate] = useState(today());
@@ -552,6 +760,8 @@ export default function FlightTestPage() {
       <FlightHealthPanel />
 
       <RouteProbePanel />
+
+      <RouteDatabasePanel />
 
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div className="flex-1 min-w-[160px]">

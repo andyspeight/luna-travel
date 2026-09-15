@@ -320,3 +320,143 @@ export function normaliseFlight(f: Record<string, unknown> | null): NormalisedFl
 }
 
 export { ADA_BASE };
+
+// ─── Route lookup ────────────────────────────────────────────────────────────
+//
+// Everything above answers "what is happening to a flight someone has already
+// booked". This answers a different question, asked BEFORE booking: does anyone
+// fly A to B non-stop, and who.
+//
+// It exists because Luna Chat told a Romanian customer that Wizz Air probably
+// flew Cluj to Malaga "with a short connection (not direct)". Wizz fly it
+// direct. Luna has no schedule data, so it guessed, and the prompt has since
+// been changed to stop it guessing. The open question is whether we can give it
+// a real answer instead, and we already hold an AeroDataBox key, so the cheapest
+// way to find out is to ask.
+//
+// TWO RULES, both learned the hard way.
+//
+// 1. POSITIVE DIRECTION ONLY. The routes endpoint reports the seven days before
+//    now. A route that is seasonal, paused, or simply did not operate this week
+//    is absent, and absent does NOT mean "no such route". Anything built on this
+//    may say "yes, that is flown non-stop" and must NEVER say "there is no
+//    direct flight" — that is the original bug with a data source bolted on to
+//    lend it false authority.
+//
+// 2. NEVER MATCH AN AIRLINE ON ONE CODE. Wizz fly Cluj to Malaga under two
+//    separate AOCs, Wizz Air Hungary (W6/WZZ) and Wizz Air Malta (W4/WMT), and
+//    which one operates varies. A matcher keyed on "W6" answers "not found" for
+//    a route that is flying. Same trap for Ryanair/Buzz/Malta Air, easyJet and
+//    easyJet Europe, BA and BA Euroflyer. Match the name as well as the codes.
+
+export interface AirportFeeds {
+  schedules: string | null;
+  live: string | null;
+  adsb: string | null;
+  covered: boolean; // schedules feed is OK or OKPartial — routes data is worth asking for
+}
+
+/**
+ * Free-tier coverage check, and the first thing to run. If an airport has no
+ * schedules feed, the routes endpoint returns nothing for it and no amount of
+ * paying fixes that. ICAO only (Cluj is LRCL).
+ */
+export async function airportFeeds(icao: string): Promise<AirportFeeds | null> {
+  try {
+    const res = await adaFetch(
+      `${ADA_BASE}/health/services/airports/${encodeURIComponent(icao)}/feeds`,
+      { headers: headers() },
+      6000,
+    );
+    if (!res.ok) return null;
+    const d = (await res.json()) as Record<string, Record<string, string> | undefined>;
+    const pick = (k: string) => d?.[k]?.status ?? null;
+    const schedules = pick('flightSchedulesFeed');
+    return {
+      schedules,
+      live: pick('liveFlightUpdatesFeed'),
+      adsb: pick('adsbUpdatesFeed'),
+      covered: schedules === 'OK' || schedules === 'OKPartial',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export interface RouteRecord {
+  iata: string | null;
+  icao: string | null;
+  name: string | null;
+  municipality: string | null;
+  countryCode: string | null;
+  averageDailyFlights: number | null;
+  operators: { name: string | null; iata: string | null; icao: string | null }[];
+}
+
+/**
+ * Every destination flown non-stop from `iata` in the last seven days, each with
+ * the airlines operating it. This is a TIER 3 call and costs more than one API
+ * unit, so it is never on a visitor path — admin and cron only.
+ *
+ * Returns null when the plan does not include the endpoint (403) or the airport
+ * is not covered (204 / empty), which are different failures and the caller
+ * should say which.
+ */
+export async function airportRoutes(
+  iata: string,
+): Promise<{ routes: RouteRecord[]; status: number } | { routes: null; status: number }> {
+  const res = await adaFetch(
+    `${ADA_BASE}/airports/iata/${encodeURIComponent(iata)}/stats/routes/daily`,
+    { headers: headers() },
+    15000,
+  );
+  if (res.status === 204) return { routes: [], status: 204 };
+  if (!res.ok) return { routes: null, status: res.status };
+
+  const d = (await res.json().catch(() => null)) as { routes?: unknown[] } | null;
+  const rows = Array.isArray(d?.routes) ? d!.routes! : [];
+  const routes: RouteRecord[] = rows.map((r) => {
+    const row = r as Record<string, unknown>;
+    const dest = (row.destination ?? {}) as Record<string, unknown>;
+    const ops = Array.isArray(row.operators) ? (row.operators as Record<string, unknown>[]) : [];
+    return {
+      iata: (dest.iata as string) ?? null,
+      icao: (dest.icao as string) ?? null,
+      name: (dest.name as string) ?? null,
+      municipality: (dest.municipalityName as string) ?? null,
+      countryCode: (dest.countryCode as string) ?? null,
+      averageDailyFlights:
+        typeof row.averageDailyFlights === 'number' ? (row.averageDailyFlights as number) : null,
+      operators: ops.map((o) => ({
+        name: (o.name as string) ?? null,
+        iata: (o.iata as string) ?? null,
+        icao: (o.icao as string) ?? null,
+      })),
+    };
+  });
+  return { routes, status: res.status };
+}
+
+/**
+ * Does `carrier` appear in this route's operator list?
+ *
+ * Matches on the airline NAME as well as its codes, because the same brand flies
+ * under several AOCs with different codes and any single-code check produces a
+ * false negative on the weeks the other AOC operates. "wizz" matches Wizz Air,
+ * Wizz Air Malta and Wizz Air UK; "W6" alone would not.
+ */
+export function operatedBy(route: RouteRecord, carrier: string): boolean {
+  const q = carrier.trim().toLowerCase();
+  if (!q) return false;
+  return route.operators.some((o) => {
+    const name = (o.name || '').toLowerCase();
+    if (name && (name.includes(q) || q.includes(name))) return true;
+    return [o.iata, o.icao].some((c) => !!c && c.toLowerCase() === q);
+  });
+}
+
+/** The route from an already-fetched list, or null if it did not fly this week. */
+export function findRoute(routes: RouteRecord[], destIata: string): RouteRecord | null {
+  const q = destIata.trim().toUpperCase();
+  return routes.find((r) => (r.iata || '').toUpperCase() === q) ?? null;
+}

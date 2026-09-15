@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio } from 'lucide-react';
+import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio, Route } from 'lucide-react';
 import { FlightHero, LiveNowPanel, AircraftPanel } from '@/components/flight-card';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
 
@@ -257,6 +257,192 @@ function toLive(n: Normalised): FlightLiveStatus {
   };
 }
 
+interface RouteProbe {
+  ok: boolean;
+  reason?: string;
+  status?: number;
+  hint?: string;
+  from?: string;
+  to?: string | null;
+  carrier?: string | null;
+  feeds?: { schedules: string | null; live: string | null; adsb: string | null; covered: boolean } | null;
+  routeCount?: number;
+  found?: boolean;
+  verdict?: string;
+  match?: {
+    iata: string | null;
+    name: string | null;
+    averageDailyFlights: number | null;
+    operators: { name: string | null; iata: string | null; icao: string | null }[];
+    carrierMatch: boolean | null;
+  } | null;
+  busiest?: { iata: string | null; name: string | null; perDay: number | null; operators: (string | null)[] }[];
+}
+
+/**
+ * Route probe — "does anyone fly A to B non-stop, and is it who they said?"
+ *
+ * The rest of this page answers questions about a flight someone has already
+ * booked. This answers the one Luna Chat got wrong before anyone booked
+ * anything: a Romanian customer was told Wizz Air probably flew Cluj to Malaga
+ * with a connection, and Wizz fly it direct.
+ *
+ * It defaults to exactly that case so the answer is one click away. A route
+ * lookup is a Tier 3 call and costs more than a single API unit, so it only
+ * ever runs when this button is pressed.
+ */
+function RouteProbePanel() {
+  const [from, setFrom] = useState('CLJ');
+  const [to, setTo] = useState('AGP');
+  const [carrier, setCarrier] = useState('wizz');
+  const [icao, setIcao] = useState('LRCL');
+  const [data, setData] = useState<RouteProbe | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const qs = new URLSearchParams({ from, to, carrier, icao });
+      const res = await fetch(`/api/admin/flight-routes?${qs}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const body = (await res.json()) as RouteProbe & { error?: string; hint?: string };
+      if (!res.ok) {
+        setError(body.hint || body.error || `Request failed (${res.status})`);
+        return;
+      }
+      setData(body);
+    } catch {
+      setError('Could not reach the route probe.');
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to, carrier, icao]);
+
+  const field = (label: string, value: string, set: (v: string) => void, width: string, ph: string) => (
+    <div className={width}>
+      <label className="block text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-1">
+        {label}
+      </label>
+      <input
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        placeholder={ph}
+        className="w-full px-3 py-2 rounded-lg border border-tg-border bg-tg-bg-secondary text-[14px]
+                   text-tg-text-primary placeholder:text-tg-text-tertiary"
+      />
+    </div>
+  );
+
+  return (
+    <section className="mb-8 rounded-xl border border-tg-border bg-tg-bg-elevated overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-tg-border">
+        <Route size={16} className="text-tg-accent" />
+        <h2 className="text-[15px] font-semibold text-tg-text-primary">
+          Route probe — can we answer the Cluj question?
+        </h2>
+      </div>
+
+      <div className="p-5">
+        <p className="text-[13px] text-tg-text-secondary mb-4">
+          Luna told a Romanian customer that Wizz Air probably flew Cluj to Malaga with a connection.
+          They fly it direct. This asks our existing AeroDataBox key whether it can give the real
+          answer. One billed lookup per run, and only when you press the button.
+        </p>
+
+        <div className="flex flex-wrap items-end gap-3">
+          {field('From (IATA)', from, setFrom, 'w-[120px]', 'CLJ')}
+          {field('To (IATA)', to, setTo, 'w-[120px]', 'AGP')}
+          {field('Airline', carrier, setCarrier, 'w-[150px]', 'wizz')}
+          {field('Origin ICAO', icao, setIcao, 'w-[130px]', 'LRCL')}
+          <button
+            onClick={run}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-tg-accent text-white
+                       text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
+          >
+            {loading ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
+            {loading ? 'Asking…' : 'Run probe'}
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-[13px] text-red-800">
+            {error}
+          </div>
+        )}
+
+        {data && (
+          <div className="mt-5 space-y-4">
+            {data.feeds && (
+              <div className="flex flex-wrap gap-2">
+                <CoverageChip label={`${icao} schedules`} live={data.feeds.covered} />
+                <CoverageChip label={`${icao} live`} live={data.feeds.live === 'OK' || data.feeds.live === 'OKPartial'} />
+              </div>
+            )}
+
+            <div
+              className={`p-4 rounded-lg border text-[13px] leading-relaxed ${
+                data.found && data.match?.carrierMatch
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : data.ok
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : 'bg-red-50 border-red-200 text-red-900'
+              }`}
+            >
+              <div className="font-semibold mb-1">
+                {data.found && data.match?.carrierMatch
+                  ? 'Yes — and this is the answer Luna could not give'
+                  : data.ok
+                    ? 'Not settled'
+                    : 'Cannot answer'}
+              </div>
+              {data.verdict || data.hint}
+            </div>
+
+            {data.match && (
+              <div className="p-4 rounded-lg border border-tg-border bg-tg-bg-secondary text-[13px]">
+                <div className="font-semibold text-tg-text-primary mb-1">
+                  {data.match.iata} {data.match.name}
+                  {typeof data.match.averageDailyFlights === 'number' && (
+                    <span className="ml-2 font-normal text-tg-text-secondary">
+                      {data.match.averageDailyFlights.toFixed(2)} flights/day
+                    </span>
+                  )}
+                </div>
+                <div className="text-tg-text-secondary">
+                  Operators: {data.match.operators.map((o) => `${o.name} (${o.iata || o.icao})`).join(', ') || 'none listed'}
+                </div>
+              </div>
+            )}
+
+            {!!data.busiest?.length && (
+              <details className="text-[13px]">
+                <summary className="cursor-pointer text-tg-text-secondary">
+                  Control: {data.routeCount} destinations flown from {data.from} in the last 7 days
+                </summary>
+                <ul className="mt-2 space-y-1 text-tg-text-secondary">
+                  {data.busiest.map((b) => (
+                    <li key={b.iata}>
+                      <span className="font-medium text-tg-text-primary">{b.iata}</span> {b.name}
+                      {typeof b.perDay === 'number' && ` — ${b.perDay.toFixed(2)}/day`}
+                      {!!b.operators.length && ` — ${b.operators.join(', ')}`}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function FlightTestPage() {
   const [flight, setFlight] = useState('');
   const [date, setDate] = useState(today());
@@ -305,6 +491,8 @@ export default function FlightTestPage() {
       </header>
 
       <FlightHealthPanel />
+
+      <RouteProbePanel />
 
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div className="flex-1 min-w-[160px]">

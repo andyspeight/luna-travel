@@ -14,6 +14,10 @@ import { AgencyShell, Callout, P, SERIF, card } from '../portal-chrome';
 interface Traveller {
   id: string;
   name: string;
+  /** The lead passenger on the booking, as opposed to someone travelling with them. */
+  isLead: boolean;
+  /** How many travellers share this booking reference. 1 for most. */
+  partySize: number;
   bookingRef: string | null;
   email: string | null;
   destination: string | null;
@@ -77,6 +81,20 @@ function TravellersPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 14.5, fontWeight: 700, color: P.ink }}>{t.name}</span>
                   <EngagementPill traveller={t} />
+                  {/* Several people now share a booking reference. Without this
+                      the list reads as duplicate rows for the same trip. */}
+                  {t.partySize > 1 && (
+                    <span
+                      title={`${t.partySize} travellers on this booking`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        fontSize: 11, fontWeight: 600, color: P.ink3,
+                        border: `1px solid ${P.line}`, borderRadius: 999, padding: '1px 7px',
+                      }}
+                    >
+                      <Users size={11} /> {t.isLead ? 'Lead' : 'Travelling with'} · {t.partySize}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12.5, color: P.ink3, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   {t.destination && (

@@ -17,6 +17,7 @@ export const runtime = 'nodejs';
 interface Row {
   id: string;
   lead_passenger_name: string | null;
+  is_lead: boolean | null;
   booking_ref: string | null;
   email: string | null;
   destination: string | null;
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await getSupabaseAdmin()
     .from('travellers')
-    .select('id, lead_passenger_name, booking_ref, email, destination, departure_date, return_date, status, device_install_status, created_at, first_opened_at, last_opened_at, open_count')
+    .select('id, lead_passenger_name, is_lead, booking_ref, email, destination, departure_date, return_date, status, device_install_status, created_at, first_opened_at, last_opened_at, open_count')
     .eq('agency_id', claims.agencyId)
     .order('created_at', { ascending: false })
     .limit(200);
@@ -46,9 +47,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'list_failed' }, { status: 500 });
   }
 
-  const travellers = ((data ?? []) as Row[]).map((t) => ({
+  // A booking can now hold several travellers, so the same reference appears on
+  // more than one row. partySize lets the portal show "2 of 4 on YTG58405"
+  // rather than looking like duplicates.
+  const rows = (data ?? []) as Row[];
+  const partySize = new Map<string, number>();
+  for (const t of rows) {
+    if (!t.booking_ref) continue;
+    partySize.set(t.booking_ref, (partySize.get(t.booking_ref) ?? 0) + 1);
+  }
+
+  const travellers = rows.map((t) => ({
     id: t.id,
     name: t.lead_passenger_name || 'Traveller',
+    isLead: !!t.is_lead,
+    partySize: t.booking_ref ? partySize.get(t.booking_ref) ?? 1 : 1,
     bookingRef: t.booking_ref,
     email: t.email,
     destination: t.destination,

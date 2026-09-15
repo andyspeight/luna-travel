@@ -33,6 +33,9 @@ import { isControlAgency } from '@/lib/agency-id';
 import { signSession } from '@/lib/jwt';
 import { logAuditEvent } from '@/lib/audit';
 import { getPlatformSettings } from '@/lib/platform-settings';
+import {
+  partyFromBooking, partyOrFallback, needsIdentity, resolvePartyMember,
+} from '@/lib/party';
 
 // ───────── Validation (matches retrieve-order.js patterns) ─────────
 
@@ -72,17 +75,6 @@ type TripTeaser = {
   countryCode: string | null;
   locationSlug: string | null;
 };
-
-function tripFromTravellerRow(row: Record<string, unknown> | null): TripTeaser {
-  return {
-    destination: (row?.destination as string) ?? null,
-    departureDate: (row?.departure_date as string) ?? null,
-    returnDate: (row?.return_date as string) ?? null,
-    leadName: (row?.lead_passenger_name as string) ?? null,
-    countryCode: (row?.country_code as string) ?? null,
-    locationSlug: (row?.location_slug as string) ?? null,
-  };
-}
 
 // Columns selected whenever we surface an existing traveller (idempotent /
 // reuse paths) so the reveal has the same teaser as a fresh redemption.
@@ -166,32 +158,24 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return notFound();
   }
 
-  // 3. Idempotency: if already redeemed, check the details match and re-issue
-  //    a session token rather than erroring. Helps when a user double-taps
-  //    submit or refreshes the page.
-  if (invite.status === 'redeemed' && invite.redeemed_traveller_id) {
-    const { data: existing, error: existingErr } = await supabase
-      .from('travellers')
-      .select(TRAVELLER_TEASER_COLS)
-      .eq('id', invite.redeemed_traveller_id as string)
-      .single();
-
-    if (!existingErr && existing && existing.email === email && existing.booking_ref === bookingRef) {
-      const token = await signSession({
-        inviteId,
-        travellerId: existing.id as string,
-        bookingRef: existing.booking_ref as string,
-        agencyId: existing.agency_id as string,
-      });
-      return jsonWithCookie({ session: token, trip: tripFromTravellerRow(existing) }, token);
-    }
-    // Already redeemed but details don't match — treat as not found
-    console.warn('[redeem] invite already redeemed by different details:', inviteId);
-    return notFound();
-  }
-
-  if (invite.status !== 'pending') {
-    console.warn('[redeem] invite status not pending:', inviteId, invite.status);
+  // 3. An invite belongs to a BOOKING, not to one person.
+  //
+  //    Travellers forward the link to the rest of their party — it is the
+  //    obvious thing to do and we should not fight it — so "already redeemed"
+  //    must not lock everyone else out. It used to: the first redeemer owned the
+  //    booking and the next person either inherited that person's record or was
+  //    refused. Each of them now gets their own row (see step 5), so the only
+  //    states that close an invite are revoked and expired.
+  //
+  //    Re-redemption by the SAME person is handled naturally further down: they
+  //    resolve to the same pax_ref and are handed back their existing row, which
+  //    covers a double-tap, a refresh and a second device alike.
+  //    invite_status also carries 'expired' as a stored value. The clock check
+  //    above catches the usual case, but a status set explicitly must close the
+  //    invite too — otherwise "closed" would depend on which of the two ways it
+  //    was closed.
+  if (invite.status === 'revoked' || invite.status === 'expired') {
+    console.warn('[redeem] invite closed:', inviteId, invite.status);
     return notFound();
   }
 
@@ -212,6 +196,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       destination: stored.destination,
       countryCode: stored.payload?.primaryCountryCode || null,
       locationSlug: stored.payload?.locationSlug || null,
+      // An off-platform booking carries its manifest in the stored payload, so
+      // a manually-entered family gets the same party treatment as a Travelify
+      // one rather than quietly falling back to a single shared record.
+      passengers: partyFromBooking(stored.payload),
     };
   } else if (!isControlAgency(invite.agency_id as string)) {
     // Only a Control (rec...) agency can be validated against Travelify, because
@@ -245,26 +233,63 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     validated = validation.booking;
   }
 
-  // 5. Atomic invite update: only proceeds if status is still 'pending'.
-  //    If two concurrent redemptions race, only one wins; the other sees
-  //    rowCount=0 and bails. (Postgres UPDATE ... WHERE status='pending' is
-  //    atomic — Supabase passes the WHERE through.)
+  // 4b. WHICH of the people on this booking is redeeming?
+  //
+  //     The order's own passenger manifest is the list — we never invent an
+  //     identity, and we never pick for someone. A solo booking (or one whose
+  //     manifest we could not read) resolves straight through, so the common
+  //     case is unchanged and nobody is asked a pointless question.
+  //
+  //     This is deliberately AFTER the Travelify check: the manifest names the
+  //     traveller's fellow passengers, so it is only ever shown to someone who
+  //     has already proved they hold the booking — the same gate the trip teaser
+  //     sits behind.
+  const party = partyOrFallback(validated.passengers, validated.leadName);
+  const chosen = typeof body.paxRef === 'string' ? body.paxRef.trim() : '';
+
+  if (needsIdentity(party, chosen)) {
+    // Not an error: the traveller now picks, and posts again with paxRef. No
+    // session is issued and nothing is written, so an abandoned choice leaves
+    // no trace.
+    return NextResponse.json(
+      {
+        needsIdentity: true,
+        passengers: party.map((m) => ({ ref: m.ref, name: m.name, type: m.type, isLead: m.isLead })),
+      },
+      { status: 200 },
+    );
+  }
+
+  const member = resolvePartyMember(party, chosen);
+  if (!member) {
+    // A paxRef that is not on this booking. Generic, like every other failure
+    // here — it must not become a way to probe who is travelling.
+    console.warn('[redeem] paxRef not on booking:', inviteId);
+    return notFound();
+  }
+
   const now = new Date().toISOString();
 
-  // 6. Insert traveller row. Schema uses lead_passenger_name (single field)
-  //    and the unique constraint is (agency_id, booking_ref) — so a re-redeem
-  //    after an earlier one would hit the constraint. We treat unique-violation
-  //    here as "this booking is already onboarded, surface the existing row"
-  //    rather than failing.
-  const leadName = validated.leadName;
-
-  const { data: traveller, error: insertErr } = await supabase
+  // 5. This person's traveller row.
+  //
+  //    Keyed (agency_id, booking_ref, pax_ref) since the party migration, so a
+  //    booking holds one row PER PERSON. A unique violation therefore no longer
+  //    means "this booking is taken" — it means this same person is back, on a
+  //    second device or after a re-install, and they simply get their own row
+  //    again. Their fellow travellers each land on a different pax_ref and get
+  //    rows of their own.
+  const { data: inserted, error: insertErr } = await supabase
     .from('travellers')
     .insert({
       agency_id: invite.agency_id,
       booking_ref: bookingRef,
       email,
-      lead_passenger_name: leadName,
+      pax_ref: member.ref,
+      is_lead: member.isLead,
+      // Despite the column name this is THIS traveller's name, not the
+      // booking's lead — every reader already treats it that way. The legacy
+      // name is flagged in the migration and a rename is pending.
+      lead_passenger_name: member.name || validated.leadName,
       departure_date: validated.departureDate || departureDate,
       return_date: validated.returnDate,
       destination: validated.destination,
@@ -272,87 +297,53 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       location_slug: validated.locationSlug,
       created_at: now,
     })
-    .select('id')
+    .select(TRAVELLER_TEASER_COLS)
     .single();
+
+  let traveller = inserted as Record<string, unknown> | null;
+  let reused = false;
 
   if (insertErr || !traveller) {
-    // A unique violation on (agency_id, booking_ref) means this booking is
-    // already onboarded for this agency (a re-issued invite, a re-install, or
-    // a second device). The caller already passed the Travelify lookup above,
-    // so they are entitled to this booking. Reuse the existing traveller and
-    // issue a session, rather than the blunt 404 the old code returned. This
-    // is the "already onboarded, surface the existing row" behaviour the flow
-    // always intended.
     const code = (insertErr as { code?: string } | null)?.code;
-    if (code === '23505') {
-      const { data: existing, error: existingErr } = await supabase
-        .from('travellers')
-        .select(TRAVELLER_TEASER_COLS)
-        .eq('agency_id', invite.agency_id as string)
-        .eq('booking_ref', bookingRef)
-        .single();
-
-      if (!existingErr && existing) {
-        // Best-effort: close this invite against the existing traveller so it
-        // does not sit pending. Compare-and-set on 'pending' keeps it safe.
-        await supabase
-          .from('invites')
-          .update({ status: 'redeemed', redeemed_at: now, redeemed_traveller_id: existing.id })
-          .eq('id', inviteId)
-          .eq('status', 'pending');
-
-        void logAuditEvent({
-          eventType: 'invite.redeemed',
-          actor: 'traveller',
-          targetId: inviteId,
-          targetLabel: `${invite.agency_id} / ${bookingRef}`,
-          metadata: {
-            agencyId: invite.agency_id,
-            bookingRef,
-            travellerEmail: email,
-            travellerId: existing.id,
-            reused: true,
-          },
-        });
-
-        const token = await signSession({
-          inviteId,
-          travellerId: existing.id as string,
-          bookingRef: existing.booking_ref as string,
-          agencyId: existing.agency_id as string,
-        });
-        return jsonWithCookie({ session: token, trip: tripFromTravellerRow(existing) }, token);
-      }
+    if (code !== '23505') {
+      console.error('[redeem] traveller insert failed:', inviteId, insertErr?.message);
+      return notFound();
     }
 
-    console.error('[redeem] traveller insert failed:', inviteId, insertErr?.message);
-    return notFound();
+    // Same person, already onboarded. They have just passed the Travelify check
+    // again, so they are entitled to this booking — hand back their own record.
+    const { data: existing, error: existingErr } = await supabase
+      .from('travellers')
+      .select(TRAVELLER_TEASER_COLS)
+      .eq('agency_id', invite.agency_id as string)
+      .eq('booking_ref', bookingRef)
+      .eq('pax_ref', member.ref)
+      .single();
+
+    if (existingErr || !existing) {
+      console.error('[redeem] conflict but no existing row:', inviteId, existingErr?.message);
+      return notFound();
+    }
+    traveller = existing as Record<string, unknown>;
+    reused = true;
   }
 
-  // 7. Now atomically mark the invite redeemed, attaching the traveller ID.
-  //    The .eq('status', 'pending') is the compare-and-set — if another
-  //    request beat us to it, this updates 0 rows.
-  const { data: updated, error: updateErr } = await supabase
-    .from('invites')
-    .update({
-      status: 'redeemed',
-      redeemed_at: now,
-      redeemed_traveller_id: traveller.id,
-    })
-    .eq('id', inviteId)
-    .eq('status', 'pending')
-    .select('id')
-    .single();
-
-  if (updateErr || !updated) {
-    // Race lost — another request redeemed first. Clean up the orphan
-    // traveller row we just inserted to avoid duplicates.
-    console.warn('[redeem] atomic update lost race, cleaning up:', inviteId, updateErr?.message);
-    await supabase.from('travellers').delete().eq('id', traveller.id as string);
-    return notFound();
+  // 6. Close the invite against the FIRST person to use it.
+  //
+  //    Best-effort and compare-and-set on 'pending': losing this race is
+  //    completely fine now, because it only means a fellow traveller redeemed a
+  //    moment earlier. The old code deleted its own freshly-inserted traveller
+  //    on a lost race — under the party model that would delete a real person's
+  //    record for the crime of being second.
+  if (invite.status === 'pending') {
+    await supabase
+      .from('invites')
+      .update({ status: 'redeemed', redeemed_at: now, redeemed_traveller_id: traveller.id })
+      .eq('id', inviteId)
+      .eq('status', 'pending');
   }
 
-  // 8. Sign session JWT
+  // 7. Sign session JWT — scoped to this PERSON, not to the booking.
   const token = await signSession({
     inviteId,
     travellerId: traveller.id as string,
@@ -373,15 +364,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       bookingRef,
       travellerEmail: email,
       travellerId: traveller.id,
+      // Which of the party this was, so a booking with four redemptions reads
+      // as four people rather than four indistinguishable events.
+      paxRef: member.ref,
+      travellerName: member.name || null,
+      isLead: member.isLead,
+      reused,
     },
   });
 
-  // Teaser comes straight from the Travelify booking we just validated.
+  // Teaser comes straight from the Travelify booking we just validated, but
+  // named for whoever is actually holding the phone.
   const trip: TripTeaser = {
     destination: validated.destination ?? null,
     departureDate: validated.departureDate || departureDate,
     returnDate: validated.returnDate ?? null,
-    leadName,
+    leadName: member.name || validated.leadName,
     countryCode: validated.countryCode ?? null,
     locationSlug: validated.locationSlug ?? null,
   };

@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio } from 'lucide-react';
+import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio, Route } from 'lucide-react';
 import { FlightHero, LiveNowPanel, AircraftPanel } from '@/components/flight-card';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
 
@@ -257,6 +257,251 @@ function toLive(n: Normalised): FlightLiveStatus {
   };
 }
 
+interface OriginResult {
+  from: string;
+  icao: string | null;
+  feeds: { schedules: string | null; live: string | null; adsb: string | null; covered: boolean } | null;
+  status: number;
+  ok: boolean;
+  reason: string | null;
+  routeCount: number;
+  found: boolean | null;
+  match: {
+    iata: string | null;
+    name: string | null;
+    countryCode: string | null;
+    averageDailyFlights: number | null;
+    operators: { name: string | null; iata: string | null; icao: string | null }[];
+    carrierMatch: boolean | null;
+  } | null;
+  destinations: { iata: string | null; name: string | null; perDay: number | null; operators: string[] }[];
+  operators: { name: string; codes: string[]; routes: number }[];
+  verdict: string;
+}
+
+interface RouteProbe {
+  ok: boolean;
+  to: string | null;
+  carrier: string | null;
+  billedCalls: number;
+  costNote: string;
+  results: OriginResult[];
+  raw?: Record<string, unknown>;
+}
+
+/**
+ * Route probe — "can AeroDataBox tell us who flies A to B non-stop?"
+ *
+ * The rest of this page answers questions about a flight someone has already
+ * booked. This answers the one Luna Chat got wrong before anyone booked
+ * anything: a Romanian customer was told Wizz Air probably flew Cluj to Malaga
+ * with a connection, and Wizz fly it direct.
+ *
+ * It defaults to exactly that case. The sweep box takes several origins so the
+ * real question — does this work across OUR markets, not just one airport — can
+ * be answered in one go. Each origin is a billed Tier 3 call, so nothing runs
+ * until the button is pressed and the call count is always shown.
+ */
+function RouteProbePanel() {
+  const [from, setFrom] = useState('CLJ');
+  const [to, setTo] = useState('AGP');
+  const [carrier, setCarrier] = useState('wizz');
+  const [icao, setIcao] = useState('LRCL');
+  const [showRaw, setShowRaw] = useState(true);
+  const [data, setData] = useState<RouteProbe | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const originCount = from.split(/[,\s]+/).filter(Boolean).length;
+
+  const run = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const qs = new URLSearchParams({ from, to, carrier, icao, raw: showRaw ? '1' : '0' });
+      const res = await fetch(`/api/admin/flight-routes?${qs}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const body = (await res.json()) as RouteProbe & { error?: string; hint?: string };
+      if (!res.ok) {
+        setError(body.hint || body.error || `Request failed (${res.status})`);
+        return;
+      }
+      setData(body);
+    } catch {
+      setError('Could not reach the route probe.');
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to, carrier, icao, showRaw]);
+
+  const field = (label: string, value: string, set: (v: string) => void, width: string, ph: string) => (
+    <div className={width}>
+      <label className="block text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-1">
+        {label}
+      </label>
+      <input
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        placeholder={ph}
+        className="w-full px-3 py-2 rounded-lg border border-tg-border bg-tg-bg-secondary text-[14px]
+                   text-tg-text-primary placeholder:text-tg-text-tertiary"
+      />
+    </div>
+  );
+
+  return (
+    <section className="mb-8 rounded-xl border border-tg-border bg-tg-bg-elevated overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-tg-border">
+        <Route size={16} className="text-tg-accent" />
+        <h2 className="text-[15px] font-semibold text-tg-text-primary">
+          Route probe — can we answer the Cluj question?
+        </h2>
+      </div>
+
+      <div className="p-5">
+        <p className="text-[13px] text-tg-text-secondary mb-4">
+          Luna told a Romanian customer that Wizz Air probably flew Cluj to Malaga with a connection.
+          They fly it direct. This asks the AeroDataBox key this app already holds whether it can give
+          the real answer. Put several origins in the From box, comma separated, to check coverage
+          across our markets at once.
+        </p>
+
+        <div className="flex flex-wrap items-end gap-3">
+          {field('From (IATA)', from, setFrom, 'w-[200px]', 'CLJ, LTN, MAN')}
+          {field('To (IATA)', to, setTo, 'w-[110px]', 'AGP')}
+          {field('Airline', carrier, setCarrier, 'w-[140px]', 'wizz')}
+          {field('Origin ICAO', icao, setIcao, 'w-[130px]', 'LRCL')}
+          <button
+            onClick={run}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-tg-accent text-white
+                       text-[14px] font-semibold disabled:opacity-50 cursor-pointer"
+          >
+            {loading ? <RefreshCw size={15} className="animate-spin" /> : <Search size={15} />}
+            {loading ? 'Asking…' : `Run probe (${originCount} call${originCount === 1 ? '' : 's'})`}
+          </button>
+        </div>
+
+        <label className="flex items-center gap-2 mt-3 text-[13px] text-tg-text-secondary cursor-pointer">
+          <input type="checkbox" checked={showRaw} onChange={(e) => setShowRaw(e.target.checked)} />
+          Include the raw AeroDataBox response
+        </label>
+
+        {error && (
+          <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-[13px] text-red-800">
+            {error}
+          </div>
+        )}
+
+        {data && (
+          <div className="mt-5 space-y-5">
+            <div className="text-[12px] text-tg-text-tertiary">{data.costNote}</div>
+
+            {data.results.map((r) => (
+              <div key={r.from} className="rounded-xl border border-tg-border overflow-hidden">
+                <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-tg-bg-secondary border-b border-tg-border">
+                  <span className="text-[14px] font-semibold text-tg-text-primary">{r.from}</span>
+                  {r.feeds && (
+                    <>
+                      <CoverageChip label="schedules" live={r.feeds.covered} />
+                      <CoverageChip
+                        label="live"
+                        live={r.feeds.live === 'OK' || r.feeds.live === 'OKPartial'}
+                      />
+                    </>
+                  )}
+                  <span className="ml-auto text-[12px] text-tg-text-tertiary">
+                    HTTP {r.status} · {r.routeCount} destinations
+                  </span>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  <div
+                    className={`p-3 rounded-lg border text-[13px] leading-relaxed ${
+                      r.found && r.match?.carrierMatch
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : r.ok
+                          ? 'bg-amber-50 border-amber-200 text-amber-900'
+                          : 'bg-red-50 border-red-200 text-red-900'
+                    }`}
+                  >
+                    {r.verdict}
+                  </div>
+
+                  {r.match && (
+                    <div className="text-[13px] text-tg-text-secondary">
+                      <span className="font-semibold text-tg-text-primary">
+                        {r.match.iata} {r.match.name}
+                      </span>
+                      {typeof r.match.averageDailyFlights === 'number' &&
+                        ` — ${r.match.averageDailyFlights.toFixed(2)} flights/day`}
+                      <div>
+                        Operators:{' '}
+                        {r.match.operators
+                          .map((o) => `${o.name} (${o.iata || ''}${o.icao ? '/' + o.icao : ''})`)
+                          .join(', ') || 'none listed'}
+                      </div>
+                    </div>
+                  )}
+
+                  {!!r.operators.length && (
+                    <details className="text-[13px]">
+                      <summary className="cursor-pointer text-tg-text-secondary">
+                        Airlines seen from {r.from} — the codes a matcher would have to handle
+                      </summary>
+                      <ul className="mt-2 space-y-1 text-tg-text-secondary">
+                        {r.operators.map((o) => (
+                          <li key={o.name}>
+                            <span className="font-medium text-tg-text-primary">{o.name}</span>
+                            {!!o.codes.length && ` (${o.codes.join(', ')})`} — {o.routes} route
+                            {o.routes === 1 ? '' : 's'}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {!!r.destinations.length && (
+                    <details className="text-[13px]">
+                      <summary className="cursor-pointer text-tg-text-secondary">
+                        Busiest destinations from {r.from}
+                      </summary>
+                      <ul className="mt-2 space-y-1 text-tg-text-secondary">
+                        {r.destinations.map((d) => (
+                          <li key={d.iata}>
+                            <span className="font-medium text-tg-text-primary">{d.iata}</span> {d.name}
+                            {typeof d.perDay === 'number' && ` — ${d.perDay.toFixed(2)}/day`}
+                            {!!d.operators.length && ` — ${d.operators.join(', ')}`}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {data.raw && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-tg-text-tertiary mb-2">
+                  Raw AeroDataBox response
+                </div>
+                <pre className="p-4 rounded-xl border border-tg-border bg-tg-bg-secondary text-[12px] leading-relaxed
+                                text-tg-text-primary overflow-x-auto font-mono max-h-[520px]">
+                  {JSON.stringify(data.raw, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function FlightTestPage() {
   const [flight, setFlight] = useState('');
   const [date, setDate] = useState(today());
@@ -305,6 +550,8 @@ export default function FlightTestPage() {
       </header>
 
       <FlightHealthPanel />
+
+      <RouteProbePanel />
 
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div className="flex-1 min-w-[160px]">

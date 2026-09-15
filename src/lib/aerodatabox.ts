@@ -404,12 +404,17 @@ export interface RouteRecord {
  */
 export async function airportRoutes(
   iata: string,
+  dateLocal?: string,
 ): Promise<{ routes: RouteRecord[] | null; status: number; raw: unknown }> {
-  const res = await adaFetch(
-    `${ADA_BASE}/airports/iata/${encodeURIComponent(iata)}/stats/routes/daily`,
-    { headers: headers() },
-    15000,
-  );
+  // The dated variant reports the seven days BEFORE the date given, which is
+  // how a year of seasonality can be backfilled in one pass instead of waiting
+  // a year to accumulate it. How far back it will go depends on the plan, so
+  // callers must treat a 4xx here as "not available on this plan" rather than
+  // as an answer about the airport.
+  const path = dateLocal
+    ? `/airports/iata/${encodeURIComponent(iata)}/stats/routes/daily/${encodeURIComponent(dateLocal)}`
+    : `/airports/iata/${encodeURIComponent(iata)}/stats/routes/daily`;
+  const res = await adaFetch(`${ADA_BASE}${path}`, { headers: headers() }, 15000);
   if (res.status === 204) return { routes: [], status: 204, raw: null };
   if (!res.ok) return { routes: null, status: res.status, raw: await res.text().catch(() => null) };
 

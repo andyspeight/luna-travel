@@ -77,7 +77,11 @@ function AccessPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErrorMsg(prettyError(data.error));
+        // The server's own wording wins when it has some: booking_not_found
+        // names the reference, the email and the date it actually searched
+        // for, which is what makes it fixable at the desk. A generic
+        // "could not create the link" would send the agent round in circles.
+        setErrorMsg(typeof data.message === 'string' && data.message ? data.message : prettyError(data.error));
         setStatus('error');
         return;
       }
@@ -318,6 +322,7 @@ function prettyError(code?: string): string {
     case 'invalid_departure_date': return 'Departure date must be a valid date.';
     case 'agency_inactive': return 'This agency is no longer active — contact Luna Travel.';
     case 'unauthorised': return 'Your session has ended — ask for a fresh access link.';
+    case 'booking_not_found': return "We couldn't find that booking in this agency's account.";
     default: return 'Could not create the link. Please try again.';
   }
 }

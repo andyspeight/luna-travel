@@ -44,11 +44,31 @@ the cookie; the grant rides along the same path, so the security decision stays
 with the system that owns it. Adding the secret here would spread a high-value
 credential for no benefit.
 
-**It fails closed to yourself.** No header, an expired or tampered grant, a
-non-staff caller, an unreachable Control — every one of them runs the request as
-whoever the ordinary session says it is. The failure mode is "you are you",
-never "you are silently them". That is what makes it safe to deploy before
-anything else is finished.
+**It never silently becomes you.** There are two different failures and they
+are deliberately not treated alike:
+
+| | |
+|---|---|
+| **No grant** | Nobody is acting. Run as the ordinary session. |
+| **A grant we refused** | Somebody *believes* they are acting. Fail the request. |
+
+An expired or tampered grant, a non-staff caller, an unreachable Control — all
+of those are the second row, and they 401. The portal clears the dead grant,
+reloads, and says *"Your acting session ended."*
+
+This was learned the hard way. The original build treated both rows as "you are
+you". A grant expired (30 minutes, and nothing said so), the portal fell back to
+the staff member's own agency while still looking like it was acting, and an
+invite for a client's booking was written into Travelgenix instead. Nothing
+errored. It surfaced days later, in front of the client, as *"we couldn't find a
+booking with those details"* — wording that blames the traveller for something
+only we could fix.
+
+Falling back is safe for a read: you see your own data and nothing leaks. It is
+not safe for a write, because the write lands somewhere real and looks like it
+worked. `src/lib/__tests__/act-as.test.ts` pins this down, including the exact
+incident: a valid own-agency cookie plus a refused grant must yield null, not
+the cookie's agency.
 
 A staff member acting as an agency needs **no** agency session of their own, so
 the picker also appears on the signed-out card. Minting them a real
@@ -62,6 +82,19 @@ Nothing when nobody is acting. With no header `resolveActAs` returns before it
 touches the network, which matters because it sits in front of every agency API
 call. While acting, each call adds one round trip to Control, the same one the
 admin session already makes.
+
+## Invites are checked before they are sent
+
+Separately, and for the same reason: `POST /api/agency/invites` now validates
+the booking reference, email and departure date against **that agency's own**
+Travelify account before the invite is created, and refuses a definite
+not-found with a message naming all three.
+
+It is cause-agnostic, which is the point — it catches a stale act-as grant, a
+mistyped reference, a wrong date and an email Travelify does not hold, all at
+the desk rather than on the traveller's phone. A Travelify outage (anything that
+is not a definite 404) lets the invite through: the booking desk should not stop
+because a supplier is having a bad minute, and redemption checks again anyway.
 
 ## If it does not appear
 

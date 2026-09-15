@@ -13,6 +13,8 @@
 
 const CONTROL = 'https://id.travelify.io';
 const KEY = 'luna-travel.act-as';
+/** One-shot flag so the portal can say why the tab stopped acting. */
+const NOTICE_KEY = 'luna-travel.act-as-ended';
 
 export interface ActAsGrant {
   grant: string;
@@ -28,22 +30,45 @@ export interface StaffClient {
 }
 
 /** Every storage read is wrapped: private mode and blocked site data both throw. */
-export function readGrant(): ActAsGrant | null {
+function storedGrant(): ActAsGrant | null {
   try {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
     const g = JSON.parse(raw) as ActAsGrant;
     if (!g?.grant || !g.agencyId) return null;
-    // Expired locally — drop it rather than sending a grant the server will
-    // refuse, which would silently drop the tab back to "you" mid-session.
-    if (typeof g.expiresAt === 'number' && Date.now() > g.expiresAt) {
-      clearGrant();
-      return null;
-    }
     return g;
   } catch {
     return null;
   }
+}
+
+/**
+ * The grant, if this tab is acting and the grant still looks live. Used by the
+ * UI to decide what to show.
+ */
+export function readGrant(): ActAsGrant | null {
+  const g = storedGrant();
+  if (!g) return null;
+  if (typeof g.expiresAt === 'number' && Date.now() > g.expiresAt) return null;
+  return g;
+}
+
+/**
+ * The grant to put on a request — INCLUDING one that has locally expired.
+ *
+ * This looks wrong and is the most important line in the file. The previous
+ * version deleted an expired grant and sent nothing, so the server saw an
+ * ordinary request and answered as the staff member's own agency. A portal that
+ * still looked like it was acting then wrote an invite for a client's booking
+ * into Travelgenix, and the client was told to check their own details.
+ *
+ * Sending the stale grant makes the server refuse (see act-as.ts: a header that
+ * does not resolve fails the request), which we recover from visibly below.
+ * An error the staff member can see beats a write that silently lands in the
+ * wrong agency. The clock here is only ever a hint; the server decides.
+ */
+function grantForRequest(): string | null {
+  return storedGrant()?.grant ?? null;
 }
 
 export function clearGrant(): void {
@@ -107,6 +132,41 @@ export async function startActingAs(client: StaffClient): Promise<ActAsGrant | n
 }
 
 /**
+ * Recover from a grant the server would not accept.
+ *
+ * Clears it, leaves a note for the portal to explain itself, and reloads once
+ * so every piece of UI re-reads its state from the server. After the reload the
+ * banner is gone and the picker is back, which is the honest position: you are
+ * yourself again and you can choose to start acting afresh.
+ *
+ * The guard matters — a page makes several agency calls at once, and each would
+ * otherwise trigger its own reload.
+ */
+let recovering = false;
+function grantRejected(): void {
+  if (recovering) return;
+  recovering = true;
+  clearGrant();
+  try {
+    sessionStorage.setItem(NOTICE_KEY, '1');
+  } catch {
+    /* the reload still puts the UI right; only the explanation is lost */
+  }
+  window.location.reload();
+}
+
+/** Read and clear the "your acting session ended" note. */
+export function takeActAsEndedNotice(): boolean {
+  try {
+    if (sessionStorage.getItem(NOTICE_KEY) !== '1') return false;
+    sessionStorage.removeItem(NOTICE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Teach this tab's fetch to carry the grant on Luna's own agency calls.
  *
  * A wrapper rather than editing every call site: the portal makes these calls
@@ -125,8 +185,8 @@ export function installActAsFetch(): () => void {
   const original = window.fetch;
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const g = readGrant();
-    if (!g) return original(input, init);
+    const grant = grantForRequest();
+    if (!grant) return original(input, init);
 
     let path = '';
     try {
@@ -142,8 +202,14 @@ export function installActAsFetch(): () => void {
     if (!path.startsWith('/api/agency/')) return original(input, init);
 
     const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
-    headers.set('X-TG-Act-As', g.grant);
-    return original(input, { ...init, headers });
+    headers.set('X-TG-Act-As', grant);
+
+    const res = await original(input, { ...init, headers });
+    // We presented a grant and were refused. The tab is no longer acting,
+    // whatever it currently looks like, so stop pretending immediately rather
+    // than letting the next click write somewhere unintended.
+    if (res.status === 401) grantRejected();
+    return res;
   };
 
   return () => {

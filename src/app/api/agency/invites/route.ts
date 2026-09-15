@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
+import { validateAgencyBooking } from '@/lib/control-order';
 import { logAuditEvent } from '@/lib/audit';
 import { actingAsMeta } from '@/lib/act-as';
 import { getPlatformSettings } from '@/lib/platform-settings';
@@ -99,7 +100,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const bookingRef = body.bookingRef?.trim() || null;
+  // Upper case, because that is what redemption sends to Travelify
+  // (validateOrderRef upper-cases the typed ref). Storing it any other way
+  // means the reference we prefill for the traveller is not the reference we
+  // will look up — which is how an invite came to be stored as "ytg58405".
+  const bookingRef = body.bookingRef?.trim().toUpperCase() || null;
   const email = body.email?.trim()?.toLowerCase() || null;
   const departureDate = body.departureDate?.trim() || null;
 
@@ -108,6 +113,62 @@ export async function POST(req: NextRequest) {
   }
   if (departureDate && !isDateLike(departureDate)) {
     return NextResponse.json({ error: 'invalid_departure_date' }, { status: 400 });
+  }
+
+  // Prove the booking is reachable from THIS agency before sending anything to
+  // a traveller.
+  //
+  // Redemption checks exactly this trio against the agency's own Travelify
+  // account. Until now nothing checked it at creation, so an invite that could
+  // never be redeemed looked fine to the agent, went out by email, and failed
+  // days later in front of the client as "we couldn't find a booking with those
+  // details" — wording that blames the traveller for something they cannot fix.
+  // That is the worst possible place to discover it.
+  //
+  // It catches every cause at once rather than any one of them: the wrong
+  // agency (an act-as grant that had quietly expired), a mistyped reference, a
+  // departure date that does not match the order, an email that is not the one
+  // Travelify holds.
+  //
+  // Only when all three are present: a blank invite the traveller completes
+  // themselves is a legitimate flow and there is nothing yet to check.
+  if (bookingRef && email && departureDate) {
+    const check = await validateAgencyBooking({
+      agencyId: claims.agencyId,
+      bookingRef,
+      email,
+      departureDate,
+    });
+
+    // Refuse ONLY on a definite no. If Travelify could not be reached we let
+    // the invite through rather than close the booking desk over an outage —
+    // it may well be correct, and redemption will check again anyway.
+    if (!check.ok && check.reason === 'not_found') {
+      const agencyLabel = claims.agencyName || 'this agency';
+      console.warn('[agency/invites] refused unredeemable invite', {
+        agencyId: claims.agencyId,
+        bookingRef,
+        actingAs: !!claims.actingAs,
+      });
+      return NextResponse.json(
+        {
+          error: 'booking_not_found',
+          message:
+            `We couldn't find booking ${bookingRef} in ${agencyLabel}'s account ` +
+            `for ${email} departing ${departureDate}. Check the reference, the ` +
+            `email on the booking and the departure date — and if you are acting ` +
+            `for another agency, check the banner still shows their name.`,
+        },
+        { status: 422 },
+      );
+    }
+    if (!check.ok) {
+      console.warn('[agency/invites] could not verify booking, allowing anyway', {
+        agencyId: claims.agencyId,
+        bookingRef,
+        reason: check.reason,
+      });
+    }
   }
 
   const expiryDays = (await getPlatformSettings()).inviteExpiryDays;

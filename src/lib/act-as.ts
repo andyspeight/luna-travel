@@ -21,10 +21,23 @@
  * requireAuth and hands back the client it resolved to, which means the
  * security decision lives with the system that owns it.
  *
- * FAILS CLOSED TO YOURSELF. No header, an expired or tampered grant, a
- * non-staff caller, an unreachable Control: every one of them returns null and
- * the request runs as whoever the ordinary session says it is. The failure mode
- * is "you are you", never "you are silently them".
+ * TWO DIFFERENT FAILURES, AND THEY ARE NOT THE SAME.
+ *
+ * "No header" means nobody is acting: run as the ordinary session. That is the
+ * safe fallback and it is what almost every request does.
+ *
+ * "Header present but it did not resolve" means somebody BELIEVES they are
+ * acting and they are not — an expired grant, a tampered one, an unreachable
+ * Control. Running that as the ordinary session is NOT safe, and treating the
+ * two alike caused a real incident: a grant quietly expired (they are capped at
+ * 30 minutes), the portal fell back to the staff member's own agency, and an
+ * invite for a client's booking was filed under Travelgenix instead. Nothing
+ * errored. It surfaced days later as the client being told to check their own
+ * details for a booking that was never reachable from that agency.
+ *
+ * So the outcomes are distinct, and 'invalid' fails the REQUEST rather than
+ * falling back. For a read that is a harmless 401 the portal recovers from; for
+ * a write it is the difference between an error and silent corruption.
  */
 
 const ME_URL = 'https://id.travelify.io/api/auth/me';
@@ -45,6 +58,21 @@ export function readActAsHeader(req: Request): string {
 }
 
 /**
+ * What the act-as header on this request amounted to.
+ *
+ * 'none'    nobody is acting — run as the ordinary session
+ * 'acting'  resolved; this is the agency for the request
+ * 'invalid' a grant was presented and refused — fail the request
+ */
+export type ActAsOutcome =
+  | { kind: 'none' }
+  | { kind: 'acting'; actingAs: ActingAs }
+  | { kind: 'invalid' };
+
+const NONE: ActAsOutcome = { kind: 'none' };
+const INVALID: ActAsOutcome = { kind: 'invalid' };
+
+/**
  * Resolve the act-as overlay for a request, or null to run as the ordinary
  * session.
  *
@@ -52,12 +80,15 @@ export function readActAsHeader(req: Request): string {
  * without touching the network, which matters because it sits in front of every
  * agency API call.
  */
-export async function resolveActAs(req: Request): Promise<ActingAs | null> {
+export async function resolveActAs(req: Request): Promise<ActAsOutcome> {
   const grant = readActAsHeader(req);
-  if (!grant) return null;
+  if (!grant) return NONE;
 
+  // From here on the caller has asserted they are acting as someone. Every exit
+  // below is INVALID, never NONE: if we cannot honour the assertion we refuse
+  // the request rather than quietly serving them their own agency.
   const cookie = req.headers.get('cookie');
-  if (!cookie) return null;
+  if (!cookie) return INVALID;
 
   // Bounded, for the same reason verifyAdminSession is: this runs on a request
   // path, and a stalled Control must not hold the whole function open.
@@ -72,12 +103,12 @@ export async function resolveActAs(req: Request): Promise<ActingAs | null> {
       signal: ctrl.signal,
     });
   } catch {
-    return null;
+    return INVALID;
   } finally {
     clearTimeout(timeout);
   }
 
-  if (!res.ok) return null;
+  if (!res.ok) return INVALID;
 
   let data: {
     ok?: boolean;
@@ -88,24 +119,28 @@ export async function resolveActAs(req: Request): Promise<ActingAs | null> {
   try {
     data = await res.json();
   } catch {
-    return null;
+    return INVALID;
   }
 
-  if (!data || data.ok !== true) return null;
+  if (!data || data.ok !== true) return INVALID;
 
-  // Staff only. Control already refuses to apply the overlay for anyone else,
-  // so a non-staff caller gets their own client back — which is not
-  // impersonation and must not be labelled or audited as if it were.
-  if (data.isStaff !== true) return null;
+  // Staff only. Control refuses to apply the overlay for anyone else and hands
+  // back their own client instead — which is not impersonation and must not be
+  // labelled or audited as if it were. Refusing rather than accepting that
+  // answer keeps "acting" meaning exactly one thing.
+  if (data.isStaff !== true) return INVALID;
 
   const agencyId = (data.client?.recordId || '').trim();
   const staffEmail = (data.user?.email || '').trim();
-  if (!agencyId || !staffEmail) return null;
+  if (!agencyId || !staffEmail) return INVALID;
 
   return {
-    agencyId,
-    agencyName: (data.client?.clientName || data.client?.name || '').trim() || 'this agency',
-    staffEmail,
+    kind: 'acting',
+    actingAs: {
+      agencyId,
+      agencyName: (data.client?.clientName || data.client?.name || '').trim() || 'this agency',
+      staffEmail,
+    },
   };
 }
 

@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react';
 import { Users, X, Search, ShieldAlert } from 'lucide-react';
 import {
-  fetchStaffClients, startActingAs, clearGrant, readGrant,
+  fetchStaffClients, startActingAs, clearGrant, readGrant, takeActAsEndedNotice,
   type StaffClient,
 } from '@/lib/act-as-client';
 import { P } from './portal-chrome';
@@ -65,6 +65,57 @@ export function ActAsBanner({ agencyName, staffEmail }: { agencyName: string; st
           }}
         >
           <X size={13} /> Stop
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Says why the tab stopped acting.
+ *
+ * Grants are capped at 30 minutes, and before this existed the expiry was
+ * completely silent: the portal simply became you again, and the next thing you
+ * saved went into your own agency. Whatever else changes, a staff member must
+ * never have to work out for themselves which agency they are in.
+ */
+export function ActAsEndedNotice() {
+  const [show, setShow] = useState(false);
+
+  // In an effect, not during render: it reads (and clears) sessionStorage, and
+  // the server render has no such thing.
+  useEffect(() => { setShow(takeActAsEndedNotice()); }, []);
+
+  if (!show) return null;
+
+  return (
+    <div
+      role="alert"
+      style={{ background: AMBER_BG, borderBottom: `1px solid ${AMBER_LINE}`, color: AMBER }}
+    >
+      <div
+        style={{
+          maxWidth: 760, margin: '0 auto', padding: '10px 16px',
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}
+      >
+        <ShieldAlert size={16} style={{ flexShrink: 0 }} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>Your acting session ended</span>
+        <span style={{ fontSize: 12.5, opacity: 0.85, minWidth: 0 }}>
+          You are yourself again. Choose the agency again before you send anything on their behalf.
+        </span>
+        <div style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={() => setShow(false)}
+          aria-label="Dismiss"
+          style={{
+            border: `1px solid ${AMBER_LINE}`, background: '#fff', color: AMBER,
+            fontSize: 12.5, fontWeight: 700, padding: '6px 11px',
+            borderRadius: 9, cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
+        >
+          Got it
         </button>
       </div>
     </div>

@@ -104,6 +104,21 @@ export interface ValidatedBooking {
 }
 
 /**
+ * Why a validation failed.
+ *
+ * The distinction is not cosmetic. 'not_found' is Travelify answering
+ * definitively that this agency's account holds no such booking — safe to
+ * refuse on. 'unavailable' means we could not get an answer at all, and
+ * refusing on that would take the booking desk offline every time Travelify has
+ * a bad minute. Callers that block MUST block only on 'not_found'.
+ */
+export type ValidationFailure = 'not_found' | 'unavailable';
+
+export type ValidateResult =
+  | { ok: true; booking: ValidatedBooking }
+  | { ok: false; reason: ValidationFailure };
+
+/**
  * Validate that a booking exists for an agency (used by invite redemption and
  * anywhere we need to confirm a booking + pull a teaser). Prefers the per-agency
  * Control path; falls back to the demo integration only when the internal path
@@ -114,7 +129,7 @@ export async function validateAgencyBooking(input: {
   bookingRef: string;
   email: string;
   departureDate: string;
-}): Promise<{ ok: true; booking: ValidatedBooking } | { ok: false }> {
+}): Promise<ValidateResult> {
   if (controlInternalConfigured()) {
     const r = await retrieveOrderByClient({
       recordId: input.agencyId,
@@ -128,7 +143,9 @@ export async function validateAgencyBooking(input: {
         bookingRef: input.bookingRef,
         status: r.status,
       });
-      return { ok: false };
+      // 404 is Travelify saying no. Anything else — 502, a timeout, the
+      // internal key missing — is us failing to ask.
+      return { ok: false, reason: r.status === 404 ? 'not_found' : 'unavailable' };
     }
     const mapped = orderToBooking(r.order, r.agency ?? null, input.bookingRef);
     if (!mapped) {
@@ -136,7 +153,10 @@ export async function validateAgencyBooking(input: {
         agencyId: input.agencyId,
         bookingRef: input.bookingRef,
       });
-      return { ok: false };
+      // The order exists but yields no usable booking. Redemption runs this
+      // exact path, so it would fail identically — treat it as not found rather
+      // than let an invite be sent for something that cannot be opened.
+      return { ok: false, reason: 'not_found' };
     }
     const lead = mapped.travellers.find((t) => t.isLead) ?? mapped.travellers[0];
     return {
@@ -160,7 +180,7 @@ export async function validateAgencyBooking(input: {
   });
   if (!lookup.ok) {
     console.warn('[validate-booking] legacy demo lookup found nothing', { bookingRef: input.bookingRef });
-    return { ok: false };
+    return { ok: false, reason: 'not_found' };
   }
   const b = lookup.booking;
   return {

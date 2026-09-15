@@ -122,19 +122,33 @@ export async function requireAgency(req: Request): Promise<AgencyClaims | null> 
   // cookie of their own still gets the agency they chose. It costs nothing
   // when nobody is acting — no header means no network call.
   //
+  // Three outcomes, and the difference between the last two is the whole point:
+  // nobody acting falls back to the cookie, a resolved grant becomes the
+  // agency, and a REFUSED grant fails the request outright.
+  //
   // A staff member acting as an agency needs no agency session at all, which
   // is the whole point: they were never issued one, and minting them a real
   // lt_agency_session would be indistinguishable from the agency signing in.
   const acting = await resolveActAs(req);
-  if (acting) {
+
+  // A grant was presented and refused. Do NOT fall through to the cookie: that
+  // would run the request as the staff member's own agency while they believe
+  // they are acting as a client, which is how an invite for a client's booking
+  // came to be filed under Travelgenix and told the client to check their own
+  // details. Null here means 401 at every caller, which the portal recovers
+  // from by clearing the dead grant — an error they can see and fix, rather
+  // than a write that lands in the wrong place and looks like it worked.
+  if (acting.kind === 'invalid') return null;
+
+  if (acting.kind === 'acting') {
     return {
       kind: 'agency',
-      agencyId: acting.agencyId,
+      agencyId: acting.actingAs.agencyId,
       // The REAL person, so anything written while acting is attributable.
-      email: acting.staffEmail,
+      email: acting.actingAs.staffEmail,
       source: 'control',
-      agencyName: acting.agencyName,
-      actingAs: acting,
+      agencyName: acting.actingAs.agencyName,
+      actingAs: acting.actingAs,
     };
   }
 

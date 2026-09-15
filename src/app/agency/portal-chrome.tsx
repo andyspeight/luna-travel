@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane, Star, BookOpen, Settings } from 'lucide-react';
 import { installActAsFetch } from '@/lib/act-as-client';
-import { ActAsBanner, ActAsPicker } from './act-as';
+import { ActAsBanner, ActAsEndedNotice, ActAsPicker } from './act-as';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -293,6 +293,7 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
       {me.actingAs && (
         <ActAsBanner agencyName={me.actingAs.agencyName} staffEmail={me.actingAs.staffEmail} />
       )}
+      <ActAsEndedNotice />
 
       {/* Nav */}
       <nav style={{ background: '#fff', borderBottom: `1px solid ${P.line}`, position: 'sticky', top: 0, zIndex: 10 }}>

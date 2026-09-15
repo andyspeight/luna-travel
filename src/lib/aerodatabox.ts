@@ -404,14 +404,14 @@ export interface RouteRecord {
  */
 export async function airportRoutes(
   iata: string,
-): Promise<{ routes: RouteRecord[]; status: number } | { routes: null; status: number }> {
+): Promise<{ routes: RouteRecord[] | null; status: number; raw: unknown }> {
   const res = await adaFetch(
     `${ADA_BASE}/airports/iata/${encodeURIComponent(iata)}/stats/routes/daily`,
     { headers: headers() },
     15000,
   );
-  if (res.status === 204) return { routes: [], status: 204 };
-  if (!res.ok) return { routes: null, status: res.status };
+  if (res.status === 204) return { routes: [], status: 204, raw: null };
+  if (!res.ok) return { routes: null, status: res.status, raw: await res.text().catch(() => null) };
 
   const d = (await res.json().catch(() => null)) as { routes?: unknown[] } | null;
   const rows = Array.isArray(d?.routes) ? d!.routes! : [];
@@ -434,7 +434,7 @@ export async function airportRoutes(
       })),
     };
   });
-  return { routes, status: res.status };
+  return { routes, status: res.status, raw: d };
 }
 
 /**
@@ -453,6 +453,35 @@ export function operatedBy(route: RouteRecord, carrier: string): boolean {
     if (name && (name.includes(q) || q.includes(name))) return true;
     return [o.iata, o.icao].some((c) => !!c && c.toLowerCase() === q);
   });
+}
+
+/**
+ * Every distinct airline across a set of routes, with the codes it appears
+ * under and how many routes it flies.
+ *
+ * This is the diagnostic that decides whether a route lookup is usable at all.
+ * If the same brand shows up as several entries — Wizz Air and Wizz Air Malta,
+ * Ryanair and Buzz — then no matcher keyed on a single code can work, and that
+ * has to be designed for rather than discovered in production.
+ */
+export function operatorInventory(
+  routes: RouteRecord[],
+): { name: string; codes: string[]; routes: number }[] {
+  const seen = new Map<string, { name: string; codes: Set<string>; routes: number }>();
+  for (const r of routes) {
+    for (const o of r.operators) {
+      const key = (o.name || o.iata || o.icao || '').toLowerCase();
+      if (!key) continue;
+      const row = seen.get(key) || { name: o.name || key, codes: new Set<string>(), routes: 0 };
+      if (o.iata) row.codes.add(o.iata);
+      if (o.icao) row.codes.add(o.icao);
+      row.routes += 1;
+      seen.set(key, row);
+    }
+  }
+  return [...seen.values()]
+    .map((v) => ({ name: v.name, codes: [...v.codes], routes: v.routes }))
+    .sort((a, b) => b.routes - a.routes);
 }
 
 /** The route from an already-fetched list, or null if it did not fly this week. */

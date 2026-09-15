@@ -98,13 +98,17 @@ export function CoverSplash() {
             'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 100%)',
         }}
       />
-      {/* Middle/bottom vignette for the headline & countdown */}
+      {/* Middle/bottom scrim for the headline & countdown.
+          Deliberately heavier than it looks like it needs to be. The old ramp
+          reached only ~0.35 where the headline sits, which is fine over a dim
+          sea and unreadable over bright sky, pale sand or a theme-park photo.
+          White-on-photo has to hold at the worst case, not the average one. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-[60%] pointer-events-none"
+        className="absolute inset-x-0 bottom-0 h-[72%] pointer-events-none"
         style={{
           background:
-            'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.6) 100%)',
+            'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.10) 22%, rgba(0,0,0,0.38) 48%, rgba(0,0,0,0.62) 72%, rgba(0,0,0,0.78) 100%)',
         }}
       />
 
@@ -145,8 +149,11 @@ export function CoverSplash() {
       </header>
 
       {/* ── Body: headline + countdown ── */}
-      <div className="relative z-10 flex-1 flex flex-col justify-end items-center px-6 pb-44 text-center">
-        <div className="mb-6 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-white/80">
+      <div
+        className="relative z-10 flex-1 flex flex-col justify-end items-center px-6 pb-44 text-center"
+        style={{ textShadow: '0 1px 12px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.4)' }}
+      >
+        <div className="mb-6 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-white">
           <IconPin size={12} />
           {booking.destinationLabel}
         </div>
@@ -154,7 +161,7 @@ export function CoverSplash() {
         <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight max-w-[300px]">
           {headline}
         </h1>
-        <p className="mt-1.5 text-base text-white/85">{lead.firstName}</p>
+        <p className="mt-1.5 text-base text-white/95">{lead.firstName}</p>
 
         {/* Countdown clock — only while the trip is still ahead. During or
             after the trip a ticking zero clock reads as broken, so show a
@@ -163,14 +170,14 @@ export function CoverSplash() {
           <div className="mt-9">
             <div className="font-light text-[44px] leading-none tracking-tight tabular flex items-baseline justify-center gap-1">
               <span className="min-w-[58px] text-center">{String(parts.days).padStart(2, '0')}</span>
-              <span className="text-white/55 px-0.5">:</span>
+              <span className="text-white/70 px-0.5">:</span>
               <span className="min-w-[58px] text-center">{String(parts.hours).padStart(2, '0')}</span>
-              <span className="text-white/55 px-0.5">:</span>
+              <span className="text-white/70 px-0.5">:</span>
               <span className="min-w-[58px] text-center">{String(parts.minutes).padStart(2, '0')}</span>
-              <span className="text-white/55 px-0.5">:</span>
+              <span className="text-white/70 px-0.5">:</span>
               <span className="min-w-[58px] text-center">{String(parts.seconds).padStart(2, '0')}</span>
             </div>
-            <div className="mt-2.5 grid grid-cols-4 gap-1 max-w-[280px] mx-auto text-[10px] uppercase tracking-[0.18em] text-white/65">
+            <div className="mt-2.5 grid grid-cols-4 gap-1 max-w-[280px] mx-auto text-[10px] uppercase tracking-[0.18em] text-white/80">
               <span className="text-center">Days</span>
               <span className="text-center">Hours</span>
               <span className="text-center">Mins</span>
@@ -178,7 +185,7 @@ export function CoverSplash() {
             </div>
           </div>
         ) : (
-          <p className="mt-9 text-[15px] text-white/80">
+          <p className="mt-9 text-[15px] text-white/90">
             {Date.now() > new Date(booking.tripEnd).getTime()
               ? 'We hope it was unforgettable.'
               : 'Enjoy every moment.'}

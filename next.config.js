@@ -40,8 +40,23 @@ const withPWA = withPWAInit({
         handler: 'NetworkFirst',
         options: { cacheName: 'static-data-assets' },
       },
+      {
+        // The PDF.js worker. Cached on first use rather than precached: it is
+        // over a megabyte, and a traveller who never opens a document should
+        // not pay for it at install. Once it is cached, document previews keep
+        // working with no network at all — which is the point of serving it
+        // ourselves instead of from a CDN.
+        urlPattern: /\/pdf\.worker\.min\.js$/i,
+        handler: 'StaleWhileRevalidate',
+        options: {
+          cacheName: 'pdf-worker',
+          expiration: { maxEntries: 2, maxAgeSeconds: 30 * 24 * 60 * 60 },
+        },
+      },
     ],
   },
+  // Kept out of the precache manifest; the runtimeCaching rule above owns it.
+  publicExcludes: ['!noprecache/**/*', '!pdf.worker.min.js'],
 });
 
 const nextConfig = {
@@ -57,6 +72,14 @@ const nextConfig = {
         headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }],
       },
     ];
+  },
+  webpack(config) {
+    // PDF.js ships one bundle for browsers and Node, and its Node half requires
+    // 'canvas'. That branch is unreachable in a browser, but webpack still has
+    // to resolve it, so the build fails on a package we neither have nor want.
+    // Aliasing it to false is the resolution PDF.js documents for bundlers.
+    config.resolve.alias = { ...(config.resolve.alias || {}), canvas: false };
+    return config;
   },
 };
 

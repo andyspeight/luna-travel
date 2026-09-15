@@ -34,3 +34,7 @@ next-env.d.ts
 
 # python build scripts
 scripts/__pycache__/
+
+# PDF.js worker (copied from node_modules by `npm run pdf:worker`, which
+# prebuild/predev run automatically — vendored so it can never drift)
+/public/pdf.worker.min.js

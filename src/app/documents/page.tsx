@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { IMAGE_EXTS, extOf } from '@/lib/document-type';
 import { PageEnter } from '@/components/page-enter';
 import { ActionButton } from '@/components/action-button';
 import {
@@ -43,8 +44,31 @@ type DisplayDoc = {
   icon: React.ReactNode;
   sizeBytes?: number;
   updatedAt?: string;
+  /** Where "Open full screen" navigates. May be another origin — that is fine. */
   url: string;
+  /** Where the in-app preview and Download read the bytes. Always same-origin. */
+  previewUrl: string;
+  /** Lowercase extension: picks the viewer, labels the sheet, names the download. */
+  ext: string;
 };
+
+/**
+ * The bytes for a document, served from our own origin.
+ *
+ * NOT doc.url. That is a Travelify or Supabase URL on somebody else's origin,
+ * and a preview has to FETCH the bytes rather than navigate to them: a
+ * cross-origin response carrying no Access-Control-Allow-Origin is blocked
+ * before the first byte arrives. That is why every supplier-issued document
+ * failed to preview while opening the very same URL in a new tab worked
+ * perfectly — a new tab is a navigation, which CORS does not police.
+ *
+ * /api/traveller/document takes an id, never a URL, and resolves it against
+ * this traveller's own booking on the server.
+ */
+function proxyUrl(src: 'booking' | 'agency', id: string, download = false): string {
+  const q = `src=${src}&id=${encodeURIComponent(id)}`;
+  return `/api/traveller/document?${q}${download ? '&download=1' : ''}`;
+}
 
 type Style = { gradient: string; icon: React.ReactNode; pill: string };
 
@@ -143,6 +167,7 @@ function prettyName(filename: string): string {
 
 function agencyToDisplay(d: AgencyDoc): DisplayDoc {
   const m = categoryStyle(d.category);
+  const proxy = proxyUrl('agency', d.id);
   return {
     id: d.id,
     name: prettyName(d.filename),
@@ -151,12 +176,21 @@ function agencyToDisplay(d: AgencyDoc): DisplayDoc {
     icon: m.icon,
     sizeBytes: typeof d.sizeBytes === 'number' ? d.sizeBytes : undefined,
     updatedAt: d.uploadedAt || undefined,
-    url: d.url || '#',
+    // The signed URL is the nicer thing to open (it survives being pasted
+    // elsewhere for its lifetime); the proxy covers the case where signing
+    // failed, so the document is still reachable rather than dead.
+    url: d.url || proxy,
+    previewUrl: proxy,
+    ext: extOf(d.filename, d.mimeType),
   };
 }
 
 function bookingToDisplay(d: Document): DisplayDoc {
   const m = kindStyle(d.kind);
+  // Only a remote document needs proxying. The demo booking's documents are
+  // already same-origin paths, and routing those through an endpoint that
+  // resolves against Control would turn a working link into a 404.
+  const remote = /^https?:\/\//i.test(d.url || '');
   return {
     id: d.id,
     name: d.name,
@@ -166,6 +200,8 @@ function bookingToDisplay(d: Document): DisplayDoc {
     sizeBytes: d.sizeBytes,
     updatedAt: d.updatedAt || undefined,
     url: d.url || '#',
+    previewUrl: remote ? proxyUrl('booking', d.id) : d.url || '',
+    ext: extOf(d.name && /\.[a-z0-9]{1,5}$/i.test(d.name) ? d.name : d.url || ''),
   };
 }
 
@@ -314,7 +350,9 @@ export default function DocumentsPage() {
         )}
       </main>
 
-      {active && <DocSheet doc={active} onClose={() => setActive(null)} />}
+      {/* key: a fresh sheet per document, so no viewer can inherit the
+          previous document's load state. */}
+      {active && <DocSheet key={active.id} doc={active} onClose={() => setActive(null)} />}
     </PageEnter>
   );
 }
@@ -325,7 +363,8 @@ export default function DocumentsPage() {
  */
 function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
   const [shareToast, setShareToast] = useState<string | null>(null);
-  const canPreview = !!doc.url && doc.url !== '#';
+  const canPreview = !!doc.previewUrl && doc.previewUrl !== '#';
+  const isImage = IMAGE_EXTS.has(doc.ext);
 
   const showToast = (msg: string) => {
     setShareToast(msg);
@@ -341,15 +380,20 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
   };
 
   const downloadDoc = () => {
-    if (!doc.url || doc.url === '#') {
+    if (!canPreview) {
       showToast('Document not available in this build');
       return;
     }
-    // Trigger a real download using a temporary anchor element.
-    // The `download` attribute forces a save dialog rather than in-tab preview.
+    // Downloads go through our own origin, and not only for tidiness: the
+    // `download` attribute is IGNORED on a cross-origin href, so pointing this
+    // at the supplier's URL quietly opened the file in a tab instead of saving
+    // it. Same-origin, it saves — and &download=1 makes the response say
+    // "attachment" too, so no browser is left to guess.
     const a = document.createElement('a');
-    a.href = doc.url;
-    a.download = doc.name.replace(/[^\w\s.-]/g, '').trim().replace(/\s+/g, '-') + '.pdf';
+    a.href = doc.previewUrl.startsWith('/api/traveller/document')
+      ? `${doc.previewUrl}&download=1`
+      : doc.previewUrl;
+    a.download = `${doc.name.replace(/[^\w\s.-]/g, '').trim().replace(/\s+/g, '-')}.${doc.ext}`;
     a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
@@ -416,14 +460,20 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
               {doc.name}
             </h2>
             <div className="text-[11px] text-ink-3 mt-0.5">
-              PDF{typeof doc.sizeBytes === 'number' ? ` · ${fileSize(doc.sizeBytes)}` : ''}
+              {doc.ext.toUpperCase()}
+              {typeof doc.sizeBytes === 'number' ? ` · ${fileSize(doc.sizeBytes)}` : ''}
             </div>
           </div>
         </div>
 
-        {/* In-app PDF preview — rendered to canvas so it works on phones too */}
+        {/* In-app preview. PDFs render to canvas so they work on phones too;
+            an image document is just an image and must not be fed to PDF.js. */}
         {canPreview ? (
-          <PdfViewer url={doc.url} />
+          isImage ? (
+            <ImageViewer src={doc.previewUrl} fallbackSrc={doc.url} alt={doc.name} />
+          ) : (
+            <PdfViewer src={doc.previewUrl} fallbackSrc={doc.url} />
+          )
         ) : (
           <div className="mb-4 w-full rounded-xl border border-line bg-surface-2 aspect-[3/4] flex items-center justify-center text-ink-3">
             <div className="text-center px-6">
@@ -482,49 +532,103 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
  * strands the traveller in an external tab. To keep them inside the app we
  * render the PDF ourselves to <canvas> pages using PDF.js.
  *
- * PDF.js is loaded from a CDN on demand, so there's no npm dependency and the
- * library is only fetched the first time a document is opened. The PDF bytes
- * are fetched straight from the signed Supabase URL and processed entirely on
- * the device — nothing is sent to any third party. If anything fails (e.g. an
- * unexpected CORS block) we fall back to the Open / Download actions below.
+ * PDF.js is BUNDLED and loaded from our own origin, in its own chunk fetched
+ * the first time a document is opened.
+ *
+ * It used to be injected from cdnjs at runtime — the only third-party script in
+ * the whole app. That put the single most important screen in the product
+ * (someone at a check-in desk who needs their voucher) behind a CDN being
+ * reachable, which is precisely what an airport network, a captive portal, a
+ * corporate proxy or an offline PWA launch cannot promise. Bundled, the preview
+ * has the same availability as the page around it, and the service worker can
+ * cache it for genuinely offline use.
+ *
+ * The legacy build, paired with the legacy worker vendored by
+ * scripts/copy-pdf-worker.mjs: travellers arrive on whatever phone they own.
+ *
+ * Bytes are fetched from /api/traveller/document (same-origin, see proxyUrl)
+ * and rendered entirely on the device. Nothing is sent to any third party.
  * ---------------------------------------------------------------------- */
-const PDFJS_VERSION = '3.11.174';
-const PDFJS_LIB = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
-const PDFJS_WORKER = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
 
-let pdfjsPromise: Promise<any> | null = null;
-function loadPdfjs(): Promise<any> {
-  if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
-  const existing = (window as any).pdfjsLib;
-  if (existing) return Promise.resolve(existing);
-  if (pdfjsPromise) return pdfjsPromise;
-  pdfjsPromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = PDFJS_LIB;
-    s.async = true;
-    s.onload = () => {
-      const lib = (window as any).pdfjsLib;
-      if (!lib) {
-        reject(new Error('pdfjsLib unavailable'));
-        return;
-      }
-      try {
-        lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-      } catch {
-        /* worker is best-effort; PDF.js falls back to the main thread */
-      }
-      resolve(lib);
-    };
-    s.onerror = () => {
-      pdfjsPromise = null; // allow a retry next open
-      reject(new Error('failed to load PDF.js'));
-    };
-    document.head.appendChild(s);
-  });
+type PdfjsLib = typeof import('pdfjs-dist/legacy/build/pdf');
+
+let pdfjsPromise: Promise<PdfjsLib> | null = null;
+function loadPdfjs(): Promise<PdfjsLib> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('pdfjs-dist/legacy/build/pdf')
+      .then((lib) => {
+        // Same origin, so the service worker can cache it and no CDN is in the
+        // path. copy-pdf-worker.mjs puts it there before every build.
+        lib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        return lib;
+      })
+      .catch((e) => {
+        pdfjsPromise = null; // a failed chunk fetch must not poison every later open
+        throw e;
+      });
+  }
   return pdfjsPromise;
 }
 
-function PdfViewer({ url }: { url: string }) {
+/**
+ * Try the same-origin proxy first and the document's own URL second.
+ *
+ * The fallback matters on the demo path, where there is no traveller session
+ * for the proxy to authenticate, and it costs nothing when the proxy works.
+ */
+function byteSources(src: string, fallbackSrc?: string): string[] {
+  const list = [src, fallbackSrc].filter(
+    (u): u is string => !!u && u !== '#',
+  );
+  return list.filter((u, i) => list.indexOf(u) === i);
+}
+
+/**
+ * An image document — a JPEG park ticket, a scanned visa. Feeding one of these
+ * to PDF.js produced "Preview couldn't load here" and no clue why.
+ */
+function ImageViewer({ src, fallbackSrc, alt }: { src: string; fallbackSrc?: string; alt: string }) {
+  const sources = byteSources(src, fallbackSrc);
+  const [n, setN] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div
+      className="mb-4 relative rounded-xl border border-line bg-surface-2 overflow-hidden"
+      style={{ height: '52vh' }}
+    >
+      <div className="absolute inset-0 overflow-y-auto p-2">
+        {!failed && (
+          // next/image is not an option here: the source is a private,
+          // per-traveller file on an unknown host, which the optimiser can
+          // neither be configured for nor allowed to cache.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={sources[n]}
+            alt={alt}
+            className="w-full h-auto rounded-lg block"
+            onError={() => {
+              if (n + 1 < sources.length) setN(n + 1);
+              else setFailed(true);
+            }}
+          />
+        )}
+      </div>
+      {failed && (
+        <div className="absolute inset-0 flex items-center justify-center text-center px-6 bg-surface-2">
+          <div>
+            <div className="text-xs font-medium text-ink">Preview couldn&rsquo;t load here</div>
+            <div className="text-[10px] mt-1 text-ink-3">
+              Use Open full screen or Download below.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PdfViewer({ src, fallbackSrc }: { src: string; fallbackSrc?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -537,8 +641,20 @@ function PdfViewer({ url }: { url: string }) {
         const pdfjs = await loadPdfjs();
         if (cancelled) return;
 
-        const pdf = await pdfjs.getDocument({ url }).promise;
+        // First source that actually yields a document wins.
+        let pdf: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']> | null = null;
+        let lastErr: unknown = null;
+        for (const candidate of byteSources(src, fallbackSrc)) {
+          try {
+            pdf = await pdfjs.getDocument({ url: candidate }).promise;
+            break;
+          } catch (e) {
+            lastErr = e;
+          }
+          if (cancelled) return;
+        }
         if (cancelled) return;
+        if (!pdf) throw lastErr ?? new Error('no readable source');
 
         const container = scrollRef.current;
         if (!container) return;
@@ -585,7 +701,7 @@ function PdfViewer({ url }: { url: string }) {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [src, fallbackSrc]);
 
   return (
     <div

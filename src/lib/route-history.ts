@@ -137,6 +137,31 @@ export function latest(a: string | null | undefined, b: string): string {
   return a && a > b ? a : b;
 }
 
+/**
+ * The dates to ask about when backfilling a year of history.
+ *
+ * Each returned date asks the provider about the seven days BEFORE it, so one
+ * per month gives a sample of each month rather than a continuous record. That
+ * is enough for the question this exists to answer — "does this route run in
+ * February" — and it is a twelfth of the cost of a continuous sweep.
+ *
+ * The 15th is used rather than today's day-of-month so the windows cannot drift
+ * into the wrong month at a month end, and so a repeat run overwrites the same
+ * windows instead of creating new ones.
+ *
+ * Newest first, because the recent months matter most and a backfill that is
+ * interrupted half way should have done the useful half.
+ */
+export function backfillWindows(months: number, today: Date | string): string[] {
+  const now = typeof today === 'string' ? new Date(today + 'T00:00:00Z') : today;
+  const out: string[] = [];
+  for (let i = 1; i <= months; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 15));
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
 /** Does this airline match what the visitor said? Name first, then codes. */
 export function carrierMatches(
   row: { carrier_name?: string | null; carrier_iata?: string | null; carrier_icao?: string | null },
@@ -418,4 +443,49 @@ export async function airportStatus(iata?: string) {
   const { data, error } = await q;
   if (error) return { ok: false, error: error.message, airports: [] };
   return { ok: true, error: null, airports: data || [] };
+}
+
+
+/**
+ * What the route database actually holds. For the admin panel and for anyone
+ * asking "did the backfill do anything".
+ *
+ * Counts only. It deliberately reports nothing that could be read as a claim
+ * about a route NOT existing — the per-airport route_count is a sweep
+ * diagnostic, not a statement about the world.
+ */
+export async function routeStats(): Promise<{
+  pairs: number;
+  rows: number;
+  airports: number;
+  covered: number;
+  monthsCovered: number[];
+  earliest: string | null;
+  latest: string | null;
+}> {
+  const db = getSupabaseAdmin();
+  const { data: rows } = await db
+    .from(OBSERVATIONS)
+    .select('origin_iata,destination_iata,months_seen,first_seen_on,last_seen_on');
+  const { data: airports } = await db.from(AIRPORTS).select('iata,covered');
+
+  const pairs = new Set<string>();
+  const months = new Set<number>();
+  let earliest: string | null = null;
+  let latest: string | null = null;
+  for (const r of rows || []) {
+    pairs.add(`${r.origin_iata}-${r.destination_iata}`);
+    for (const m of normaliseMonths(r.months_seen)) months.add(m);
+    if (r.first_seen_on && (!earliest || r.first_seen_on < earliest)) earliest = r.first_seen_on;
+    if (r.last_seen_on && (!latest || r.last_seen_on > latest)) latest = r.last_seen_on;
+  }
+  return {
+    pairs: pairs.size,
+    rows: (rows || []).length,
+    airports: (airports || []).length,
+    covered: (airports || []).filter((a: { covered: boolean }) => a.covered).length,
+    monthsCovered: [...months].sort((a, b) => a - b),
+    earliest,
+    latest,
+  };
 }

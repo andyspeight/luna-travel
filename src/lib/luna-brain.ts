@@ -102,6 +102,9 @@ async function brainGet(
     // but stay fresh enough that newly-promoted Luna Brain content (the daily
     // crawl → review → promote loop) surfaces within minutes, not a day.
     next: { revalidate: 900 },
+    // Without a timeout a slow Airtable holds the destination route open until
+    // the platform kills it, turning a degraded upstream into a hung page.
+    signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -251,7 +254,21 @@ export async function getGuide(opts: {
   // The destination's own name is a strong match token for the Q&A search.
   const tokens = [...opts.tokens];
   if (destination?.name) tokens.push(destination.name);
-  const knowledge = await getKnowledge(tokens);
+
+  // FAULT ISOLATION, deliberately asymmetric. getKnowledge runs a
+  // filterByFormula scan (four fields × N tokens, maxRecords 60, sorted) which
+  // can plausibly exceed brainGet's AbortSignal.timeout(4000) under load. Before
+  // this catch, that abort propagated out of getGuide, the route turned it into
+  // a 502, and the ALREADY-FETCHED `destination` was thrown away with it —
+  // silently stripping the verified-fact layer (visa, FCDO status, emergency
+  // number, tap water, driving side) that guide-merge and the Visa & safety tab
+  // read straight off it. A slow Q&A scan must cost the Q&A and nothing else.
+  // getDestination keeps its hard throw: with no destination there is no
+  // verified layer to protect, and the route's 502 is the honest answer.
+  const knowledge = await getKnowledge(tokens).catch((err) => {
+    console.warn('[luna-brain] knowledge read failed, degrading to no Q&A:', err);
+    return [] as BrainAnswer[];
+  });
 
   const byCategory = groupByCategory(knowledge);
 

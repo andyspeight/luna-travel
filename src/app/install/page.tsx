@@ -253,16 +253,19 @@ function RedeemView({ inviteId }: { inviteId: string }) {
       void refreshLive();
       // Show the reveal.
       const data = await res.json().catch(() => ({}));
-      setTrip(
-        (data && data.trip) || {
-          destination: null,
-          departureDate: departureDate.trim() || null,
-          returnDate: null,
-          leadName: null,
-          countryCode: null,
-          locationSlug: null,
-        },
-      );
+      const teaser: Partial<Trip> = (data && data.trip) || {};
+      setTrip({
+        destination: teaser.destination ?? null,
+        departureDate: teaser.departureDate ?? (departureDate.trim() || null),
+        returnDate: teaser.returnDate ?? null,
+        leadName: teaser.leadName ?? null,
+        // The redeem response is the only thing that ever knows these — the
+        // gate form never learns them — and reading them field by field is what
+        // stops a teaser that carries a destination but no hero keys from
+        // opening on the gradient instead of the location's own photograph.
+        countryCode: teaser.countryCode ?? null,
+        locationSlug: teaser.locationSlug ?? null,
+      });
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {

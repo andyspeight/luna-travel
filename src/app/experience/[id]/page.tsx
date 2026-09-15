@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/booking-context';
 import { NavBar } from '@/components/nav-bar';
@@ -17,9 +17,23 @@ import {
   IconNavigate,
   IconPin,
 } from '@/components/icons';
+import { ParkPanel, NearbyParks } from '@/components/park-panel';
 import { findExperience, EXPERIENCE_LABELS } from '@/lib/booking-helpers';
 import { formatDate, formatTime } from '@/lib/format';
+import { usePlace } from '@/lib/use-place';
+import { matchTicketsToParks } from '@/lib/park-match';
 import type { ExperienceKind } from '@/types/booking';
+import type { ParkRecord } from '@/types/destination-content';
+
+// The park list is chain-wide, so without this an airport transfer or a car
+// hire in Orlando would carry a "theme parks in the area" block — and, worse,
+// a full park guide claimed as theirs. Both claims are gated on these kinds.
+// Only a genuine attraction booking earns a park guide. Travelify Extras — a dining
+// plan, resort car parking, a fast-track pass — all map to kind 'other', and they
+// carry the park's NAME, so including 'other' here handed "Walt Disney World Dining
+// Plan" a full park guide with Disney's height restrictions on it. attractionKind()
+// only ever returns 'excursion' or 'activity' for a real ticket.
+const TICKET_KINDS = new Set<ExperienceKind>(['excursion', 'activity']);
 
 export default function ExperienceDetailPage() {
   const params = useParams<{ id: string }>();
@@ -27,6 +41,30 @@ export default function ExperienceDetailPage() {
   const { booking } = useBooking();
   const [showMap, setShowMap] = useState(false);
   const exp = findExperience(booking, params.id);
+  const { place } = usePlace(booking);
+
+  // A ticket only gets a park guide when the matcher was confident about THIS
+  // experience; anything else stays in `nearby` and is never called theirs.
+  //
+  // The kind gate is load-bearing, not defensive. order-to-booking.ts builds
+  // transfer titles as `Transfer to ${dropoff}`, so a real Mears airport
+  // transfer becomes "Transfer to Universal Orlando Resort" carrying the
+  // PICKUP coordinates (the airport) — it matches Universal on name, and the
+  // coordinate veto cannot save us because the airport is inside the 40 km
+  // window. Same shape for "Disney Magical Express", "Universal Orlando Resort
+  // car park" and "Walt Disney World Dining Plan". A park guide asserts "this
+  // is your park" and prints height restrictions, so a transfer, a car hire, a
+  // lounge or a parking add-on must never be given one — exactly what
+  // park-match.ts's header says it exists to prevent.
+  const { park, nearby } = useMemo((): { park: ParkRecord | null; nearby: ParkRecord[] } => {
+    if (!exp || !TICKET_KINDS.has(exp.kind)) return { park: null, nearby: [] };
+    const { matched, nearby: rest } = matchTicketsToParks(
+      [{ id: exp.id, title: exp.title, lat: exp.lat, lng: exp.lng }],
+      place?.parks ?? [],
+    );
+    const mine = matched.filter((m) => m.experienceId === exp.id);
+    return { park: mine.length === 1 ? mine[0].park : null, nearby: rest };
+  }, [exp, place]);
 
   if (!exp) {
     return (
@@ -98,6 +136,16 @@ export default function ExperienceDetailPage() {
               )}
             </ul>
           </Panel>
+
+          {park && <ParkPanel park={park} href={`/park/${park.slug}`} image={hero} />}
+
+          {/* NearbyParks is handed the resolved place because "in the area" is a
+              spatial claim the chain-wide park join cannot support on its own —
+              it filters by real distance from place.coords and renders nothing
+              when it has no origin it can stand behind. */}
+          {!park && nearby.length > 0 && TICKET_KINDS.has(exp.kind) && (
+            <NearbyParks parks={nearby} place={place} />
+          )}
 
           {exp.notes && (
             <Panel title="Notes" icon={<IconInfo size={14} />}>

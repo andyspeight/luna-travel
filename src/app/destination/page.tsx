@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { useI18n } from '@/lib/locale-context';
 import { NavBar } from '@/components/nav-bar';
 import { PageEnter } from '@/components/page-enter';
 import {
@@ -11,9 +12,35 @@ import {
   IconWarning,
   IconShield,
   IconPin,
+  IconPlane,
 } from '@/components/icons';
+import {
+  ClimateStrip,
+  EventList,
+  OtherTimesEvents,
+  UndatedEvents,
+  FactGrid,
+  FactRows,
+  HighlightGrid,
+  PlaceCredit,
+  ProseStack,
+  type PlaceFactRow,
+} from '@/components/place-sections';
+import { ParkPanel } from '@/components/park-panel';
 import { destinationHero } from '@/lib/hero';
 import { getDestinationGuide } from '@/data/destinations';
+import { usePlace } from '@/lib/use-place';
+import { isEmptyGuide, resolveGuide, type ResolvedGuide } from '@/lib/guide-merge';
+import { splitEvents } from '@/lib/destination-dates';
+import { haversineKm, matchTicketsToParks } from '@/lib/park-match';
+import type {
+  ParkRecord,
+  PlaceFact,
+  PlaceSectionKey,
+  PlaceTier,
+  PlaceView,
+} from '@/types/destination-content';
+import type { ExperienceKind } from '@/types/booking';
 
 // ───────── Luna Brain shapes (mirror src/lib/luna-brain.ts) ─────────
 
@@ -86,20 +113,59 @@ interface CondSegment {
 }
 interface Conditions { configured: boolean; segments: CondSegment[] }
 
-const STATIC_TABS = ['Overview', 'Essentials', 'Visa & safety', 'Insider tips'] as const;
+interface TabDef { id: string; label: string }
+
+const TAB_OVERVIEW = 'Overview';
+const TAB_DATES = 'For your dates';
+const TAB_WHATS_ON = "What's on";
+const TAB_ESSENTIALS = 'Essentials';
+const TAB_PARK = 'Your park guide';
+const TAB_VISA = 'Visa & safety';
+const TAB_TIPS = 'Insider tips';
+
+// Kinds that can legitimately BE a theme park visit. Mirrors the gate on
+// src/app/experience/[id]/page.tsx — a transfer, car hire, lounge, parking or
+// fast-track add-on never gets a park guide, however park-shaped its title is.
+// Only a genuine attraction booking earns a park guide. Travelify Extras — a dining
+// plan, resort car parking, a fast-track pass — all map to kind 'other', and they
+// carry the park's NAME, so including 'other' here handed "Walt Disney World Dining
+// Plan" a full park guide with Disney's height restrictions on it. attractionKind()
+// only ever returns 'excursion' or 'activity' for a real ticket.
+const TICKET_KINDS = new Set<ExperienceKind>(['excursion', 'activity']);
 
 export default function DestinationGuidePage() {
   const { booking } = useBooking();
-  const guide = getDestinationGuide(booking.primaryCountryCode);
-  const hero = destinationHero(booking.primaryCountryCode);
+  const { t } = useI18n();
+  const { place, loading: placeLoading } = usePlace(booking);
   const [brain, setBrain] = useState<BrainGuide | null>(null);
+  const [brainLoading, setBrainLoading] = useState(true);
   const [conditions, setConditions] = useState<Conditions | null>(null);
-  const [tab, setTab] = useState<string>('Overview');
+  const [tab, setTab] = useState<string>(TAB_OVERVIEW);
+
+  // THE merge. Every guide.* dereference below reads from this object, so the
+  // precedence between place content, Luna Brain and the static guide lives in
+  // exactly one place instead of fifteen inline `brain?.x || guide.x` chains.
+  const guide = useMemo<ResolvedGuide>(
+    () =>
+      resolveGuide({
+        countryCode: booking.primaryCountryCode,
+        place,
+        brain: brain ? { destination: brain.destination ?? undefined } : null,
+        staticGuide: getDestinationGuide(booking.primaryCountryCode),
+      }),
+    [booking.primaryCountryCode, place, brain],
+  );
+
+  const hero = destinationHero(
+    booking.primaryCountryCode,
+    place?.heroSlug || booking.locationSlug,
+  );
 
   // Pull the verified Luna Brain layer for this booking's destination + dates.
   // Additive: any failure (offline, no key) simply leaves the static guide.
   useEffect(() => {
     let alive = true;
+    setBrainLoading(true);
     const labelParts = booking.destinationLabel.split(/[&,/]+/);
     const tokens = Array.from(
       new Set(
@@ -126,6 +192,9 @@ export default function DestinationGuidePage() {
       })
       .catch(() => {
         /* ignore — static guide stands */
+      })
+      .finally(() => {
+        if (alive) setBrainLoading(false);
       });
     return () => {
       alive = false;
@@ -136,7 +205,13 @@ export default function DestinationGuidePage() {
   // (consecutive stays in the same place are merged). Additive + graceful.
   useEffect(() => {
     let alive = true;
-    const segments = buildSegments(booking.hotels);
+    const segments = buildSegments(
+      booking.hotels,
+      booking.experiences ?? [],
+      place,
+      booking.tripStart,
+      booking.tripEnd,
+    );
     if (!segments.length) return;
     const qs = new URLSearchParams();
     for (const s of segments) {
@@ -153,30 +228,166 @@ export default function DestinationGuidePage() {
     return () => {
       alive = false;
     };
-  }, [booking.reference, booking.hotels]);
+  }, [booking.reference, booking.hotels, booking.experiences, booking.tripStart, booking.tripEnd, place]);
+
+  const events = useMemo(
+    () => splitEvents(place?.events ?? [], booking.tripStart, booking.tripEnd),
+    [place, booking.tripStart, booking.tripEnd],
+  );
+
+  // Ticket → park runs here so the tab can exist at all; the matcher is
+  // deliberately conservative and an unmatched ticket simply gets no tab.
+  //
+  // Only real ticket kinds are offered to the matcher. order-to-booking.ts
+  // builds transfer titles as `Transfer to ${dropoff}`, so a Mears airport
+  // transfer arrives as "Transfer to Universal Orlando Resort" carrying the
+  // PICKUP coordinates (the airport, inside the 40 km veto) and matches
+  // Universal on name+coords. A transfer, a car hire or a generic add-on must
+  // never be handed a park guide — the same gate the experience page applies.
+  const parkMatch = useMemo(() => {
+    const tickets = (booking.experiences ?? [])
+      .filter((e) => TICKET_KINDS.has(e.kind))
+      .map((e) => ({
+        id: e.id,
+        title: e.title,
+        lat: e.lat,
+        lng: e.lng,
+      }));
+    return matchTicketsToParks(tickets, place?.parks ?? []);
+  }, [booking.experiences, place]);
+
+  // EVERY confident match, not just the first. An Orlando booking routinely
+  // carries a Disney ticket AND a Universal ticket; taking matched[0] gave the
+  // second park no tab, no panel and no insider tips at all. Each park is
+  // paired here with the photo from ITS OWN experience so a panel can never
+  // show one park's guide over another park's supplier photo.
+  const myParks = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ park: ParkRecord; photo?: string }> = [];
+    for (const m of parkMatch.matched) {
+      // Two tickets can resolve to the same park (a park ticket plus its dining
+      // plan); the traveller should see that guide once, not twice.
+      if (seen.has(m.park.id)) continue;
+      seen.add(m.park.id);
+      out.push({
+        park: m.park,
+        photo: (booking.experiences ?? []).find((e) => e.id === m.experienceId)?.photos?.[0],
+      });
+    }
+    return out;
+  }, [parkMatch, booking.experiences]);
 
   const hasConditions = !!conditions?.segments?.some(
     (s) => s.weather || (s.holidays && s.holidays.holidays.length > 0),
   );
   const hasForYourDates = !!brain?.forYourDates || hasConditions;
-  const tabs = useMemo<string[]>(() => {
-    if (!hasForYourDates) return [...STATIC_TABS];
-    return ['Overview', 'For your dates', 'Essentials', 'Visa & safety', 'Insider tips'];
-  }, [hasForYourDates]);
+  const hasWhatsOn =
+    events.inWindow.length > 0 || events.otherTimes.length > 0 || events.undated.length > 0;
 
   const essentialsQA = brainSectionFor(brain, /money|getting (around|there)|culture|practical/i);
   const visaQA = brainSectionFor(brain, /entry|visa|health|safety/i);
   const travelLabel = brain?.forYourDates?.travelLabel || travelWindowLabel(booking.tripStart, booking.tripEnd);
 
-  if (!guide) {
+  const sections = place?.sections ?? [];
+  const hasIntroSections = hasSection(sections, ['hero-intro', 'overview']);
+  const hasCharacterSections = hasSection(sections, ['what-makes-it-special', 'character']);
+  const hasBestTime = hasSection(sections, ['best-time']);
+
+  const quickFacts: PlaceFactRow[] = [
+    { icon: <IconCoin size={14} />, label: 'Currency', value: guide.currency, ...attrOf(guide, place, 'currency', place?.facts.currency) },
+    { icon: <IconClock size={14} />, label: 'Time zone', value: guide.timeZone, ...attrOf(guide, place, 'timeZone', place?.facts.timeZone) },
+    { icon: <IconInfo size={14} />, label: 'Languages', value: guide.languages, ...attrOf(guide, place, 'languages', place?.facts.language) },
+    { icon: <IconInfo size={14} />, label: t('place.power'), value: guide.voltageAndPlug, ...attrOf(guide, place, 'voltageAndPlug', place?.facts.voltageAndPlug) },
+    { icon: <IconPlane size={14} />, label: t('place.flightTime'), value: guide.flightTimeFromUK, ...attrOf(guide, place, 'flightTimeFromUK', place?.facts.flightTimeFromUK) },
+  ];
+
+  // Does any row in the grid ABOVE actually come from Luna Brain?
+  //
+  // The chip says "Verified facts from Luna Brain", but resolveGuide now puts
+  // place content AHEAD of Brain for exactly these five local-practicality
+  // fields (guide-merge.ts), so on any destination with its own Airtable copy
+  // none of them are Brain's and the chip was stamping "verified" on editorial
+  // prose. place-sections.tsx's own header: labelling editorial copy as
+  // verified is worse than labelling it not at all.
+  //
+  // A row is Brain's when it has a value, carries no place tier (sourceOf is
+  // only ever set for place content) and Brain actually holds that field —
+  // otherwise the value fell through to the static guide. flightTimeFromUK is
+  // absent here on purpose: Luna Brain has no such field, so that row can only
+  // ever be place content or static.
+  const brainDest = brain?.destination;
+  const fromBrain = (field: keyof ResolvedGuide, brainValue?: string) =>
+    !!guide[field] && !guide.sourceOf[field] && !!brainValue;
+  const quickFactsVerified =
+    fromBrain('currency', brainDest?.currency) ||
+    fromBrain('timeZone', brainDest?.timeZone) ||
+    fromBrain('languages', brainDest?.languages) ||
+    fromBrain(
+      'voltageAndPlug',
+      [brainDest?.voltage, brainDest?.plugType].filter(Boolean).join(' · '),
+    );
+
+  const essentialFacts: PlaceFactRow[] = [
+    ...quickFacts,
+    // Only the fallback wording: when the place has its own best-time prose it
+    // renders in full on Overview and a truncated copy here helps nobody.
+    ...(hasBestTime ? [] : [{ icon: <IconInfo size={14} />, label: 'Weather', value: guide.weatherSummary }]),
+    ...(brain?.destination?.tapWaterSafe ? [{ icon: <IconInfo size={14} />, label: 'Tap water', value: brain.destination.tapWaterSafe }] : []),
+    ...(brain?.destination?.drivingSide ? [{ icon: <IconInfo size={14} />, label: 'Driving', value: brain.destination.drivingSide }] : []),
+    { icon: <IconWarning size={14} />, label: 'Emergency', value: guide.emergencyNumber },
+  ];
+  const hasEssentialFacts = essentialFacts.some((f) => !!f.value);
+
+  // The four tabs used to be unconditional because DestinationGuide made every
+  // field mandatory. Place content does not, so a country with only an Overview
+  // would otherwise open a tab onto a blank screen.
+  const hasEssentials =
+    hasEssentialFacts ||
+    hasSection(sections, ['getting-there', 'getting-around', 'nearby-excursions']) ||
+    essentialsQA.length > 0;
+  const hasVisa =
+    !!guide.visaSummary ||
+    !!guide.emergencyNumber ||
+    visaQA.length > 0 ||
+    hasSection(sections, ['visa', 'health']);
+  const parkTips = myParks.filter((p) => !!p.park.quirksAndInsiderTips);
+  const hasTips = !!guide.insiderTips || parkTips.length > 0;
+
+  const tabs = useMemo<TabDef[]>(() => {
+    const out: TabDef[] = [{ id: TAB_OVERVIEW, label: TAB_OVERVIEW }];
+    if (hasForYourDates) out.push({ id: TAB_DATES, label: TAB_DATES });
+    if (hasWhatsOn) out.push({ id: TAB_WHATS_ON, label: t('whatson.section') });
+    if (hasEssentials) out.push({ id: TAB_ESSENTIALS, label: TAB_ESSENTIALS });
+    // One tab whatever the count: two parks is the common Orlando case and does
+    // not warrant two tabs, so both panels stack inside it.
+    if (myParks.length > 0) out.push({ id: TAB_PARK, label: t('park.section') });
+    if (hasVisa) out.push({ id: TAB_VISA, label: TAB_VISA });
+    if (hasTips) out.push({ id: TAB_TIPS, label: TAB_TIPS });
+    return out;
+  }, [hasForYourDates, hasWhatsOn, hasEssentials, hasVisa, hasTips, myParks, t]);
+
+  // A tab can vanish between renders (the place payload arrives, or the park
+  // match changes); without this the page would show a body with nothing lit.
+  const activeTab = tabs.some((d) => d.id === tab) ? tab : TAB_OVERVIEW;
+
+  // Three states, in this order: nothing yet but still loading → skeleton;
+  // nothing and settled → the coming-soon line; anything at all → the page.
+  // Without the skeleton every booking outside the four static guides flashed
+  // "coming soon" before the fetches resolved.
+  if (isEmptyGuide(guide)) {
+    const settled = !placeLoading && !brainLoading;
     return (
       <>
         <NavBar title="Destination" backLabel="Trip" />
         <PageEnter>
-          <main className="px-5 pt-12 text-center">
-            <p className="text-ink-2">
-              Destination guide for {booking.destinationLabel} is coming soon.
-            </p>
+          <main className="px-5 pt-12">
+            {settled ? (
+              <p className="text-ink-2 text-center">
+                Destination guide for {booking.destinationLabel} is coming soon.
+              </p>
+            ) : (
+              <GuideSkeleton />
+            )}
           </main>
         </PageEnter>
       </>
@@ -191,6 +402,30 @@ export default function DestinationGuidePage() {
           className="relative h-72 text-white"
           style={{ background: hero.gradient }}
         >
+          {hero.image && (
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: `center/cover no-repeat url("${hero.image}")` }}
+            />
+          )}
+          {hero.imageLocation && (
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
+            />
+          )}
+          {/* The place's own photograph is the most specific image we have, so
+              it sits above the bucket layers — which stay as the fallback when
+              it fails to load. */}
+          {place?.images?.[0]?.url && (
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: `center/cover no-repeat url("${place.images[0].url}")` }}
+            />
+          )}
           <div
             aria-hidden
             className="absolute inset-0"
@@ -208,68 +443,115 @@ export default function DestinationGuidePage() {
             <NavBar title=" " backLabel="Trip" variant="dark" />
           </div>
           <div className="absolute bottom-5 left-5 right-5 z-10">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/85 inline-flex items-center gap-1.5 mb-2">
-              <IconPin size={12} />
-              {guide.region}
-            </div>
-            <h1 className="font-serif text-[40px] leading-none tracking-tight">
-              <em>{guide.name}</em>
-            </h1>
-            <p className="text-sm text-white/85 mt-1.5">{guide.weatherSummary}</p>
+            {guide.region && (
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white/85 inline-flex items-center gap-1.5 mb-2">
+                <IconPin size={12} />
+                {guide.region}
+              </div>
+            )}
+            {guide.name && (
+              <h1 className="font-serif text-[40px] leading-none tracking-tight">
+                <em>{guide.name}</em>
+              </h1>
+            )}
+            {(guide.tagline || guide.weatherSummary) && (
+              <p className="text-sm text-white/85 mt-1.5 line-clamp-2">
+                {guide.tagline || guide.weatherSummary}
+              </p>
+            )}
           </div>
         </section>
 
         {/* Tabs */}
         <div className="sticky top-0 z-20 bg-surface border-b border-line-light">
           <div className="flex gap-1.5 px-4 py-2.5 overflow-x-auto scrollbar-none">
-            {tabs.map((t) => (
+            {tabs.map((d) => (
               <button
-                key={t}
+                key={d.id}
                 type="button"
-                onClick={() => setTab(t)}
+                onClick={() => setTab(d.id)}
                 className={[
                   'px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors',
-                  tab === t
+                  activeTab === d.id
                     ? 'bg-navy text-white dark:bg-teal dark:text-navy-dark'
                     : 'bg-surface-3 text-ink-2 hover:text-ink',
                 ].join(' ')}
               >
-                {t}
+                {d.label}
               </button>
             ))}
           </div>
         </div>
 
         <div className="px-5 pt-4">
-          {tab === 'Overview' && (
+          {activeTab === TAB_OVERVIEW && (
             <>
-              <p className="text-sm text-ink-2 leading-relaxed">
-                {guide.introduction}
-              </p>
-              <h2 className="text-base font-semibold text-ink mt-5 mb-2">
-                Why we love it
-              </h2>
-              <p className="text-sm text-ink-2 leading-relaxed">
-                {guide.whyWeLoveIt}
-              </p>
+              {hasIntroSections ? (
+                <ProseStack sections={sections} sectionKey={['hero-intro', 'overview']} />
+              ) : (
+                guide.introduction && (
+                  <p className="text-sm text-ink-2 leading-relaxed">{guide.introduction}</p>
+                )
+              )}
 
-              {/* Quick facts */}
-              <div className="grid grid-cols-2 gap-2 mt-5">
-                <Fact icon={<IconCoin size={14} />} label="Currency" value={brain?.destination?.currency || guide.currency} />
-                <Fact icon={<IconClock size={14} />} label="Time zone" value={brain?.destination?.timeZone || guide.timeZone} />
-                <Fact
-                  icon={<IconInfo size={14} />}
-                  label="Languages"
-                  value={brain?.destination?.languages || guide.languages.join(' · ')}
+              {hasCharacterSections ? (
+                <ProseStack
+                  sections={sections}
+                  sectionKey={['what-makes-it-special', 'character']}
+                  title="Why we love it"
                 />
-                <Fact icon={<IconInfo size={14} />} label="Weather" value={guide.weatherSummary} />
-              </div>
+              ) : (
+                guide.whyWeLoveIt && (
+                  <>
+                    <h2 className="text-base font-semibold text-ink mt-5 mb-2">
+                      Why we love it
+                    </h2>
+                    <p className="text-sm text-ink-2 leading-relaxed whitespace-pre-line">
+                      {guide.whyWeLoveIt}
+                    </p>
+                  </>
+                )
+              )}
 
-              {brain?.destination && <VerifiedChip lastVerified={brain.destination.lastVerified} />}
+              {place && <HighlightGrid highlights={place.highlights} />}
+
+              <ProseStack sections={sections} sectionKey="things-to-do" title={t('place.thingsToDo')} />
+              <ProseStack sections={sections} sectionKey="food" title={t('place.food')} />
+              <ProseStack sections={sections} sectionKey="beaches" title="Beaches" />
+              <ProseStack sections={sections} sectionKey="best-time" title={t('place.bestTime')} />
+
+              <ClimateStrip
+                climate={place?.climate}
+                tripStart={booking.tripStart}
+                tripEnd={booking.tripEnd}
+              />
+
+              <FactGrid facts={quickFacts} />
+
+              {place?.audienceTags && place.audienceTags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-4">
+                  {place.audienceTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-[11px] font-medium text-ink-2 bg-surface-3 px-2.5 py-1 rounded-full"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {place?.audienceNote && (
+                <p className="text-sm text-ink-2 leading-relaxed mt-4 whitespace-pre-line">
+                  {place.audienceNote}
+                </p>
+              )}
+
+              {quickFactsVerified && <VerifiedChip lastVerified={brainDest?.lastVerified} />}
+              {place && <PlaceCredit place={place} />}
             </>
           )}
 
-          {tab === 'For your dates' && (
+          {activeTab === TAB_DATES && (
             <ForYourDates
               fyd={brain?.forYourDates ?? null}
               fcdoStatus={brain?.destination?.fcdoStatus}
@@ -278,43 +560,71 @@ export default function DestinationGuidePage() {
             />
           )}
 
-          {tab === 'Essentials' && (
+          {activeTab === TAB_WHATS_ON && (
             <>
-              <h2 className="text-base font-semibold text-ink mb-2">
-                The basics
-              </h2>
-              <div className="space-y-2">
-                <EssentialRow icon={<IconCoin size={14} />} label="Currency" value={brain?.destination?.currency || guide.currency} />
-                <EssentialRow icon={<IconClock size={14} />} label="Time zone" value={brain?.destination?.timeZone || guide.timeZone} />
-                <EssentialRow icon={<IconInfo size={14} />} label="Languages" value={brain?.destination?.languages || guide.languages.join(', ')} />
-                <EssentialRow icon={<IconInfo size={14} />} label="Weather" value={guide.weatherSummary} />
-                {(brain?.destination?.plugType || brain?.destination?.voltage) && (
-                  <EssentialRow icon={<IconInfo size={14} />} label="Power" value={[brain.destination.plugType, brain.destination.voltage].filter(Boolean).join(' · ')} />
-                )}
-                {brain?.destination?.tapWaterSafe && (
-                  <EssentialRow icon={<IconInfo size={14} />} label="Tap water" value={brain.destination.tapWaterSafe} />
-                )}
-                {brain?.destination?.drivingSide && (
-                  <EssentialRow icon={<IconInfo size={14} />} label="Driving" value={brain.destination.drivingSide} />
-                )}
-                {(brain?.destination?.emergencyNumber || guide.emergencyNumber) && (
-                  <EssentialRow icon={<IconWarning size={14} />} label="Emergency" value={brain?.destination?.emergencyNumber || guide.emergencyNumber!} />
-                )}
-              </div>
-
-              <BrainSection title="Good to know" answers={essentialsQA} />
+              {events.inWindow.length > 0 && (
+                <>
+                  <h2 className="text-base font-semibold text-ink mb-2">{t('whatson.section')}</h2>
+                  <EventList events={events.inWindow} />
+                </>
+              )}
+              {/* Out-of-window events get a neutral heading, never "through the
+                  year" — an October-only festival shown to a May traveller under
+                  that heading asserts a run length the Events JSON never states.
+                  Undated ones ("Easter", "Varies") get a heading that claims no
+                  date at all rather than being dropped. Both self-hide. */}
+              <OtherTimesEvents events={events.otherTimes} />
+              <UndatedEvents events={events.undated} />
+              <p className="text-[11px] text-ink-3 italic mt-4">{t('whatson.note')}</p>
             </>
           )}
 
-          {tab === 'Visa & safety' && (
+          {activeTab === TAB_ESSENTIALS && (
             <>
-              <h2 className="text-base font-semibold text-ink mb-2 inline-flex items-center gap-1.5">
-                <IconShield size={16} />
-                Entry requirements
-              </h2>
-              <p className="text-sm text-ink-2 leading-relaxed">
-                {guide.visaSummary}
-              </p>
+              {hasEssentialFacts && (
+                <>
+                  <h2 className="text-base font-semibold text-ink mb-2">
+                    The basics
+                  </h2>
+                  <FactRows facts={essentialFacts} />
+                </>
+              )}
+
+              <ProseStack sections={sections} sectionKey="getting-there" title={t('place.gettingThere')} />
+              <ProseStack sections={sections} sectionKey="getting-around" title={t('place.gettingAround')} />
+              <ProseStack sections={sections} sectionKey="nearby-excursions" title="Nearby excursions" />
+
+              <BrainSection title="Good to know" answers={essentialsQA} />
+              {place && <PlaceCredit place={place} />}
+            </>
+          )}
+
+          {activeTab === TAB_PARK && myParks.length > 0 && (
+            <div className="space-y-4">
+              {myParks.map(({ park, photo }) => (
+                <ParkPanel
+                  key={park.id}
+                  park={park}
+                  href={`/park/${park.slug}`}
+                  image={photo}
+                />
+              ))}
+            </div>
+          )}
+
+          {activeTab === TAB_VISA && (
+            <>
+              {guide.visaSummary && (
+                <>
+                  <h2 className="text-base font-semibold text-ink mb-2 inline-flex items-center gap-1.5">
+                    <IconShield size={16} />
+                    Entry requirements
+                  </h2>
+                  <p className="text-sm text-ink-2 leading-relaxed whitespace-pre-line">
+                    {guide.visaSummary}
+                  </p>
+                </>
+              )}
 
               {guide.emergencyNumber && (
                 <>
@@ -327,16 +637,26 @@ export default function DestinationGuidePage() {
                       Emergency number
                     </div>
                     <a
-                      href={`tel:${(brain?.destination?.emergencyNumber || guide.emergencyNumber).replace(/[^\d+]/g, '')}`}
+                      href={`tel:${guide.emergencyNumber.replace(/[^\d+]/g, '')}`}
                       className="text-base font-semibold text-ink"
                     >
-                      {brain?.destination?.emergencyNumber || guide.emergencyNumber}
+                      {guide.emergencyNumber}
                     </a>
                   </div>
                 </>
               )}
 
+              {/* Luna Brain first — it is the only layer carrying Source,
+                  Confidence and Last Verified. The country's own advisory copy
+                  sits below it, never above. */}
               <BrainSection title="Verified answers" answers={visaQA} />
+
+              {/* Suppressed when resolveGuide already promoted this very copy to
+                  Entry requirements above, which it does when Brain had nothing. */}
+              {guide.sourceOf.visaSummary === undefined && (
+                <ProseStack sections={sections} sectionKey="visa" title="Visa advisory" />
+              )}
+              <ProseStack sections={sections} sectionKey="health" title="Health notes" />
 
               <p className="text-[11px] text-ink-3 italic mt-4">
                 Always check the latest FCDO travel advice before you travel.
@@ -345,14 +665,32 @@ export default function DestinationGuidePage() {
             </>
           )}
 
-          {tab === 'Insider tips' && (
+          {activeTab === TAB_TIPS && (
             <>
-              <h2 className="text-base font-semibold text-ink mb-2">
-                What we&rsquo;d tell a friend
-              </h2>
-              <p className="text-sm text-ink-2 leading-relaxed">
-                {guide.insiderTips}
-              </p>
+              {guide.insiderTips && (
+                <>
+                  <h2 className="text-base font-semibold text-ink mb-2">
+                    What we&rsquo;d tell a friend
+                  </h2>
+                  <p className="text-sm text-ink-2 leading-relaxed whitespace-pre-line">
+                    {guide.insiderTips}
+                  </p>
+                </>
+              )}
+
+              {/* One block per matched park. The heading carries the park name
+                  whenever there is more than one, so Disney's tips can never be
+                  read as Universal's. */}
+              {parkTips.map(({ park }) => (
+                <div key={park.id} className="mt-5">
+                  <h2 className="text-base font-semibold text-ink mb-2">
+                    {parkTips.length > 1 ? `${park.name} — ${t('park.tips')}` : t('park.tips')}
+                  </h2>
+                  <p className="text-sm text-ink-2 leading-relaxed whitespace-pre-line">
+                    {park.quirksAndInsiderTips}
+                  </p>
+                </div>
+              ))}
             </>
           )}
         </div>
@@ -361,16 +699,81 @@ export default function DestinationGuidePage() {
   );
 }
 
-/** Build one conditions segment per stay location, merging consecutive stays in
- *  the same place. Only hotels with real coordinates are used (never guessed). */
+/** Attribution for a merged field — present only when place content supplied it,
+ *  so a Luna Brain or static-guide value never gets labelled with a place name. */
+function attrOf(
+  guide: ResolvedGuide,
+  place: PlaceView | null,
+  field: keyof ResolvedGuide,
+  fact?: PlaceFact,
+): { tier?: PlaceTier; from?: string } {
+  const tier = guide.sourceOf[field];
+  if (!tier) return {};
+  return { tier, from: fact?.from || place?.name };
+}
+
+function hasSection(
+  sections: { key: PlaceSectionKey; body: string }[],
+  keys: PlaceSectionKey[],
+): boolean {
+  return sections.some((s) => keys.includes(s.key) && !!s.body);
+}
+
+function GuideSkeleton() {
+  return (
+    <div className="animate-pulse space-y-3" aria-hidden>
+      <div className="h-6 w-1/2 rounded-lg bg-surface-3" />
+      <div className="h-3 w-full rounded bg-surface-3" />
+      <div className="h-3 w-5/6 rounded bg-surface-3" />
+      <div className="h-3 w-4/6 rounded bg-surface-3" />
+      <div className="grid grid-cols-2 gap-2 pt-3">
+        <div className="h-20 rounded-xl bg-surface-3" />
+        <div className="h-20 rounded-xl bg-surface-3" />
+      </div>
+    </div>
+  );
+}
+
+interface Segment {
+  lat: number;
+  lng: number;
+  countryCode: string;
+  from: string;
+  to: string;
+  label: string;
+}
+
+/** An excursion inside this radius of a hotel segment is the same place as far
+ *  as weather and public holidays go; splitting it out would put a per-segment
+ *  heading on trips that read as one destination today. */
+const SEGMENT_MERGE_KM = 25;
+
+function segLabel(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/**
+ * Conditions segments, in decreasing order of confidence: located hotels, then
+ * located experiences, then — only when there is neither — one segment from the
+ * place's own coordinates. Coordinates are never guessed; a booking with none
+ * still gets no weather, which is the correct failure.
+ *
+ * Without the second and third source an attraction-ticket booking (Orlando,
+ * no hotel) had no segments at all, so the whole "For your dates" tab never
+ * appeared.
+ */
 function buildSegments(
   hotels: { lat?: number; lng?: number; city?: string; resort?: string; country?: string; countryCode?: string; checkIn: string; checkOut: string }[],
-): { lat: number; lng: number; countryCode: string; from: string; to: string; label: string }[] {
-  const located = hotels
+  experiences: { lat?: number; lng?: number; location?: string; title?: string; countryCode?: string; startDate?: string; endDate?: string }[],
+  place: PlaceView | null,
+  tripStart: string,
+  tripEnd: string,
+): Segment[] {
+  const located = (hotels ?? [])
     .filter((h) => typeof h.lat === 'number' && typeof h.lng === 'number' && h.countryCode)
     .sort((a, b) => new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime());
 
-  const segs: { lat: number; lng: number; countryCode: string; from: string; to: string; label: string }[] = [];
+  const segs: Segment[] = [];
   for (const h of located) {
     const label = (h.city || h.resort || h.country || h.countryCode!).trim();
     const from = h.checkIn.slice(0, 10);
@@ -382,7 +785,57 @@ function buildSegments(
       segs.push({ lat: h.lat!, lng: h.lng!, countryCode: h.countryCode!, from, to, label });
     }
   }
-  return segs;
+
+  const hotelSegs = segs.length;
+
+  const locatedExps = (experiences ?? [])
+    .filter(
+      (e) =>
+        typeof e.lat === 'number' &&
+        typeof e.lng === 'number' &&
+        !!e.countryCode &&
+        !!e.startDate,
+    )
+    .sort((a, b) => new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime());
+
+  for (const e of locatedExps) {
+    const label = (e.location || e.title || e.countryCode!).trim();
+    const from = e.startDate!.slice(0, 10);
+    const to = (e.endDate || e.startDate!).slice(0, 10);
+
+    const covered = segs.slice(0, hotelSegs).some(
+      (s) =>
+        segLabel(s.label) === segLabel(label) ||
+        haversineKm(s.lat, s.lng, e.lat!, e.lng!) <= SEGMENT_MERGE_KM,
+    );
+    if (covered) continue;
+
+    const last = segs[segs.length - 1];
+    if (last && last.label === label && last.countryCode === e.countryCode) {
+      if (to > last.to) last.to = to;
+    } else {
+      segs.push({ lat: e.lat!, lng: e.lng!, countryCode: e.countryCode!, from, to, label });
+    }
+  }
+
+  if (segs.length) return segs;
+
+  // Last resort: the place record's own coordinates. Real numbers from a real
+  // Airtable row, spanning the whole trip — never an approximation of a city.
+  if (place?.coords && place.code && tripStart && tripEnd) {
+    return [
+      {
+        lat: place.coords.lat,
+        lng: place.coords.lng,
+        countryCode: place.code,
+        from: tripStart.slice(0, 10),
+        to: tripEnd.slice(0, 10),
+        label: place.name,
+      },
+    ];
+  }
+
+  return [];
 }
 
 const MONTHS_LONG = [
@@ -651,48 +1104,4 @@ function fmtRange(from: string, to: string): string {
   const aStr = a.toLocaleDateString('en-GB', { day: 'numeric', month: sameMonth ? undefined : 'short' });
   const bStr = b.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   return `${aStr}–${bStr}`;
-}
-
-function Fact({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="p-3 rounded-xl bg-surface border border-line-light">
-      <div className="w-7 h-7 rounded-lg bg-teal/10 text-teal-dark dark:text-teal-light flex items-center justify-center mb-2">
-        {icon}
-      </div>
-      <div className="text-[10px] uppercase tracking-wider text-ink-3 mb-0.5">{label}</div>
-      <div className="text-[13px] font-semibold text-ink leading-snug">{value}</div>
-    </div>
-  );
-}
-
-function EssentialRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-surface border border-line-light">
-      <span className="w-8 h-8 rounded-lg bg-teal/10 text-teal-dark dark:text-teal-light flex items-center justify-center flex-shrink-0">
-        {icon}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">
-          {label}
-        </div>
-        <div className="text-sm font-medium text-ink mt-0.5">{value}</div>
-      </div>
-    </div>
-  );
 }

@@ -11,6 +11,19 @@
  * labels (admin grid, agency Trips picker). Static snapshot, like the country
  * roster — regenerate from Airtable when cities are added ("regenerate the hero
  * locations"). 284 locations across 102 countries.
+ *
+ * THIS ROSTER IS CITIES AND REGIONS ONLY, and deliberately so. It is the sole
+ * source of truth for isKnownLocation(), which gates the /admin/heroes upload
+ * validator and fills both booking pickers (agency Trips, admin new booking),
+ * so every row here is a place an agent can pick and a hero can be uploaded
+ * for. Resorts and areas live in the separate generated
+ * src/data/destination-places.ts, which carries all three tiers and the
+ * Airtable parent link between them; they are NOT added here. Adding, say, an
+ * 'orlando' row would put a phantom option in both pickers and point the hero
+ * at a US/orlando/landscape.webp that does not exist. matchLocationSlug()
+ * instead resolves a resort signal to its parent city's slug through that
+ * index — Orlando → florida — and re-checks the result with isKnownLocation(),
+ * so it can still only ever return a row from this file.
  */
 
 export interface HeroLocation {

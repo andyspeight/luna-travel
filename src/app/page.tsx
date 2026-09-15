@@ -23,6 +23,8 @@ import {
   IconMap,
   IconCompass,
   IconBell,
+  IconTicket,
+  IconCalendar,
 } from '@/components/icons';
 import {
   countdownTo,
@@ -32,19 +34,25 @@ import {
 } from '@/lib/format';
 import { buildTimeline, nextEvent, type TimelineEvent } from '@/lib/booking-helpers';
 import { destinationHero } from '@/lib/hero';
-import { InspirationCard } from '@/components/inspiration-card';
-import { getInspirations } from '@/data/inspirations';
+import { getDestinationGuide } from '@/data/destinations';
+import { WhatsOn } from '@/components/whats-on';
+import { SuggestionRail } from '@/components/suggestion-rail';
 import { useI18n } from '@/lib/locale-context';
 import { PageEnter } from '@/components/page-enter';
-import { CoverSplash } from '@/components/cover-splash';
+import { CoverSplash, tripStartInstant } from '@/components/cover-splash';
 import { useCover } from '@/lib/cover-context';
 import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
+import { usePlace } from '@/lib/use-place';
 
 export default function HomePage() {
   const { booking, onboarding, liveLoading, source } = useBooking();
   const { coverEnabled, coverDismissed } = useCover();
   const { t } = useI18n();
   const { latest } = useAgentMessages();
+  // Third first-paint fetch on this screen, and deliberately non-blocking: the
+  // hook returns {place:null, loading:false} without touching the network for a
+  // booking with no country, and every section it feeds hides itself.
+  const { place, loading: placeLoading } = usePlace(booking);
 
   // Mark a surfaced agent message read in place, then tell the rest of the app
   // (bottom-bar badge, this banner) to refresh so it clears immediately.
@@ -65,21 +73,82 @@ export default function HomePage() {
       /* no-op */
     }
   };
-  const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
+  // NOT booking.tripStart: that is a calendar date ('2026-11-27'), so counting
+  // down to it counts down to 00:00 UTC on departure day and the pill reads
+  // "0 hours until you fly" while the traveller is still at home. The real
+  // instant is derived from the first flight / timed item — see tripStartInstant
+  // in cover-splash.tsx, which the splash on this same screen ticks from too, so
+  // the two clocks can never disagree.
+  const startIso = tripStartInstant(booking);
+  const [parts, setParts] = useState<CountdownParts>(() => countdownTo(startIso));
 
   useEffect(() => {
-    setParts(countdownTo(booking.tripStart));
-    const id = setInterval(() => setParts(countdownTo(booking.tripStart)), 1000);
+    setParts(countdownTo(startIso));
+    const id = setInterval(() => setParts(countdownTo(startIso)), 1000);
     return () => clearInterval(id);
-  }, [booking.tripStart]);
+  }, [startIso]);
 
   const lead = booking.travellers.find((t) => t.isLead) ?? booking.travellers[0];
   const next = nextEvent(booking);
   const upcoming = buildTimeline(booking).filter((e) => !e.past).slice(0, 3);
-  const hero = destinationHero(booking.primaryCountryCode, booking.locationSlug);
-  const hasFlights = booking.flights.length > 0;
+  // heroSlug first, locationSlug second — and /destination and the cover splash
+  // do exactly the same. booking.locationSlug is only re-derived on the live
+  // Travelify path; a redeemed invite persists location_slug at redeem time and
+  // a stored off-platform payload bakes it in, so for those travellers it stays
+  // null and this screen showed the generic country cover while the guide page
+  // one tap later showed the right photo. place.heroSlug is resolved from the
+  // booking's signals at request time, so it is correct for those rows too.
+  // usePlace is already called above: no extra fetch.
+  const hero = destinationHero(
+    booking.primaryCountryCode,
+    place?.heroSlug || booking.locationSlug,
+  );
   const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
-  const inspirations = getInspirations(booking.primaryCountryCode);
+
+  // Tiles describe the booking rather than a fixed template. The old five were
+  // hardcoded, so a tickets-only trip got a permanently dead Hotel tile and a
+  // plane on a trip with no flight. Candidates in priority order; first five win.
+  const tiles: Array<{ href: string; icon: React.ReactNode; label: string }> = [];
+  if (booking.flights.length) {
+    tiles.push({
+      href: `/flight/${booking.flights[0].id}`,
+      icon: <IconPlane size={18} />,
+      label: t('tile.flights'),
+    });
+  }
+  if (booking.hotels.length) {
+    tiles.push({
+      href: `/hotel/${booking.hotels[0].id}`,
+      icon: <IconBed size={18} />,
+      label: t('tile.hotel'),
+    });
+  }
+  if (booking.experiences?.length) {
+    tiles.push({
+      href: `/experience/${booking.experiences[0].id}`,
+      icon: <IconTicket size={18} />,
+      label: t('tile.tickets'),
+    });
+  }
+  tiles.push({ href: '/itinerary', icon: <IconCalendar size={18} />, label: t('tile.plan') });
+  tiles.push({ href: '/map', icon: <IconMap size={18} />, label: t('tile.map') });
+  tiles.push({ href: '/documents', icon: <IconDoc size={18} />, label: t('tile.docs') });
+  tiles.push({ href: '/luna', icon: <IconChat size={18} />, label: t('tile.luna') });
+
+  // A guide card that leads to "coming soon" is worse than no card, so the link
+  // waits until we know there is something behind it — either a place record or
+  // the static guide.
+  //
+  // Only the place-only branch waits on the network. getDestinationGuide() is a
+  // synchronous lookup in local bundled data, so gating it on !placeLoading meant
+  // a stalled /api/traveller/place request — lie-fi, a captive portal, a socket
+  // that never settles, i.e. the normal condition for this app's audience — hid
+  // the destination card for the whole session for a country we could already
+  // render offline.
+  const hasGuide = Boolean(
+    booking.primaryCountryCode &&
+      (getDestinationGuide(booking.primaryCountryCode) || (!placeLoading && place)),
+  );
 
   // First-run / un-onboarded visitor (no session, no demo trip chosen): show
   // the onboarding prompt instead of the fallback demo booking.
@@ -245,7 +314,8 @@ export default function HomePage() {
                 <em>{booking.destinationLabel || t('home.yourTrip')}</em>
               </h2>
               <p className="text-sm opacity-95 truncate">
-                {booking.hotels[0]?.name ?? 'Custom itinerary'} · {booking.durationLabel} ·{' '}
+                {booking.hotels[0]?.name ?? booking.experiences?.[0]?.title ?? t('home.tripCustom')}{' '}
+                · {booking.durationLabel} ·{' '}
                 {booking.travellers.length} traveller{booking.travellers.length === 1 ? '' : 's'}
               </p>
             </div>
@@ -275,20 +345,9 @@ export default function HomePage() {
 
       {/* Quick tiles */}
       <div className="grid grid-cols-5 gap-2 mt-4">
-        <QuickTile
-          href={hasFlights ? `/flight/${booking.flights[0].id}` : '/itinerary'}
-          icon={<IconPlane size={18} />}
-          label={hasFlights ? t('tile.flights') : t('tile.plan')}
-        />
-        <QuickTile
-          href={`/hotel/${booking.hotels[0]?.id ?? ''}`}
-          icon={<IconBed size={18} />}
-          label={t('tile.hotel')}
-          disabled={!booking.hotels.length}
-        />
-        <QuickTile href="/map" icon={<IconMap size={18} />} label={t('tile.map')} />
-        <QuickTile href="/documents" icon={<IconDoc size={18} />} label={t('tile.docs')} />
-        <QuickTile href="/luna" icon={<IconChat size={18} />} label={t('tile.luna')} />
+        {tiles.slice(0, 5).map((tile) => (
+          <QuickTile key={tile.href} href={tile.href} icon={tile.icon} label={tile.label} />
+        ))}
       </div>
 
       {/* Up next */}
@@ -323,7 +382,7 @@ export default function HomePage() {
           booking of attraction tickets has no hotel city and no arrival
           airport, so it has no country, and the card rendered as a blank
           title over an empty gradient. */}
-      {booking.primaryCountryCode && (
+      {hasGuide && (
       <section className="mt-6">
         <SectionHeading title={t('home.getToKnow')} />
         <Link
@@ -374,25 +433,14 @@ export default function HomePage() {
       </section>
       )}
 
-      {/* Inspiration teaser — discoverable before the trip, prominent after.
-          The dedicated /inspiration route carries the full collection. */}
-      {inspirations.length > 0 && (
-        <section className="mt-6">
-          <SectionHeading
-            title={tripOver ? t('next.whereNext') : t('home.teaserPre')}
-            seeAllHref="/inspiration"
-          />
-          <div className="-mx-5 px-5 overflow-x-auto scrollbar-none">
-            <div className="flex gap-3" style={{ width: 'max-content' }}>
-              {inspirations.slice(0, 4).map((ins) => (
-                <div key={ins.id} className="w-[200px] flex-shrink-0">
-                  <InspirationCard inspiration={ins} agency={booking.agency} variant="compact" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Local events inside the traveller's own dates */}
+      <WhatsOn />
+
+      {/* Two rails, not one filtered rail: "add a few days" keeps the trip's own
+          country, "where next?" is the rebooking surface in another one. Both
+          fall back to the curated collection on /inspiration. */}
+      <SuggestionRail reason="paired" variant="compact" />
+      <SuggestionRail reason="similar" variant="compact" />
 
       {/* Airport extras */}
       {booking.airportExtras.length > 0 && (
@@ -599,6 +647,14 @@ function eventGradient(k: TimelineEvent['kind']): string {
       return 'linear-gradient(135deg, #0F766E, #0EA5E9)';
     case 'fast-track':
       return 'linear-gradient(135deg, #C2410C, #F59E0B)';
+    // Tickets and excursions matched the experience page's own treatment
+    // nowhere: a Disney day read as an unclassified 'other' in grey.
+    case 'activity':
+    case 'excursion':
+      return 'linear-gradient(135deg, #1B2B5B 0%, #0096B7 100%)';
+    case 'car-hire':
+    case 'transfer':
+      return 'linear-gradient(135deg, #0F766E, #0EA5E9)';
     default:
       return 'linear-gradient(135deg, #475569, #94A3B8)';
   }
@@ -617,6 +673,12 @@ function eventIcon(k: TimelineEvent['kind'], size = 18) {
       return <IconCar size={size} />;
     case 'fast-track':
       return <IconFastTrack size={size} />;
+    case 'activity':
+    case 'excursion':
+      return <IconCompass size={size} />;
+    case 'car-hire':
+    case 'transfer':
+      return <IconCar size={size} />;
     default:
       return <IconPin size={size} />;
   }

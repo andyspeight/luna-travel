@@ -20,13 +20,33 @@ interface Props {
   inspiration: Inspiration;
   agency: Agency;
   variant?: 'full' | 'compact';
+  /** Display name of the place the traveller is already booked into. Only the
+   *  enquiry body uses it, so the agent can see what prompted the suggestion. */
+  becauseOf?: string;
 }
 
-export function InspirationCard({ inspiration: ins, agency, variant = 'full' }: Props) {
+export function InspirationCard({
+  inspiration: ins,
+  agency,
+  variant = 'full',
+  becauseOf,
+}: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const image = heroImageUrl(ins.code, 'landscape');
+  // Third argument: a suggestion carries its own city/region slug, so it gets
+  // its own photo and falls back to the country image, then the gradient.
+  const image = heroImageUrl(ins.code, 'landscape', ins.locationSlug);
   const compact = variant === 'compact';
+  const label = ins.country ? `${ins.name}, ${ins.country}` : ins.name;
+
+  // A curated card carries its own written blurb; a live suggestion carries the
+  // tags it shares with the traveller's place instead, and the sentence is built
+  // here so it lands in the traveller's language rather than in English.
+  // Joined with ', ' and never with an "and" — the conjunction is not the same
+  // word (or the same position) in the six locales this app ships.
+  const shared = (ins.sharedTags ?? []).filter(Boolean).slice(0, 3);
+  const blurb =
+    ins.blurb || (shared.length > 0 ? t('next.alsoGoodFor', { tags: shared.join(', ') }) : '');
 
   const priceChip =
     typeof ins.fromPrice === 'number'
@@ -40,7 +60,7 @@ export function InspirationCard({ inspiration: ins, agency, variant = 'full' }: 
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={`Enquire about ${ins.name}, ${ins.country}`}
+        aria-label={`Enquire about ${label}`}
         className={[
           'group relative block w-full text-left rounded-3xl overflow-hidden shadow-sm border border-line-light',
           'transition-all hover:shadow-md active:scale-[0.99]',
@@ -84,9 +104,24 @@ export function InspirationCard({ inspiration: ins, agency, variant = 'full' }: 
             <h3 className="font-serif text-2xl leading-none mt-0.5 drop-shadow-sm">
               <em>{ins.name}</em>
             </h3>
-            <p className="text-[13px] opacity-90 mt-1 leading-snug">{ins.tagline}</p>
-            {!compact && (
-              <p className="text-xs opacity-80 mt-1.5 line-clamp-2">{ins.blurb}</p>
+            {/* A live suggestion's tagline is best-effort (the adapter fills it
+                only if the read fits the budget), so the line hides itself
+                rather than leaving a blank gap where the hook should be. */}
+            {ins.tagline && (
+              <p
+                className={`text-[13px] opacity-90 mt-1 leading-snug${compact ? ' line-clamp-1' : ''}`}
+              >
+                {ins.tagline}
+              </p>
+            )}
+            {/* The blurb is the only place a compact card can say WHY it is
+                being suggested, and compact is the variant on the home rails —
+                the surface most travellers ever see. The compact card is a
+                fixed 176px tile, so the tagline above is clamped to one line to
+                make room for two lines of blurb without pushing the country
+                eyebrow out of the top of the tile. */}
+            {blurb && (
+              <p className="text-xs opacity-80 mt-1.5 line-clamp-2">{blurb}</p>
             )}
 
             <div className="mt-2.5 flex items-center justify-between">
@@ -107,7 +142,12 @@ export function InspirationCard({ inspiration: ins, agency, variant = 'full' }: 
       </button>
 
       {open && (
-        <EnquirySheet ins={ins} agency={agency} onClose={() => setOpen(false)} />
+        <EnquirySheet
+          ins={ins}
+          agency={agency}
+          becauseOf={becauseOf}
+          onClose={() => setOpen(false)}
+        />
       )}
     </>
   );
@@ -129,15 +169,36 @@ function formatMoneyShort(amount: number, currency = 'GBP'): string {
 function EnquirySheet({
   ins,
   agency,
+  becauseOf,
   onClose,
 }: {
   ins: Inspiration;
   agency: Agency;
+  becauseOf?: string;
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const subject = `Enquiry: ${ins.name}, ${ins.country}`;
-  const body = `Hi ${agency.name},\n\nWe loved travelling with you and we're now thinking about ${ins.name} (${ins.country}). Could you put together some options and prices for us?\n\nThanks!`;
+  const where = ins.country ? `${ins.name}, ${ins.country}` : ins.name;
+  const subject = `Enquiry: ${where}`;
+  // WHY THIS IS ITS OWN PARAGRAPH AND NOT PART OF THE SENTENCE ABOVE.
+  // This email is composed in the traveller's voice and sent from their own
+  // address, so the agent cannot tell which words the traveller wrote. The
+  // previous version appended "We loved {place} — Couples, Luxury, Honeymoons,
+  // Beach.", where the tags were the SUGGESTED destination's Best For Tags:
+  // an Orlando traveller enquiring about Santorini appeared to have described
+  // Orlando as a luxury honeymoon beach, and the lead was mis-qualified.
+  //  - the tags are `sharedTags` (what the two places have in common), never
+  //    the suggestion's own tag list;
+  //  - the line is an explicit machine attribution ("Suggested because …"), on
+  //    its own line, so it reads as the app talking, not the traveller;
+  //  - with no `becauseOf` there is no honest sentence to write, so the block
+  //    is omitted entirely rather than half-stated.
+  const shared = (ins.sharedTags ?? []).filter(Boolean).slice(0, 4);
+  const reason =
+    shared.length > 0 && becauseOf
+      ? `\n\n${t('next.suggestedBecause', { tags: shared.join(', '), place: becauseOf })}`
+      : '';
+  const body = `Hi ${agency.name},\n\nWe loved travelling with you and we're now thinking about ${ins.name}${ins.country ? ` (${ins.country})` : ''}. Could you put together some options and prices for us?${reason}\n\nThanks!`;
   const mailto = `mailto:${agency.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   const tel = `tel:${agency.phone.replace(/\s+/g, '')}`;
 

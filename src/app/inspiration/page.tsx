@@ -3,14 +3,12 @@
 import { useBooking } from '@/lib/booking-context';
 import { NavBar } from '@/components/nav-bar';
 import { PageEnter } from '@/components/page-enter';
-import { InspirationCard } from '@/components/inspiration-card';
-import { getInspirations } from '@/data/inspirations';
+import { SuggestionRail } from '@/components/suggestion-rail';
 import { useI18n } from '@/lib/locale-context';
 
 export default function InspirationPage() {
   const { booking } = useBooking();
   const { t } = useI18n();
-  const items = getInspirations(booking.primaryCountryCode);
   const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
 
   const intro = tripOver
@@ -22,18 +20,12 @@ export default function InspirationPage() {
       <NavBar title={t('next.whereNext')} backLabel={t('tab.trip')} />
       <PageEnter>
         <main className="px-5 pt-2 pb-8">
-          <header className="py-3">
-            <h1 className="font-serif text-[30px] leading-tight text-ink">
-              {t('next.whereNext')}
-            </h1>
-            <p className="text-sm text-ink-2 mt-1.5">{intro}</p>
-          </header>
-
-          <div className="space-y-3 mt-2">
-            {items.map((ins) => (
-              <InspirationCard key={ins.id} inspiration={ins} agency={booking.agency} />
-            ))}
-          </div>
+          {/* No page <h1>: NavBar already renders one, and a second "Where
+              next?" above the rail that also says it read as a stutter.
+              Extending the trip they already have comes first — it is the
+              easier sale and the only rail that keeps their own country. */}
+          <SuggestionRail reason="paired" variant="full" />
+          <SuggestionRail reason="similar" variant="full" intro={intro} />
 
           <p className="mt-5 text-[11px] text-ink-3 leading-relaxed text-center">
             {t('next.footer', { agency: booking.agency.name })}

@@ -10,9 +10,21 @@
  * distinctive token (>= 5 chars, not a generic geography word) and at a word
  * boundary. Matching is scoped to the booking's OWN country, so a false
  * cross-country match is impossible.
+ *
+ * LAST RESORT (only when the scorer above found nothing): the roster is a
+ * snapshot of Cities and Regions, so it has no row for a resort or area. An
+ * Orlando booking therefore scored 0 against "Florida" — the relationship
+ * between the two is an Airtable parent link, not a name similarity, and no
+ * threshold could ever recover it. So an unscored signal is looked up in the
+ * generated place index, which does carry that link, and resolved to the
+ * nearest ancestor that actually has an uploaded hero: Orlando → Florida.
+ * The result is re-checked with isKnownLocation(), so this function can still
+ * only ever return a roster slug — the pickers, the upload validator and the
+ * hero path all keep their existing guarantees.
  */
 
-import { HERO_LOCATIONS_BY_COUNTRY } from '@/data/hero-locations';
+import { HERO_LOCATIONS_BY_COUNTRY, isKnownLocation } from '@/data/hero-locations';
+import { normPlace, resolvePlaceRef, heroSlugFor } from '@/lib/place-index';
 
 // Generic geography words that must never trigger a match on their own.
 const STOPWORDS = new Set([
@@ -21,16 +33,6 @@ const STOPWORDS = new Set([
   'alps', 'peninsula', 'lakes', 'lake', 'highlands', 'national', 'park', 'sacred',
   'grand', 'greater', 'golden', 'triangle', 'and', 'the', 'los', 'las', 'del', 'de', 'la',
 ]);
-
-function norm(s: string): string {
-  return (s || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // strip accents
-    .toLowerCase()
-    .replace(/&/g, ' ')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -48,10 +50,10 @@ interface Key { key: string; weight: number }
 function candidateKeys(name: string, slug: string): Key[] {
   const phrases: string[] = [];
   for (const part of name.split(/[&,/]/)) {
-    const n = norm(part.replace(/\bthe\b/gi, ''));
+    const n = normPlace(part.replace(/\bthe\b/gi, ''));
     if (n) phrases.push(n);
   }
-  const slugPhrase = norm(slug.replace(/-/g, ' '));
+  const slugPhrase = normPlace(slug.replace(/-/g, ' '));
   if (slugPhrase) phrases.push(slugPhrase);
 
   const keys: Key[] = [];
@@ -80,7 +82,7 @@ export function matchLocationSlug(
   if (!locs || !locs.length) return undefined;
 
   const normSignals = Array.from(
-    new Set(signals.map((s) => norm(s || '')).filter((s) => s.length >= 3)),
+    new Set(signals.map((s) => normPlace(s || '')).filter((s) => s.length >= 3)),
   );
   if (!normSignals.length) return undefined;
 
@@ -100,5 +102,16 @@ export function matchLocationSlug(
     }
     if (score > bestScore) { bestScore = score; bestSlug = loc.slug; }
   }
-  return bestScore >= MIN_SCORE ? bestSlug : undefined;
+  if (bestScore >= MIN_SCORE) return bestSlug;
+
+  // Last resort: a child place (resort/area) whose PARENT city is in the
+  // roster. Exact equality on a whole normalised signal only — the scorer above
+  // is untouched, so every booking that matches today matches identically.
+  for (const s of normSignals) {
+    const ref = resolvePlaceRef({ countryCode: code, signals: [s] });
+    if (!ref || ref.tier === 'country') continue;
+    const slug = heroSlugFor(ref);
+    if (slug && isKnownLocation(code, slug)) return slug;
+  }
+  return undefined;
 }

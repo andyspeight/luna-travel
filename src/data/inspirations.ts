@@ -13,7 +13,15 @@
  * `fromPrice` is promotional "from" copy the agency sets for marketing — it is
  * NOT booking/supplier data and is always optional (a missing price simply
  * hides the chip). It is never derived from a real booking.
+ *
+ * This list is now the OFFLINE FLOOR. Live suggestions come from the place
+ * content chain (PlaceView.suggestions) via inspirationFromSuggestion(); when
+ * there is no content — no AIRTABLE_KEY, an unmatched destination, a cold or
+ * failing adapter — getInspirations() still answers, so the rebooking surface
+ * and the enquiry funnel behind it are never blank.
  */
+
+import type { PlaceSuggestion } from '@/types/destination-content';
 
 export interface Inspiration {
   id: string;
@@ -28,6 +36,27 @@ export interface Inspiration {
   tags?: string[];
   /** Distinct card gradient so cards look good before any photo is uploaded. */
   gradient: string;
+  /**
+   * City/region slug for heroImageUrl()'s third argument, so a suggestion gets
+   * its own photo with the country image then the gradient behind it. Only ever
+   * a slug the hero bucket was known to hold at index-generation time.
+   */
+  locationSlug?: string;
+  /** The suggested place's own "Best For Tags", verbatim. DESCRIBES THE
+   *  SUGGESTION, NOT THE TRAVELLER. Never put these in a first-person sentence:
+   *  the enquiry is sent from the traveller's own address, so "We loved Orlando
+   *  — Couples, Luxury, Honeymoons, Beach" reads to the agent as the traveller
+   *  describing Orlando and mis-qualifies the lead. Use `sharedTags`, attributed
+   *  to the machine, for anything a human will read. */
+  audience?: string[];
+  /** The tags this suggestion has in common with the place the traveller is
+   *  actually booked into — the visible, defensible "why". This is the only tag
+   *  set that may be shown to a traveller or an agent as a reason, and only ever
+   *  as an explicit machine attribution (t('next.suggestedBecause')). */
+  sharedTags?: string[];
+  /** Airtable record id when this card came from place content, so a card can
+   *  be traced back to the row that produced it. */
+  sourceId?: string;
 }
 
 const INSPIRATIONS: Inspiration[] = [
@@ -119,4 +148,53 @@ export function getInspirations(excludeCode?: string): Inspiration[] {
   const ex = (excludeCode ?? '').toUpperCase();
   const list = ex ? INSPIRATIONS.filter((i) => i.code.toUpperCase() !== ex) : INSPIRATIONS;
   return list;
+}
+
+/** The card gradients, reused for suggestions so a live card is visually
+ *  indistinguishable from a curated one before its photo loads. */
+const GRADIENTS: string[] = INSPIRATIONS.map((i) => i.gradient);
+
+/** Stable per-record gradient: the same suggestion keeps the same colours on
+ *  every render and on every device, so the rail never flickers between them. */
+function gradientFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return GRADIENTS[h % GRADIENTS.length];
+}
+
+/**
+ * A live suggestion as an Inspiration card.
+ *
+ * Deliberately sets no `nights` and no `fromPrice`: those are agency-set
+ * promotional copy (see the header) and there is nothing in the content base
+ * that may stand in for them.
+ *
+ * `blurb` is left EMPTY on purpose. The only sentence we can honestly write
+ * about a live suggestion is "also good for <shared tags>", and that sentence
+ * has to be translated — this module is plain data with no locale. So the tags
+ * travel as structured `sharedTags` and InspirationCard renders them through
+ * t('next.alsoGoodFor'). A French traveller was getting English here.
+ *
+ * `tags` (the chips the card actually renders) are the SHARED tags, so the card
+ * shows the same "why" the rail's subline claims. They fall back to the
+ * suggestion's own Best For Tags for a paired suggestion, which is curated by
+ * an editor rather than chosen by tag overlap and so has no shared set.
+ */
+export function inspirationFromSuggestion(s: PlaceSuggestion): Inspiration {
+  const shared = (s.sharedTags ?? []).filter(Boolean);
+  const bestFor = (s.bestForTags ?? []).filter(Boolean);
+  return {
+    id: `sug-${s.id}`,
+    code: s.code,
+    name: s.name,
+    country: s.ancestry?.length ? s.ancestry[s.ancestry.length - 1] : '',
+    tagline: s.tagline ?? '',
+    blurb: '',
+    tags: shared.length > 0 ? shared : bestFor,
+    locationSlug: s.heroSlug || undefined,
+    audience: bestFor,
+    sharedTags: shared,
+    sourceId: s.id,
+    gradient: gradientFor(s.id),
+  };
 }

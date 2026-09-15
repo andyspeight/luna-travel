@@ -41,6 +41,13 @@ type Dict = Record<Locale, string>;
 const S: Record<string, Dict> = {
   // ── Common ──
   'common.seeAll': { en: 'See all', ro: 'Vezi tot', fr: 'Tout voir', de: 'Alle', es: 'Ver todo', it: 'Vedi tutto' },
+  'common.back': { en: 'Back', ro: 'Înapoi', fr: 'Retour', de: 'Zurück', es: 'Atrás', it: 'Indietro' },
+  'common.backToItinerary': { en: 'Back to itinerary', ro: 'Înapoi la itinerar', fr: 'Retour à l’itinéraire', de: 'Zurück zum Reiseplan', es: 'Volver al itinerario', it: 'Torna all’itinerario' },
+  // Only ever rendered for a value the source actually states. A park row
+  // whose Airtable cell is blank hides itself rather than printing 'No' —
+  // missing data must never read as a definite negative fact.
+  'common.yes': { en: 'Yes', ro: 'Da', fr: 'Oui', de: 'Ja', es: 'Sí', it: 'Sì' },
+  'common.no': { en: 'No', ro: 'Nu', fr: 'Non', de: 'Nein', es: 'No', it: 'No' },
 
   // ── Tab bar ──
   'tab.trip': { en: 'Trip', ro: 'Călătorie', fr: 'Voyage', de: 'Reise', es: 'Viaje', it: 'Viaggio' },
@@ -239,6 +246,87 @@ const S: Record<string, Dict> = {
   'guide.cat.shop': { en: 'Shopping', ro: 'Cumpărături', fr: 'Shopping', de: 'Einkaufen', es: 'Compras', it: 'Shopping' },
   'guide.cat.practical': { en: 'Practical', ro: 'Util', fr: 'Pratique', de: 'Praktisch', es: 'Práctico', it: 'Utile' },
   'guide.cat.other': { en: 'Place', ro: 'Loc', fr: 'Lieu', de: 'Ort', es: 'Sitio', it: 'Luogo' },
+
+  // ── Destination content: what's on ──
+  // Events carry a month token and no year, so the copy never promises a date.
+  'whatson.section': { en: 'While you’re there', ro: 'Cât ești acolo', fr: 'Pendant votre séjour', de: 'Während Ihres Aufenthalts', es: 'Mientras estés allí', it: 'Durante il soggiorno' },
+  'whatson.yearRound': { en: '{place} through the year', ro: '{place} de-a lungul anului', fr: '{place} au fil de l’année', de: '{place} im Jahresverlauf', es: '{place} durante el año', it: '{place} durante l’anno' },
+  'whatson.note': { en: 'Local events, not part of your booking', ro: 'Evenimente locale, nu fac parte din rezervare', fr: 'Événements locaux, non inclus dans votre réservation', de: 'Lokale Veranstaltungen, nicht Teil Ihrer Buchung', es: 'Eventos locales, no incluidos en tu reserva', it: 'Eventi locali, non inclusi nella prenotazione' },
+  // Events whose month token sits outside the trip window, or did not parse at
+  // all. Deliberately NOT a year-round claim: the source never states that an
+  // event runs all year, so the heading only says 'not while you are there'.
+  'whatson.otherTimes': { en: 'Other times of year', ro: 'În alte perioade ale anului', fr: 'À d’autres moments de l’année', de: 'Zu anderen Zeiten im Jahr', es: 'En otras épocas del año', it: 'In altri periodi dell’anno' },
+  // Events whose month token cannot be read ('Easter', 'Varies'). Claims no date
+  // at all, because filing them under a month or a season would assert the one
+  // fact the source is missing.
+  'whatson.datesVary': { en: 'Dates vary', ro: 'Datele variază', fr: 'Dates variables', de: 'Termine variieren', es: 'Fechas variables', it: 'Date variabili' },
+
+  // ── Destination content: place ──
+  'place.highlights': { en: 'Highlights', ro: 'Puncte forte', fr: 'À ne pas manquer', de: 'Highlights', es: 'Lo mejor', it: 'Da non perdere' },
+  'place.thingsToDo': { en: 'Things to do', ro: 'Ce poți face', fr: 'À faire', de: 'Aktivitäten', es: 'Qué hacer', it: 'Cosa fare' },
+  'place.food': { en: 'Food & drink', ro: 'Mâncare & băutură', fr: 'Manger & boire', de: 'Essen & Trinken', es: 'Comer y beber', it: 'Mangiare e bere' },
+  'place.gettingThere': { en: 'Getting there', ro: 'Cum ajungi', fr: 'Y aller', de: 'Anreise', es: 'Cómo llegar', it: 'Come arrivare' },
+  'place.gettingAround': { en: 'Getting around', ro: 'Cum te deplasezi', fr: 'Se déplacer', de: 'Vor Ort unterwegs', es: 'Cómo moverse', it: 'Come spostarsi' },
+  'place.bestTime': { en: 'Best time to visit', ro: 'Cea mai bună perioadă', fr: 'Quand y aller', de: 'Beste Reisezeit', es: 'Mejor época para ir', it: 'Quando andare' },
+  'place.flightTime': { en: 'Flight time from the UK', ro: 'Durata zborului din Marea Britanie', fr: 'Temps de vol depuis le Royaume-Uni', de: 'Flugzeit ab Großbritannien', es: 'Duración del vuelo desde el Reino Unido', it: 'Durata del volo dal Regno Unito' },
+  'place.power': { en: 'Power', ro: 'Curent electric', fr: 'Électricité', de: 'Strom', es: 'Electricidad', it: 'Corrente elettrica' },
+  'place.climate': { en: 'Typical weather', ro: 'Vreme obișnuită', fr: 'Météo habituelle', de: 'Typisches Wetter', es: 'Tiempo habitual', it: 'Meteo tipico' },
+  // Tier labels on stacked prose — the same section can appear for the resort
+  // and again for the region, and the traveller has to be able to tell which.
+  'place.inOrlando': { en: 'In {place}', ro: 'În {place}', fr: 'À {place}', de: 'In {place}', es: 'En {place}', it: 'A {place}' },
+  'place.acrossX': { en: 'Across {place}', ro: 'În {place}', fr: 'Dans toute la région de {place}', de: 'In ganz {place}', es: 'Por todo {place}', it: 'In tutta {place}' },
+  'place.credit': { en: 'Destination content by Travelgenix', ro: 'Conținut despre destinație de Travelgenix', fr: 'Contenu destination par Travelgenix', de: 'Reiseziel-Inhalte von Travelgenix', es: 'Contenido del destino por Travelgenix', it: 'Contenuti destinazione di Travelgenix' },
+
+  // ── Destination content: theme parks ──
+  'park.section': { en: 'Your park guide', ro: 'Ghidul parcului tău', fr: 'Votre guide du parc', de: 'Ihr Park-Guide', es: 'Tu guía del parque', it: 'La tua guida al parco' },
+  'park.nearby': { en: 'Theme parks in the area', ro: 'Parcuri tematice în zonă', fr: 'Parcs à thème dans la région', de: 'Freizeitparks in der Umgebung', es: 'Parques temáticos en la zona', it: 'Parchi a tema in zona' },
+  'park.full': { en: 'Full park guide', ro: 'Ghid complet', fr: 'Guide complet du parc', de: 'Vollständiger Park-Guide', es: 'Guía completa del parque', it: 'Guida completa al parco' },
+  'park.days': { en: 'Days needed', ro: 'Zile necesare', fr: 'Jours nécessaires', de: 'Benötigte Tage', es: 'Días necesarios', it: 'Giorni necessari' },
+  'park.heights': { en: 'Height restrictions', ro: 'Restricții de înălțime', fr: 'Restrictions de taille', de: 'Größenbeschränkungen', es: 'Restricciones de altura', it: 'Limiti di altezza' },
+  'park.fastTrack': { en: 'Fast track', ro: 'Acces rapid', fr: 'Coupe-file', de: 'Fast Track', es: 'Acceso rápido', it: 'Accesso rapido' },
+  'park.family': { en: 'With children', ro: 'Cu copiii', fr: 'Avec des enfants', de: 'Mit Kindern', es: 'Con niños', it: 'Con bambini' },
+  'park.thrill': { en: 'For thrill-seekers', ro: 'Pentru amatorii de adrenalină', fr: 'Pour les amateurs de sensations', de: 'Für Adrenalinjunkies', es: 'Para los amantes de la adrenalina', it: 'Per chi ama il brivido' },
+  'park.stars': { en: 'Don’t miss', ro: 'Nu rata', fr: 'À ne pas manquer', de: 'Nicht verpassen', es: 'No te pierdas', it: 'Da non perdere' },
+  'park.tips': { en: 'Insider tips', ro: 'Sfaturi utile', fr: 'Bons plans', de: 'Insidertipps', es: 'Consejos locales', it: 'Consigli utili' },
+  'park.access': { en: 'Accessibility', ro: 'Accesibilitate', fr: 'Accessibilité', de: 'Barrierefreiheit', es: 'Accesibilidad', it: 'Accessibilità' },
+  'park.hotels': { en: 'On-site hotels', ro: 'Hoteluri în parc', fr: 'Hôtels sur place', de: 'Hotels vor Ort', es: 'Hoteles en el recinto', it: 'Hotel interni' },
+  'park.official': { en: 'Official website', ro: 'Site oficial', fr: 'Site officiel', de: 'Offizielle Website', es: 'Web oficial', it: 'Sito ufficiale' },
+  'park.overview': { en: 'Overview', ro: 'Prezentare generală', fr: 'Aperçu', de: 'Überblick', es: 'Resumen', it: 'Panoramica' },
+  // Guidance copy from the content base, never a bookable rate — the label has
+  // to keep saying so in every locale.
+  'park.tickets': { en: 'Tickets and prices', ro: 'Bilete și prețuri', fr: 'Billets et tarifs', de: 'Tickets und Preise', es: 'Entradas y precios', it: 'Biglietti e prezzi' },
+  'park.priceGuide': { en: 'Price guide', ro: 'Ghid de prețuri', fr: 'Indication de prix', de: 'Preisrahmen', es: 'Orientación de precios', it: 'Fascia di prezzo' },
+  'park.airport': { en: 'Nearest airport', ro: 'Cel mai apropiat aeroport', fr: 'Aéroport le plus proche', de: 'Nächstgelegener Flughafen', es: 'Aeropuerto más cercano', it: 'Aeroporto più vicino' },
+  'park.combine': { en: 'Combine with', ro: 'Combină cu', fr: 'À combiner avec', de: 'Kombinieren mit', es: 'Combínalo con', it: 'Da abbinare a' },
+  // {date} is the park record's Verified Date — the only provenance the parks
+  // base carries. Never rendered without a real date behind it.
+  'park.verifiedOn': { en: 'Verified {date}', ro: 'Verificat {date}', fr: 'Vérifié le {date}', de: 'Geprüft am {date}', es: 'Verificado el {date}', it: 'Verificato il {date}' },
+  'park.unavailable': { en: 'Guide not available.', ro: 'Ghidul nu este disponibil.', fr: 'Guide non disponible.', de: 'Guide nicht verfügbar.', es: 'Guía no disponible.', it: 'Guida non disponibile.' },
+
+  // ── Where next? / Add a few days ──
+  'next.addDays': { en: 'Add a few days', ro: 'Adaugă câteva zile', fr: 'Ajoutez quelques jours', de: 'Ein paar Tage dranhängen', es: 'Añade unos días', it: 'Aggiungi qualche giorno' },
+  'next.addDaysIntro': { en: 'Easy to pair with {place}.', ro: 'Se combină ușor cu {place}.', fr: 'Se combine facilement avec {place}.', de: 'Lässt sich gut mit {place} verbinden.', es: 'Fácil de combinar con {place}.', it: 'Si abbina facilmente a {place}.' },
+  'next.becauseTags': { en: 'Because you liked {tags}', ro: 'Pentru că ți-a plăcut {tags}', fr: 'Parce que vous avez aimé {tags}', de: 'Weil Ihnen {tags} gefallen hat', es: 'Porque te gustó {tags}', it: 'Perché ti è piaciuto {tags}' },
+  // Attribution for an automatic suggestion. Phrased as the machine's own
+  // statement, NOT in the traveller's voice: this text also goes into an
+  // enquiry email sent from the traveller's address, and an agent must not
+  // read the suggested destination's tags as the traveller describing the
+  // place they actually visited. {place} is where they are booked, {tags} the
+  // tags the two places share.
+  'next.suggestedBecause': {
+    en: 'Suggested because it shares {tags} with {place}.',
+    ro: 'Sugerat pentru că are în comun {tags} cu {place}.',
+    fr: 'Suggéré car cette destination partage {tags} avec {place}.',
+    de: 'Vorgeschlagen, weil dieses Ziel {tags} mit {place} gemeinsam hat.',
+    es: 'Sugerido porque comparte {tags} con {place}.',
+    it: 'Suggerito perché condivide {tags} con {place}.',
+  },
+  'next.alsoGoodFor': { en: 'Also good for {tags}.', ro: 'Bun și pentru {tags}.', fr: 'Également apprécié pour {tags}.', de: 'Ebenfalls gut für {tags}.', es: 'También ideal para {tags}.', it: 'Ottimo anche per {tags}.' },
+
+  // ── Home tiles / hero ──
+  'tile.tickets': { en: 'Tickets', ro: 'Bilete', fr: 'Billets', de: 'Tickets', es: 'Entradas', it: 'Biglietti' },
+  'tile.things': { en: 'Things to do', ro: 'Ce poți face', fr: 'À faire', de: 'Aktivitäten', es: 'Qué hacer', it: 'Cosa fare' },
+  'home.tripCustom': { en: 'Your itinerary', ro: 'Itinerarul tău', fr: 'Votre itinéraire', de: 'Ihr Reiseplan', es: 'Tu itinerario', it: 'Il tuo itinerario' },
 };
 
 /** Interpolate {var} tokens. */

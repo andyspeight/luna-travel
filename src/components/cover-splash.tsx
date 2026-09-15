@@ -18,6 +18,82 @@ import {
 import { countdownTo, type CountdownParts } from '@/lib/format';
 import { cinematicCover } from '@/lib/hero';
 import { leadTraveller } from '@/lib/booking-helpers';
+import { usePlace } from '@/lib/use-place';
+import type { Booking } from '@/types/booking';
+
+/**
+ * The real instant this trip begins — what the countdown ticks down to and what
+ * the "away / home" phase lines switch on.
+ *
+ * WHY: `booking.tripStart` is a CALENDAR DATE ('2026-11-27'), deliberately, so
+ * that a trip window means the same thing in every timezone. But `new Date()`
+ * reads a bare date as 00:00 UTC, so counting straight down to it reaches zero
+ * hours before the aircraft moves and flips "I'm in Dubai right now" at UTC
+ * midnight instead of at take-off. The departure instant was never lost — it
+ * lives on the items — so read it from there: the earliest flight departure ON
+ * the start day, else the earliest airport extra or dated experience that
+ * carries a time, else the calendar date exactly as before.
+ *
+ * Only same-day candidates count. A booking that opens with an airport hotel
+ * the night before an 06:00 flight must still count down to that hotel day; a
+ * blind "first flight" would overshoot it by a day.
+ *
+ * A booking with no time information anywhere falls through to `tripStart`
+ * untouched, so it keeps its current behaviour (including a NaN date staying
+ * NaN, which is what the zeroed clock downstream already expects).
+ *
+ * WHY IT LIVES HERE: its natural home is a shared helper lib, but this pass
+ * owns only this file and app/page.tsx, so it is exported from here and
+ * imported there rather than duplicated. Worth relocating to
+ * `@/lib/booking-helpers` next time that file is in scope.
+ */
+export function tripStartInstant(booking: Booking): string {
+  const day = dayPart(booking.tripStart);
+  if (!day) return booking.tripStart;
+
+  // Flights first: take-off is the moment the traveller is counting to.
+  const flight = earliest((booking.flights ?? []).map((f) => instantOn(day, f.depTime)));
+  if (flight !== null) return new Date(flight).toISOString();
+
+  // No flight — the lounge, the transfer or the ticket that opens the day.
+  const other = earliest([
+    ...(booking.airportExtras ?? []).map((x) => instantOn(day, x.date, x.time)),
+    ...(booking.experiences ?? []).map((e) => instantOn(day, e.startDate, e.time)),
+  ]);
+  if (other !== null) return new Date(other).toISOString();
+
+  return booking.tripStart;
+}
+
+/** 'YYYY-MM-DD' from an ISO date or date-time, '' when there isn't one. Same
+ *  leading-10-characters reading order-to-booking normalises with, so the day
+ *  always compares like with like. */
+function dayPart(iso: string | undefined): string {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec((iso ?? '').trim());
+  return m ? m[1] : '';
+}
+
+/** Milliseconds for a component starting on `day`, or null when it falls on a
+ *  different day or carries no time at all. A full ISO timestamp is trusted as
+ *  given; a bare 'HH:MM' has no zone, so it is read as local time — the same
+ *  reading the itinerary already prints it with. */
+function instantOn(day: string, date?: string, time?: string): number | null {
+  if (dayPart(date) !== day) return null;
+  const raw = (date ?? '').trim();
+  let ms = /T\d{2}:\d{2}/.test(raw) ? new Date(raw).getTime() : NaN;
+  if (Number.isNaN(ms)) {
+    const hm = /^(\d{1,2}):(\d{2})$/.exec((time ?? '').trim());
+    if (!hm) return null; // date only — no instant to be had, so don't invent one
+    ms = new Date(`${day}T${hm[1].padStart(2, '0')}:${hm[2]}:00`).getTime();
+  }
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function earliest(values: Array<number | null>): number | null {
+  let best: number | null = null;
+  for (const v of values) if (v !== null && (best === null || v < best)) best = v;
+  return best;
+}
 
 /**
  * Vamoos-style full-bleed welcome splash.
@@ -36,9 +112,27 @@ import { leadTraveller } from '@/lib/booking-helpers';
 export function CoverSplash() {
   const { booking } = useBooking();
   const { dismiss } = useCover();
-  const cover = cinematicCover(booking.primaryCountryCode, booking.locationSlug);
+  // The splash, the home hero and /destination must all key the photo the same
+  // way, or one trip shows two different covers. booking.locationSlug is only
+  // re-derived on the live Travelify path; a redeemed invite persists
+  // location_slug at redeem time and a stored off-platform payload bakes it in,
+  // so for those rows it stays null — those travellers saw the generic country
+  // photo on the FIRST screen and the right one a tap later. place.heroSlug is
+  // resolved from the booking's signals at request time and fixes them.
+  // usePlace shares a module-level cache and one in-flight promise with the
+  // home screen that renders this component, so this costs no extra request;
+  // until it resolves the country photo shows, which is the same layer the
+  // location photo sits on top of anyway.
+  const { place } = usePlace(booking);
+  const cover = cinematicCover(
+    booking.primaryCountryCode,
+    place?.heroSlug || booking.locationSlug,
+  );
   const lead = leadTraveller(booking);
-  const [parts, setParts] = useState<CountdownParts>(() => countdownTo(booking.tripStart));
+  // Not booking.tripStart: that is a calendar date, and counting down to its
+  // UTC midnight hits zero before the flight has left. See tripStartInstant.
+  const startIso = tripStartInstant(booking);
+  const [parts, setParts] = useState<CountdownParts>(() => countdownTo(startIso));
   const [shared, setShared] = useState(false);
 
   // Share the countdown moment — text only, no links, nothing private beyond
@@ -54,7 +148,7 @@ export function CoverSplash() {
     const text =
       now > new Date(booking.tripEnd).getTime()
         ? `Just home${dest ? ` from ${dest}` : ''} — what a trip! ${sign}`
-        : now >= new Date(booking.tripStart).getTime()
+        : now >= new Date(startIso).getTime()
           ? `${dest ? `I'm in ${dest}` : "I'm away"} right now ${sign}`
           : parts.days > 0
             ? `${parts.days} day${parts.days === 1 ? '' : 's'} until ${dest || 'my trip'}! ${sign}`
@@ -73,10 +167,10 @@ export function CoverSplash() {
   };
 
   useEffect(() => {
-    setParts(countdownTo(booking.tripStart));
-    const id = setInterval(() => setParts(countdownTo(booking.tripStart)), 1000);
+    setParts(countdownTo(startIso));
+    const id = setInterval(() => setParts(countdownTo(startIso)), 1000);
     return () => clearInterval(id);
-  }, [booking.tripStart]);
+  }, [startIso]);
 
   const headline = tripHeadline(booking);
 
@@ -89,32 +183,57 @@ export function CoverSplash() {
         paddingBottom: 'var(--safe-bottom)',
       }}
     >
-      {/* Top vignette for legibility of the header */}
+      {/* Top vignette for legibility of the header.
+          The old 0.35 → transparent ramp over h-32 died before it reached the
+          chrome: the vignette starts at the physical top of the screen, so on a
+          notched phone the safe-area inset alone eats a third of it and the
+          agency name lands where the alpha is nearly zero. Over pure white
+          photography that left 10px text at roughly 1.4:1. The ramp now runs
+          160px with a shaping stop, so the composited floor is ~0.26 alpha
+          (0.74 white) behind the icon buttons and ~0.19 (0.81 white) behind the
+          agency name — the header chips below take it the rest of the way. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 top-0 h-32 pointer-events-none"
+        className="absolute inset-x-0 top-0 h-40 pointer-events-none"
         style={{
           background:
-            'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 100%)',
+            'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.38) 55%, rgba(0,0,0,0.15) 82%, transparent 100%)',
         }}
       />
-      {/* Middle/bottom vignette for the headline & countdown */}
+      {/* Middle/bottom scrim for the headline & countdown.
+          Deliberately heavier than it looks like it needs to be. The old ramp
+          reached only ~0.35 where the headline sits, which is fine over a dim
+          sea and unreadable over bright sky, pale sand or a theme-park photo.
+          White-on-photo has to hold at the worst case, not the average one. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-[60%] pointer-events-none"
+        className="absolute inset-x-0 bottom-0 h-[72%] pointer-events-none"
         style={{
           background:
-            'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.15) 35%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.6) 100%)',
+            'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.10) 22%, rgba(0,0,0,0.38) 48%, rgba(0,0,0,0.62) 72%, rgba(0,0,0,0.78) 100%)',
         }}
       />
 
-      {/* ── Top bar ── */}
-      <header className="relative z-10 flex items-center justify-between px-4 pt-3">
+      {/* ── Top bar ──
+          The chips were bg-white/15: a white wash on a white photograph, which
+          is why the three 1px hamburger rules and the 10px agency name both
+          disappeared over bright sky. They are now black-tinted, so each chip
+          darkens whatever is under it instead of lightening it, and the
+          backdrop-blur is kept purely for the glass texture rather than being
+          the only thing separating the chrome from the photo.
+          Worst case, pure white photo: vignette leaves 0.74 white behind the
+          icon buttons and 0.81 behind the agency name; black/45 composites
+          those to 0.41 and 0.44, giving the white/95 name ~4.6:1 and the white
+          rules and icons well past the 3:1 non-text floor. */}
+      <header
+        className="relative z-10 flex items-center justify-between px-4 pt-3"
+        style={{ textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}
+      >
         <Link
           href="/me"
           onClick={dismiss}
           aria-label="Menu"
-          className="w-10 h-10 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-colors"
+          className="w-10 h-10 rounded-full bg-black/45 border border-white/25 backdrop-blur flex items-center justify-center hover:bg-black/55 transition-colors"
         >
           <span aria-hidden className="block w-4 space-y-[3px]">
             <span className="block h-px bg-white" />
@@ -124,11 +243,11 @@ export function CoverSplash() {
         </Link>
 
         <BookingPicker>
-          <div className="px-3 py-2 rounded-xl bg-white/15 backdrop-blur border border-white/15 flex flex-col items-center gap-1.5">
+          <div className="px-3 py-2 rounded-xl bg-black/45 backdrop-blur border border-white/25 flex flex-col items-center gap-1.5">
             {booking.agency.logoUrl && (
               <AgencyLogo agency={booking.agency} size={26} />
             )}
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/80 text-center">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-white/95 text-center">
               {booking.agency.name}
             </div>
           </div>
@@ -138,15 +257,18 @@ export function CoverSplash() {
           type="button"
           aria-label="Share your trip"
           onClick={shareTrip}
-          className="w-10 h-10 rounded-full bg-white/15 backdrop-blur flex items-center justify-center hover:bg-white/25 transition-colors"
+          className="w-10 h-10 rounded-full bg-black/45 border border-white/25 backdrop-blur flex items-center justify-center hover:bg-black/55 transition-colors"
         >
           {shared ? <IconCheck size={16} /> : <IconShare size={16} />}
         </button>
       </header>
 
       {/* ── Body: headline + countdown ── */}
-      <div className="relative z-10 flex-1 flex flex-col justify-end items-center px-6 pb-44 text-center">
-        <div className="mb-6 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-white/80">
+      <div
+        className="relative z-10 flex-1 flex flex-col justify-end items-center px-6 pb-44 text-center"
+        style={{ textShadow: '0 1px 12px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.4)' }}
+      >
+        <div className="mb-6 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-white">
           <IconPin size={12} />
           {booking.destinationLabel}
         </div>
@@ -154,23 +276,28 @@ export function CoverSplash() {
         <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight max-w-[300px]">
           {headline}
         </h1>
-        <p className="mt-1.5 text-base text-white/85">{lead.firstName}</p>
+        <p className="mt-1.5 text-base text-white/95">{lead.firstName}</p>
 
         {/* Countdown clock — only while the trip is still ahead. During or
             after the trip a ticking zero clock reads as broken, so show a
             phase-appropriate line instead. */}
-        {Date.now() < new Date(booking.tripStart).getTime() ? (
+        {Date.now() < new Date(startIso).getTime() ? (
           <div className="mt-9">
             <div className="font-light text-[44px] leading-none tracking-tight tabular flex items-baseline justify-center gap-1">
               <span className="min-w-[58px] text-center">{String(parts.days).padStart(2, '0')}</span>
-              <span className="text-white/55 px-0.5">:</span>
+              <span className="text-white/85 px-0.5">:</span>
               <span className="min-w-[58px] text-center">{String(parts.hours).padStart(2, '0')}</span>
-              <span className="text-white/55 px-0.5">:</span>
+              <span className="text-white/85 px-0.5">:</span>
               <span className="min-w-[58px] text-center">{String(parts.minutes).padStart(2, '0')}</span>
-              <span className="text-white/55 px-0.5">:</span>
+              <span className="text-white/85 px-0.5">:</span>
               <span className="min-w-[58px] text-center">{String(parts.seconds).padStart(2, '0')}</span>
             </div>
-            <div className="mt-2.5 grid grid-cols-4 gap-1 max-w-[280px] mx-auto text-[10px] uppercase tracking-[0.18em] text-white/65">
+            {/* 10px at 0.18em tracking is the smallest type on the splash, and
+                it sits where the scrim is only ~0.62 — white/80 measured barely
+                over 4:1 against a white photo there. white/95 clears 5:1, and
+                the separators follow at /85 so the clock still reads as one
+                figure rather than four. */}
+            <div className="mt-2.5 grid grid-cols-4 gap-1 max-w-[280px] mx-auto text-[10px] uppercase tracking-[0.18em] text-white/95">
               <span className="text-center">Days</span>
               <span className="text-center">Hours</span>
               <span className="text-center">Mins</span>
@@ -178,7 +305,7 @@ export function CoverSplash() {
             </div>
           </div>
         ) : (
-          <p className="mt-9 text-[15px] text-white/80">
+          <p className="mt-9 text-[15px] text-white/90">
             {Date.now() > new Date(booking.tripEnd).getTime()
               ? 'We hope it was unforgettable.'
               : 'Enjoy every moment.'}
@@ -186,11 +313,25 @@ export function CoverSplash() {
         )}
       </div>
 
-      {/* ── Dock ── */}
+      {/* ── Dock ──
+          The glass is the only thing separating the dock from the photograph,
+          and it is load-bearing: rgba(255,255,255,0.14) READ ALONE is a white
+          wash, so wherever backdrop-filter is unsupported or switched off
+          (Firefox with the pref disabled, reduced-transparency modes, older
+          WebKit) the dock vanishes into a bright bottom edge. The @supports
+          fallback swaps in slate at 0.62, which over the scrim's 0.78 floor
+          composites to ~0.15 white — the labels clear 10:1 there, against
+          ~6.4:1 with the blur working. It has to live in a rule rather than
+          the inline style, because an inline background would win over it. */}
+      <style>{`
+        .cover-dock { background: rgba(255,255,255,0.14); }
+        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+          .cover-dock { background: rgba(15,23,42,0.62); }
+        }
+      `}</style>
       <nav
-        className="relative z-10 mx-3 mb-3 rounded-3xl px-2 py-2 grid grid-cols-4 gap-1"
+        className="cover-dock relative z-10 mx-3 mb-3 rounded-3xl px-2 py-2 grid grid-cols-4 gap-1"
         style={{
-          background: 'rgba(255,255,255,0.14)',
           backdropFilter: 'blur(24px) saturate(180%)',
           WebkitBackdropFilter: 'blur(24px) saturate(180%)',
           border: '1px solid rgba(255,255,255,0.15)',
@@ -223,8 +364,16 @@ export function CoverSplash() {
         />
       </nav>
 
+      {/* The credit sat at 9px/white-45, which is under 2:1 against the scrim's
+          0.78 floor and simply unreadable over a bright bottom edge — an
+          attribution nobody can read is not an attribution. 10px at white/75
+          over that floor measures ~7.4:1, and it borrows the body block's
+          shadow so it survives the stretch of photo the scrim does not cover. */}
       {cover.credit && (
-        <div className="relative z-10 pb-1 text-center text-[9px] text-white/45 tracking-wide">
+        <div
+          className="relative z-10 pb-1 text-center text-[10px] text-white/75 tracking-wide"
+          style={{ textShadow: '0 1px 12px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.4)' }}
+        >
           {cover.credit}
         </div>
       )}
@@ -249,8 +398,8 @@ function DockButton({
       onClick={onTap}
       className="flex flex-col items-center justify-center py-2.5 rounded-2xl hover:bg-white/10 active:bg-white/15 transition-colors min-h-[58px]"
     >
-      <span className="text-white/95">{icon}</span>
-      <span className="text-[10px] mt-1 font-medium tracking-wide text-white/80">{label}</span>
+      <span className="text-white">{icon}</span>
+      <span className="text-[10px] mt-1 font-medium tracking-wide text-white/95">{label}</span>
     </Link>
   );
 }
@@ -276,7 +425,10 @@ function tripHeadline(booking: ReturnType<typeof useBooking>['booking']): string
   if (now > new Date(booking.tripEnd).getTime()) {
     return dest ? `Welcome home from ${dest}` : 'Welcome home';
   }
-  if (now >= new Date(booking.tripStart).getTime()) {
+  // The real departure instant, not the calendar date's UTC midnight — the
+  // headline must turn from "Your trip to Dubai" into "Enjoy Dubai" when the
+  // flight leaves, in step with the countdown above it, not hours earlier.
+  if (now >= new Date(tripStartInstant(booking)).getTime()) {
     return dest ? `Enjoy ${dest}` : 'Enjoy every moment';
   }
 

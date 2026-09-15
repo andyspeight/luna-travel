@@ -32,6 +32,7 @@ import type {
   TripStartEvent,
 } from '@/types/booking';
 import { matchLocationSlug } from '@/lib/location-match';
+import { HERO_DESTINATIONS } from '@/data/hero-destinations';
 
 // ───────── Loosely-typed view of the trimmed Control/Travelify order ─────────
 // We keep these permissive: the order is sanitised server-side, and we never
@@ -178,11 +179,24 @@ function addDays(isoDate: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
-function daysBetween(a: string, b: string): number {
+/**
+ * The number of days the traveller is actually away, counting both ends.
+ *
+ * This replaces a daysBetween() that measured a SPAN — the right unit for
+ * nights and the wrong one for days. Attraction tickets on the 23rd and the
+ * 24th are one span apart but two days out, and the booking read "1 day".
+ * Nobody describes that trip as a day trip. Nights still come from the
+ * supplier's own count and never go through here.
+ *
+ * Returns 0 — not 1 — for a missing, unreadable or reversed pair of dates, so
+ * the callers' `> 0` guard still filters junk out instead of inventing a
+ * one-day trip.
+ */
+function inclusiveDays(a: string, b: string): number {
   const da = new Date(`${dateOnly(a)}T00:00:00Z`).getTime();
   const db = new Date(`${dateOnly(b)}T00:00:00Z`).getTime();
-  if (Number.isNaN(da) || Number.isNaN(db)) return 0;
-  return Math.max(0, Math.round((db - da) / 86_400_000));
+  if (Number.isNaN(da) || Number.isNaN(db) || db < da) return 0;
+  return Math.round((db - da) / 86_400_000) + 1;
 }
 function timePart(s?: string | null): string | undefined {
   if (typeof s !== 'string') return undefined;
@@ -254,7 +268,6 @@ function inferDocKind(name?: string | null, ext?: string | null): BookingDocumen
 
 // ───────── Main mapper ─────────
 
-/** Normalise a Travelify country value to uppercase ISO-2, or '' if it isn't one. */
 /** Whatever the supplier called this place, in preference order. */
 function pointPlace(p?: RawPoint | null): string {
   if (!p) return '';
@@ -293,9 +306,60 @@ function attractionKind(t: RawTickets): ExperienceKind {
   return /tour|excursion|safari|cruise|day trip|sightseeing/.test(words) ? 'excursion' : 'activity';
 }
 
-function iso2(v: string | null | undefined): string {
+/** Uppercase, accent-free, punctuation-free form of a country name, so both
+ *  sides of the lookup below are spelled the same way. */
+function normCountryName(v: string): string {
+  return v
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/&/g, ' AND ')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim()
+    .replace(/^THE /, '');
+}
+
+// Forms that are not ISO-2 and are not the roster's display name either. 'UK'
+// is here because it is not an assigned ISO code — GB is — so it matched no
+// hero, no guide and no roster entry however it was spelled upstream.
+const COUNTRY_ALIASES: Record<string, string> = {
+  USA: 'US',
+  'UNITED STATES OF AMERICA': 'US',
+  UK: 'GB',
+  'GREAT BRITAIN': 'GB',
+  UAE: 'AE',
+  HOLLAND: 'NL',
+};
+
+/** Display name → ISO-2, from the roster the rest of the app already keys on. */
+const CODE_BY_COUNTRY_NAME: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const d of HERO_DESTINATIONS) {
+    const key = normCountryName(d.name);
+    if (key && !map[key]) map[key] = d.code;
+  }
+  return map;
+})();
+
+/**
+ * Normalise a Travelify country value to uppercase ISO-2, or '' if it isn't one.
+ *
+ * Suppliers are not consistent about this field: the same country arrives as
+ * 'US', 'us', 'USA' or 'United States'. Returning '' for everything but a
+ * 2-letter code left primaryCountryCode empty, and an empty country code hides
+ * the hero, the destination guide and the weather all at once — which reads as
+ * missing content rather than as a bad country value, so it goes unnoticed.
+ * A full display name is therefore resolved through the ISO roster. Anything
+ * still unrecognised returns '' — never a guess.
+ *
+ * Exported for the unit test only; nothing else should import it.
+ */
+export function iso2(v: string | null | undefined): string {
   const s = (v || '').trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(s) ? s : '';
+  if (!s) return '';
+  const alias = COUNTRY_ALIASES[s];
+  if (alias) return alias;
+  if (/^[A-Z]{2}$/.test(s)) return s;
+  return CODE_BY_COUNTRY_NAME[normCountryName(s)] || '';
 }
 
 export function orderToBooking(
@@ -368,7 +432,10 @@ export function orderToBooking(
       city: loc.city || '',
       region: loc.state || undefined,
       country: loc.country || '',
-      countryCode: (loc.country || '').toUpperCase(),
+      // Same normalisation as the experience path below: a hotel-bearing
+      // Orlando order would otherwise set primaryCountryCode to 'UNITED STATES'
+      // and fail every roster, hero and weather lookup.
+      countryCode: iso2(loc.country),
       lat: typeof loc.latitude === 'number' ? loc.latitude : undefined,
       lng: typeof loc.longitude === 'number' ? loc.longitude : undefined,
       checkIn,
@@ -541,7 +608,19 @@ export function orderToBooking(
     .filter((d) => d.url);
 
   // ----- Dates -----
-  let tripStart = summary.earliestStart || items.find((i) => i.startDate)?.startDate || '';
+  // tripStart is a CALENDAR DATE, exactly like tripEnd below, and is normalised
+  // here so the pair can never disagree about what shape they are.
+  //
+  // summary.earliestStart arrives as a full timestamp (a flight departAt), while
+  // every tripEnd candidate goes through dateOnly(). Downstream that mismatch is
+  // not cosmetic: destination-dates.tripMonths feeds splitEvents and
+  // climateForTrip from 'use client' components, and `new Date()` reads a
+  // timestamp without an offset as LOCAL midnight but a date-only string as UTC
+  // midnight — so the pair described a different month window in the traveller's
+  // browser in Tokyo than in London. destination-dates.ts now anchors its own
+  // parse to UTC regardless (bookings already stored cannot be rewritten); this
+  // stops new bookings carrying the mismatch in the first place.
+  let tripStart = dateOnly(summary.earliestStart || items.find((i) => i.startDate)?.startDate || '');
   const endCandidates: string[] = [];
   hotels.forEach((h) => { if (h.checkOut) endCandidates.push(dateOnly(h.checkOut)); });
   flights.forEach((f) => { if (f.arrTime) endCandidates.push(dateOnly(f.arrTime)); });
@@ -553,7 +632,8 @@ export function orderToBooking(
     const start = dateOnly(x.startDate);
     if (start) {
       endCandidates.push(start);
-      if (!tripStart || start < dateOnly(tripStart)) tripStart = start;
+      // tripStart is already date-only, so this compares like with like.
+      if (!tripStart || start < tripStart) tripStart = start;
     }
     if (x.endDate) endCandidates.push(dateOnly(x.endDate));
   });
@@ -581,7 +661,12 @@ export function orderToBooking(
   if (totalNights > 0) {
     durationLabel = `${totalNights} night${totalNights === 1 ? '' : 's'}`;
   } else if (tripStart && tripEnd) {
-    const days = daysBetween(tripStart, tripEnd);
+    // Nights are a span; days are a count. Only bookings with no nights at all
+    // reach here — a trip made of dated attraction tickets — and for those the
+    // traveller counts the days they are out, not the gaps between them. Tickets
+    // on the 23rd and the 24th are "2 days". A hotel booking with nights took
+    // the branch above and is untouched.
+    const days = inclusiveDays(tripStart, tripEnd);
     if (days > 0) durationLabel = `${days} day${days === 1 ? '' : 's'}`;
   }
 
@@ -698,14 +783,27 @@ export function fillTripSummaryGaps(booking: Booking): void {
   // something has supplied a country code. An experience carries a free-text
   // place, never an ISO code, so it cannot supply one itself.
   if (!booking.locationSlug && booking.primaryCountryCode) {
-    const signals = [...experiences.map((e) => e.location || ''), booking.destinationLabel];
+    // A hotel's resort and region are the supplier's own words for the area —
+    // "Orlando", "Florida" — and are often the only signal that names anything
+    // more specific than the city the property sits in.
+    const hotels = booking.hotels ?? [];
+    const signals = [
+      ...experiences.map((e) => e.location || ''),
+      ...hotels.map((h) => h.resort || ''),
+      ...hotels.map((h) => h.region || ''),
+      booking.destinationLabel,
+    ];
     booking.locationSlug = matchLocationSlug(booking.primaryCountryCode, signals);
   }
 
   // A day trip spans no nights and no whole days, so the label came out empty
   // and the trip read as having no length at all.
+  //
+  // inclusiveDays, not daysBetween: the span between two consecutive ticket
+  // dates is 1, but the traveller is out for 2 days, and the booking said
+  // "1 day". The '1 day' fallback now only catches a date we could not read.
   if (!booking.durationLabel && booking.tripStart) {
-    const days = daysBetween(booking.tripStart, booking.tripEnd || booking.tripStart);
+    const days = inclusiveDays(booking.tripStart, booking.tripEnd || booking.tripStart);
     booking.durationLabel = days > 0 ? `${days} day${days === 1 ? '' : 's'}` : '1 day';
   }
 }

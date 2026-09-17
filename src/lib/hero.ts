@@ -31,6 +31,17 @@ export interface DestinationHero {
    * gradient fallback chain. Empty unless a location slug was supplied.
    */
   imageLocation?: string;
+  /**
+   * The specific place (usually a resort) photo, layered on top of both.
+   *
+   * Orlando's own photograph rather than Florida's. Same trick as the layer
+   * below it and the reason no existence check is needed anywhere: a layer
+   * whose file is missing paints nothing, so the chain is place → location →
+   * country → gradient and a resort with no photo of its own is exactly as it
+   * was before. Empty unless a place slug was supplied AND it differs from the
+   * location slug — no point requesting the same file twice.
+   */
+  imagePlace?: string;
 }
 
 const DEFAULT: DestinationHero = {
@@ -88,14 +99,23 @@ export function heroImageUrl(
   return `${base}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
-export function destinationHero(countryCode: string, locationSlug?: string): DestinationHero {
+export function destinationHero(
+  countryCode: string,
+  locationSlug?: string,
+  placeSlug?: string,
+): DestinationHero {
   const base = HEROES[countryCode.toUpperCase()] ?? DEFAULT;
   const image = heroImageUrl(countryCode, 'landscape');
   const imageLocation = locationSlug ? heroImageUrl(countryCode, 'landscape', locationSlug) : '';
+  // Only when it is a DIFFERENT place from the location, or every city booking
+  // would fetch the same file twice for no reason.
+  const distinctPlace = placeSlug && placeSlug !== locationSlug ? placeSlug : '';
+  const imagePlace = distinctPlace ? heroImageUrl(countryCode, 'landscape', distinctPlace) : '';
   return {
     ...base,
     ...(image ? { image } : {}),
     ...(imageLocation ? { imageLocation } : {}),
+    ...(imagePlace ? { imagePlace } : {}),
   };
 }
 

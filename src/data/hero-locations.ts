@@ -13,17 +13,24 @@
  * locations"). 284 locations across 102 countries.
  *
  * THIS ROSTER IS CITIES AND REGIONS ONLY, and deliberately so. It is the sole
- * source of truth for isKnownLocation(), which gates the /admin/heroes upload
- * validator and fills both booking pickers (agency Trips, admin new booking),
- * so every row here is a place an agent can pick and a hero can be uploaded
- * for. Resorts and areas live in the separate generated
+ * source of truth for isKnownLocation(), which fills both booking pickers
+ * (agency Trips, admin new booking), so every row here is a place an agent can
+ * pick for a booking. Resorts and areas live in the separate generated
  * src/data/destination-places.ts, which carries all three tiers and the
  * Airtable parent link between them; they are NOT added here. Adding, say, an
- * 'orlando' row would put a phantom option in both pickers and point the hero
- * at a US/orlando/landscape.webp that does not exist. matchLocationSlug()
- * instead resolves a resort signal to its parent city's slug through that
- * index — Orlando → florida — and re-checks the result with isKnownLocation(),
- * so it can still only ever return a row from this file.
+ * 'orlando' row would put 495 resorts into pickers meant for cities.
+ * matchLocationSlug() instead resolves a resort signal to its parent city's
+ * slug through that index — Orlando → florida — and re-checks the result with
+ * isKnownLocation(), so it can still only ever return a row from this file.
+ *
+ * IT NO LONGER GATES HERO UPLOADS. It used to, and that conflated two
+ * different questions: "can an agent pick this for a booking?" and "can this
+ * place have its own photograph?". The second is now heroUploadablePlaces() /
+ * canUploadHeroFor() in place-index.ts, which answers for cities AND resorts —
+ * so Orlando can carry its own picture instead of only ever inheriting
+ * Florida's. Nothing breaks when a place has no photo: the cover layers
+ * country, then city, then place, and a layer whose file is missing simply
+ * does not paint.
  */
 
 export interface HeroLocation {

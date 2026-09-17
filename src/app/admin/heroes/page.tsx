@@ -23,7 +23,10 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { ImageIcon, Check, Search, Trash2, Loader2, AlertCircle, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { HERO_DESTINATIONS } from '@/data/hero-destinations';
-import { HERO_LOCATIONS_BY_COUNTRY } from '@/data/hero-locations';
+import { heroUploadablePlaces } from '@/lib/place-index';
+
+/** Cities + resorts that can carry their own hero, for the drill-down badge. */
+const placeCount = (code: string) => heroUploadablePlaces(code).length;
 
 type Variant = 'portrait' | 'landscape';
 
@@ -325,13 +328,13 @@ export default function HeroImagesPage() {
                   );
                 })}
               </div>
-              {HERO_LOCATIONS_BY_COUNTRY[d.code]?.length ? (
+              {placeCount(d.code) ? (
                 <button
                   type="button"
                   onClick={() => openCountry(d.code)}
                   style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', borderRadius: 8, border: `1px solid ${c.border}`, background: c.bgTertiary, color: c.textSecondary, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
                 >
-                  <MapPin size={13} /> {HERO_LOCATIONS_BY_COUNTRY[d.code].length} location{HERO_LOCATIONS_BY_COUNTRY[d.code].length === 1 ? '' : 's'} <ChevronRight size={14} />
+                  <MapPin size={13} /> {placeCount(d.code)} place{placeCount(d.code) === 1 ? '' : 's'} <ChevronRight size={14} />
                 </button>
               ) : null}
             </div>
@@ -427,7 +430,11 @@ function LocationManager({
   onDelete: (code: string, spec: VariantSpec, slug?: string) => void;
 }) {
   const [q, setQ] = useState('');
-  const locations = HERO_LOCATIONS_BY_COUNTRY[code] || [];
+  // Cities AND resorts. The cities-only roster fills the booking pickers, where
+  // an agent chooses a city or region — a different question from "what can be
+  // given a photograph", which was the same list only by accident. It meant a
+  // resort like Orlando could only ever inherit Florida's picture.
+  const locations = heroUploadablePlaces(code);
   const shown = locations.filter((l) => !q.trim() || l.name.toLowerCase().includes(q.trim().toLowerCase()));
 
   const renderSlots = (slug?: string) => (
@@ -472,8 +479,9 @@ function LocationManager({
       </button>
       <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>{countryName} — locations</h2>
       <p style={{ fontSize: 13, color: c.textSecondary, margin: '0 0 18px', maxWidth: 560 }}>
-        A location hero shows for bookings to that city or region, falling back to the country hero
-        below, then the gradient. Same 9:16 / 16:9 sizes.
+        A hero shows for bookings to that place, falling back to its city, then the country hero
+        below, then the gradient. A resort with no photo of its own simply shows its city&rsquo;s, so
+        adding one here can only ever improve a cover. Same 9:16 / 16:9 sizes.
       </p>
 
       <div style={{ background: c.bgElevated, border: `1px solid ${c.border}`, borderRadius: 12, padding: 14, marginBottom: 22, maxWidth: 340 }}>
@@ -488,7 +496,7 @@ function LocationManager({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={`Search ${locations.length} locations…`}
+          placeholder={`Search ${locations.length} cities and resorts…`}
           style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: 8, border: `1px solid ${c.border}`, background: c.bgElevated, color: c.text, fontSize: 14, outline: 'none' }}
         />
       </div>
@@ -502,8 +510,19 @@ function LocationManager({
           {shown.map((l) => (
             <div key={l.slug} style={{ background: c.bgElevated, border: `1px solid ${c.border}`, borderRadius: 12, padding: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                <MapPin size={14} style={{ color: c.accent }} />
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{l.name}</div>
+                <MapPin size={14} style={{ color: l.tier === 'city' ? c.accent : c.textTertiary }} />
+                <div style={{ fontWeight: 600, fontSize: 14, flex: 1, minWidth: 0 }}>{l.name}</div>
+                {/* Which tier, because "Orlando" and "Florida" sit in one list
+                    and a resort's photo overrides its city's. */}
+                <span
+                  style={{
+                    fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase',
+                    color: c.textTertiary, border: `1px solid ${c.border}`,
+                    borderRadius: 999, padding: '1px 7px', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {l.tier}
+                </span>
               </div>
               {renderSlots(l.slug)}
             </div>

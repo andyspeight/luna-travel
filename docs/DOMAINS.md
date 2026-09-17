@@ -229,11 +229,46 @@ Adding an apex SPF record would do nothing for this path.
 Cloudflare gotcha, same as the web records: those CNAMEs must be **"DNS only"
 (grey cloud)**. A proxied record breaks verification.
 
-**Worth tightening later, not urgent.** `p=none` is monitor-only: it protects
-nothing against someone spoofing `my-booking.co`, and no reports are being
-collected. Once the volume is steady, add a `rua=` address and move to
-`p=quarantine`. Do it in that order — collect reports first, so you can see
-what a stricter policy would have blocked before it starts blocking.
+### Tightening DMARC — the record to paste
+
+`p=none` is monitor-only. It protects nothing against someone spoofing
+`my-booking.co`, and with no `rua=` there is nothing being collected either, so
+there is currently no evidence on which to judge a stricter policy.
+
+**Step 1 — start collecting. Set this now:**
+
+```
+_dmarc.my-booking.co   TXT   "v=DMARC1; p=none; rua=mailto:dmarc_agg@vali.email; pct=100; ri=86400"
+```
+
+That address is not a guess. `travelify.io` already publishes
+`v=DMARC1; p=reject; sp=reject; pct=100; ri=86400; rua=mailto:dmarc_agg@vali.email`,
+so the organisation already has a Valimail aggregate-report pipeline — reports
+for `my-booking.co` land in the same dashboard, with nothing new to set up.
+
+Cross-domain reporting normally needs the receiving domain to authorise the
+sender, and **it is authorised**: `vali.email` publishes a wildcard
+`*._report._dmarc.vali.email` → `v=DMARC1;` (verified by querying an arbitrary
+label, which answers). No extra record is needed at either end.
+
+**Step 2 — once a fortnight of reports looks clean**, walk the policy up. Do not
+jump straight to reject:
+
+```
+p=quarantine; pct=25     →    p=quarantine; pct=100    →    p=reject
+```
+
+Collect first, in that order, so you can see what a stricter policy *would* have
+blocked before it starts blocking it. The one thing to watch for in the reports
+is any legitimate sender for this domain that is not SendGrid.
+
+**`lunatravel.travelify.io` needs nothing.** `travelify.io` carries
+`sp=reject`, which covers every subdomain, and there is no record at
+`_dmarc.lunatravel.travelify.io` overriding it — so the portal domain is already
+at reject.
+
+*(DNS lives in Cloudflare; this is the only item here that is not a code or data
+change.)*
 
 The agency's name is used as the email's *display name* and their address as
 *reply-to*, so it reads as from the agency in the inbox while the sending

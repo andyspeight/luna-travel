@@ -27,7 +27,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { logAuditEvent } from '@/lib/audit';
 import { HERO_DESTINATION_BY_CODE } from '@/data/hero-destinations';
-import { isKnownLocation } from '@/data/hero-locations';
+import { canUploadHeroFor } from '@/lib/place-index';
 import { requireAdmin } from '@/lib/admin-session';
 
 export const dynamic = 'force-dynamic';
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
       // would inflate it.
       if (!single) continue;
       const slug = parts[1];
-      if (!isKnownLocation(code, slug)) continue;
+      if (!canUploadHeroFor(code, slug)) continue;
       heroes[slotKey(code, variant, slug)] = {
         url: publicUrl(code, variant, slug),
         updatedAt: row.updated_at,
@@ -147,9 +147,12 @@ export async function POST(req: NextRequest) {
   if (!VARIANTS.has(variant)) {
     return NextResponse.json({ error: 'invalid_variant', message: 'variant must be portrait or landscape' }, { status: 400 });
   }
-  // A location hero must name a known city/region within this country.
-  if (slug && !isKnownLocation(code, slug)) {
-    return NextResponse.json({ error: 'invalid_location', message: 'Unknown location for this country' }, { status: 400 });
+  // A location hero must name a real place within this country — a city OR a
+  // resort. Deliberately wider than isKnownLocation(), which answers a
+  // different question ("can an agent pick this for a booking?") and stays
+  // cities-only so the pickers do not fill with 495 resorts.
+  if (slug && !canUploadHeroFor(code, slug)) {
+    return NextResponse.json({ error: 'invalid_location', message: 'Unknown place for this country' }, { status: 400 });
   }
 
   // Validate file
@@ -233,7 +236,7 @@ export async function DELETE(req: NextRequest) {
   if (!VARIANTS.has(variant)) {
     return NextResponse.json({ error: 'invalid_variant' }, { status: 400 });
   }
-  if (slug && !isKnownLocation(code, slug)) {
+  if (slug && !canUploadHeroFor(code, slug)) {
     return NextResponse.json({ error: 'invalid_location' }, { status: 400 });
   }
 

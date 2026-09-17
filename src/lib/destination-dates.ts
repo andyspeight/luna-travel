@@ -28,8 +28,26 @@ function monthIndex(word: string): number | null {
   return idx === undefined ? null : idx;
 }
 
+const ALL_MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+/**
+ * "Year-round" and friends, which mean every month rather than no month.
+ *
+ * Content writers reach for this constantly — 31 resorts and 37 cities use it —
+ * and until it was understood here every one of those entries was INVISIBLE.
+ * An unreadable month token makes an event `undated`, and undated events are
+ * deliberately never rendered (see splitEvents), so a permanently-open
+ * attraction was the one thing guaranteed never to appear in "what's on".
+ *
+ * Twelve months is the honest reading: something that runs all year genuinely
+ * is on while you are there, whenever you go.
+ */
+const ALL_YEAR = /^(?:year[\s-]?round|all[\s-]?year|throughout the year|any ?time)$/i;
+
 /** One "Jun" or "Nov-Dec" run. Wraps forward through December. */
 function parseMonthRange(part: string): number[] {
+  if (ALL_YEAR.test(part.trim())) return [...ALL_MONTHS];
+
   const parts = part
     .split(/[-–—]|\bto\b|\buntil\b/i)
     .map((p) => p.trim())
@@ -56,7 +74,7 @@ function parseMonthRange(part: string): number[] {
 }
 
 /** "Oct"→[9]; "Nov-Dec"→[10,11]; "May-Sep"→[4,5,6,7,8]; "Dec-Feb"→[11,0,1];
- *  "Oct, Nov"→[9,10]; "May/Jun"→[4,5].
+ *  "Oct, Nov"→[9,10]; "May/Jun"→[4,5]; "Year-round"→all twelve.
  *  Accepts long names, any case, '-' and en-dash. Walks forward wrapping through
  *  December, hard-capped at 12 iterations. [] when unparseable.
  *

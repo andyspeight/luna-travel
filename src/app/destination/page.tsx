@@ -159,6 +159,12 @@ export default function DestinationGuidePage() {
   const hero = destinationHero(
     booking.primaryCountryCode,
     place?.heroSlug || booking.locationSlug,
+    // The resolved place itself, so Orlando can carry its own photograph
+    // rather than only inheriting Florida's. heroSlug above is the nearest
+    // ANCESTOR that has one; this is the place. When no photo has been
+    // uploaded for it the layer simply does not paint and the ancestor shows
+    // through, so this can never make a cover worse than it was.
+    place?.slug,
   );
 
   // Pull the verified Luna Brain layer for this booking's destination + dates.
@@ -414,6 +420,13 @@ export default function DestinationGuidePage() {
               aria-hidden
               className="absolute inset-0"
               style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
+            />
+          )}
+          {hero.imagePlace && (
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{ background: `center/cover no-repeat url("${hero.imagePlace}")` }}
             />
           )}
           {/* The place's own photograph is the most specific image we have, so

@@ -14,9 +14,10 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane, Star, BookOpen, Settings } from 'lucide-react';
+import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users, MessageSquare, Plane, Star, BookOpen, Settings, LifeBuoy } from 'lucide-react';
 import { installActAsFetch } from '@/lib/act-as-client';
 import { ActAsBanner, ActAsEndedNotice, ActAsPicker } from './act-as';
+import { AgencyTour } from './tour';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -145,7 +146,7 @@ export function useAgencyMe() {
   return ctx;
 }
 
-type NavKey = 'overview' | 'travellers' | 'flights' | 'messages' | 'reviews' | 'branding' | 'trips' | 'content' | 'documents' | 'access' | 'settings';
+type NavKey = 'overview' | 'travellers' | 'flights' | 'messages' | 'reviews' | 'branding' | 'trips' | 'content' | 'documents' | 'access' | 'settings' | 'guide';
 const NAV: { key: NavKey; label: string; href: string; icon: typeof LayoutGrid }[] = [
   { key: 'overview', label: 'Overview', href: '/agency', icon: LayoutGrid },
   { key: 'travellers', label: 'Travellers', href: '/agency/travellers', icon: Users },
@@ -158,6 +159,7 @@ const NAV: { key: NavKey; label: string; href: string; icon: typeof LayoutGrid }
   { key: 'documents', label: 'Documents', href: '/agency/documents', icon: FileText },
   { key: 'access', label: 'Send access', href: '/agency/access', icon: Send },
   { key: 'settings', label: 'Settings', href: '/agency/settings', icon: Settings },
+  { key: 'guide', label: 'Guide', href: '/agency/guide', icon: LifeBuoy },
 ];
 
 export function AgencyShell({ active, children }: { active: NavKey; children: React.ReactNode }) {
@@ -309,6 +311,9 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
               <Link
                 key={n.key}
                 href={n.href}
+                // The walkthrough points at these. An attribute rather than a
+                // class, so restyling the nav cannot silently break the tour.
+                data-tour={`nav-${n.key}`}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7,
                   padding: '14px 14px', fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
@@ -339,6 +344,10 @@ export function AgencyShell({ active, children }: { active: NavKey; children: Re
       <main style={{ maxWidth: 760, margin: '0 auto', padding: '24px 16px 72px' }} className="animate-fade-in">
         <AgencyContext.Provider value={{ me, refresh: load }}>{children}</AgencyContext.Provider>
       </main>
+
+      {/* Inside the signed-in shell only: it spotlights portal controls, so it
+          has nothing to point at on the signed-out card. */}
+      <AgencyTour />
     </div>
   );
 }

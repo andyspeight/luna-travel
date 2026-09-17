@@ -13,9 +13,10 @@
  * goes wrong.
  *
  * THE SCREENSHOTS ARE REAL. `npm run guide:shots` drives a browser at a running
- * app and captures the traveller screens at phone size (scripts/guide-
- * screenshots.mjs). Drawings of a screen drift from the product the first time
- * somebody moves a button; a screenshot that can be regenerated does not.
+ * app and captures them — the traveller app on a phone, the two portal screens
+ * the setup steps talk about on a desk (scripts/guide-screenshots.mjs).
+ * Drawings of a screen drift from the product the first time somebody moves a
+ * button, and nobody notices; a screenshot that can be regenerated does not.
  *
  * The troubleshooting is not padding. Every entry is something that has already
  * gone wrong for a real agency, and the first one accounts for more failed
@@ -49,6 +50,23 @@ function Tip({ children }: { children: React.ReactNode }) {
       <Lightbulb size={14} style={{ color: '#b45309', flexShrink: 0, marginTop: 2 }} />
       <div style={{ fontSize: 12.5, color: '#92400e', lineHeight: 1.55 }}>{children}</div>
     </div>
+  );
+}
+
+/** A real portal screen, shown inside the step that explains it. */
+function WideShot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+  return (
+    <figure style={{ margin: '12px 0 0' }}>
+      <div
+        style={{
+          borderRadius: 12, overflow: 'hidden', border: `1px solid ${P.line}`,
+          background: '#fff', boxShadow: '0 6px 18px rgba(13,24,54,0.09)',
+        }}
+      >
+        <Image src={src} alt={alt} width={1000} height={860} style={{ width: '100%', height: 'auto', display: 'block' }} />
+      </div>
+      <figcaption style={{ fontSize: 11.5, color: P.ink3, lineHeight: 1.5, marginTop: 6 }}>{caption}</figcaption>
+    </figure>
   );
 }
 
@@ -86,7 +104,14 @@ function H2({ children }: { children: React.ReactNode }) {
 
 // ── Setup, step by step ──────────────────────────────────────────────────────
 
-const SETUP: { title: string; where: string; href: string; body: React.ReactNode; tip?: React.ReactNode }[] = [
+const SETUP: {
+  title: string;
+  where: string;
+  href: string;
+  body: React.ReactNode;
+  tip?: React.ReactNode;
+  shot?: { src: string; alt: string; caption: string };
+}[] = [
   {
     title: 'Brand the app',
     where: 'App branding',
@@ -111,6 +136,11 @@ const SETUP: { title: string; where: string; href: string; body: React.ReactNode
         impressions only happen once.
       </>
     ),
+    shot: {
+      src: '/guide/portal-branding.png',
+      alt: 'The App branding screen, with the form on the right and a live phone preview on the left',
+      caption: 'The phone on the left is a live preview — it re-skins as you type.',
+    },
   },
   {
     title: 'Say where replies should go',
@@ -183,6 +213,11 @@ const SETUP: { title: string; where: string; href: string; body: React.ReactNode
         whole thing work end to end — including what your traveller receives.
       </>
     ),
+    shot: {
+      src: '/guide/portal-access.png',
+      alt: 'The Send access screen, with fields for booking reference, traveller email and departure date',
+      caption: 'Fill in the three fields, press Create access link, and send the link or the QR code.',
+    },
   },
   {
     title: 'Check it landed',
@@ -366,6 +401,7 @@ function Guide() {
                 {step.body}
               </div>
               {step.tip && <Tip>{step.tip}</Tip>}
+              {step.shot && <WideShot {...step.shot} />}
             </div>
           </li>
         ))}
@@ -380,9 +416,14 @@ function Guide() {
       <div
         style={{
           display: 'grid', gap: 14,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
         }}
       >
+        <Shot
+          src="/guide/traveller-home.png"
+          alt="The traveller home screen, showing a countdown to the trip and quick links"
+          caption="Their trip, counting down, in your name and your colours. The branding here is a sample agency's — it will be yours."
+        />
         <Shot
           src="/guide/traveller-itinerary.png"
           alt="The itinerary screen, showing flights, a lounge and hotel check-in on a timeline"

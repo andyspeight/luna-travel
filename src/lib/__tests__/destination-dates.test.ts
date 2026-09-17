@@ -22,6 +22,34 @@ function evt(name: string, monthLabel: string): PlaceEvent {
   };
 }
 
+describe('parseMonthToken — year-round', () => {
+  // These were invisible until the parser understood them. An unreadable month
+  // makes an event `undated`, and undated events are deliberately never
+  // rendered — so a permanently-open attraction was the one thing guaranteed
+  // never to appear in "what's on". 31 resorts and 37 cities write it this way.
+  it.each(['Year-round', 'year round', 'Yearround', 'All year', 'all-year', 'throughout the year', 'any time', 'Anytime'])(
+    'reads "%s" as every month',
+    (token) => {
+      expect(parseMonthToken(token)).toHaveLength(12);
+      expect(parseMonthToken(token)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    },
+  );
+
+  it('still rejects things it genuinely cannot read', () => {
+    // The all-or-nothing rule holds: a token we can only half-read is reported
+    // as undated rather than asserting the half we recognised.
+    expect(parseMonthToken('Easter')).toEqual([]);
+    expect(parseMonthToken('Varies')).toEqual([]);
+    expect(parseMonthToken('Late summer')).toEqual([]);
+    expect(parseMonthToken('')).toEqual([]);
+  });
+
+  it('does not mistake a real month for an all-year token', () => {
+    expect(parseMonthToken('Jan')).toEqual([0]);
+    expect(parseMonthToken('Mar-Apr')).toEqual([2, 3]);
+  });
+});
+
 describe('parseMonthToken', () => {
   it('reads a single month', () => {
     expect(parseMonthToken('Oct')).toEqual([9]);

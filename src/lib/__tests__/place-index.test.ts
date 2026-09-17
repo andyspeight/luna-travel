@@ -4,6 +4,8 @@ import {
   heroSlugFor,
   parkIdsForChain,
   resolvePlaceRef,
+  heroUploadablePlaces,
+  canUploadHeroFor,
 } from '@/lib/place-index';
 
 // Live record ids from the committed index snapshot. Pinned here deliberately:
@@ -330,5 +332,59 @@ describe('resolvePlaceRef — coordinates can never cross a country border', () 
     const ref = resolvePlaceRef({ countryCode: 'US', signals: [], coords: toronto });
     expect(ref?.code).toBe('US');
     expect(ref?.tier).toBe('country');
+  });
+});
+
+describe('hero uploads — cities and resorts', () => {
+  it('offers resorts as well as cities', () => {
+    const us = heroUploadablePlaces('US');
+    const slugs = us.map((p) => p.slug);
+    // The case that prompted this: Orlando could only ever inherit Florida's
+    // photograph, because the upload gate used the cities-only picker roster.
+    expect(slugs).toContain('florida');
+    expect(slugs).toContain('orlando');
+  });
+
+  it('never offers a country — those upload with no slug at all', () => {
+    for (const p of heroUploadablePlaces('US')) expect(p.tier).not.toBe('country');
+  });
+
+  it('lists cities before resorts', () => {
+    const tiers = heroUploadablePlaces('US').map((p) => p.tier);
+    const lastCity = tiers.lastIndexOf('city');
+    const firstResort = tiers.indexOf('resort');
+    if (lastCity >= 0 && firstResort >= 0) expect(lastCity).toBeLessThan(firstResort);
+  });
+
+  it('is case-insensitive about the country code', () => {
+    expect(heroUploadablePlaces('us').length).toBe(heroUploadablePlaces('US').length);
+  });
+
+  it('is empty for a country it does not know', () => {
+    expect(heroUploadablePlaces('ZZ')).toEqual([]);
+    expect(heroUploadablePlaces('')).toEqual([]);
+  });
+});
+
+describe('canUploadHeroFor', () => {
+  it('accepts a city and a resort in the right country', () => {
+    expect(canUploadHeroFor('US', 'florida')).toBe(true);
+    expect(canUploadHeroFor('US', 'orlando')).toBe(true);
+  });
+
+  it('is case-insensitive on both parts', () => {
+    expect(canUploadHeroFor('us', 'ORLANDO')).toBe(true);
+  });
+
+  it('refuses a place from a different country', () => {
+    // The gate is what stops a hero landing at ES/orlando/landscape.webp,
+    // where nothing would ever look for it.
+    expect(canUploadHeroFor('ES', 'orlando')).toBe(false);
+  });
+
+  it('refuses nonsense', () => {
+    expect(canUploadHeroFor('US', 'not-a-place')).toBe(false);
+    expect(canUploadHeroFor('US', '')).toBe(false);
+    expect(canUploadHeroFor('', 'orlando')).toBe(false);
   });
 });

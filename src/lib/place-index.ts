@@ -421,3 +421,42 @@ export function ancestryNames(place: IndexPlace): string[] {
   const rows = chainRows(toRef(place));
   return rows.slice(1).map((r) => r.name).filter(Boolean);
 }
+
+/**
+ * Places within a country that may be given their own hero photograph.
+ *
+ * Cities AND resorts, which is the point. `src/data/hero-locations.ts` is
+ * cities-only and deliberately so — it fills the booking pickers, where an
+ * agent chooses a city or region — but it was also gating hero UPLOADS, and
+ * those are not the same question. A resort like Orlando could never be given
+ * its own photograph, only inherit Florida's.
+ *
+ * Countries are excluded: a country hero is uploaded without a slug at all.
+ *
+ * Sorted city tier first, then alphabetically, so the admin list reads the way
+ * somebody looking for a place expects it to.
+ */
+export function heroUploadablePlaces(code: string): IndexPlace[] {
+  const rows = PLACES_BY_COUNTRY ? PLACES_BY_COUNTRY[(code || '').toUpperCase()] : undefined;
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((r) => (r.tier === 'city' || r.tier === 'resort') && !!r.slug)
+    .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === 'city' ? -1 : 1));
+}
+
+/**
+ * May a hero be uploaded at this country + slug?
+ *
+ * The gate for /api/admin/heroes. Deliberately wider than isKnownLocation(),
+ * which answers a different question — "is this a place an agent can pick for a
+ * booking?" — and must stay cities-only so the pickers do not fill with 495
+ * resorts.
+ *
+ * Nothing breaks when a slug here has no image: the cover layers country, then
+ * city, then place, and a layer whose file is missing simply does not paint.
+ */
+export function canUploadHeroFor(code: string, slug: string): boolean {
+  if (!code || !slug) return false;
+  const want = slug.toLowerCase();
+  return heroUploadablePlaces(code).some((r) => r.slug.toLowerCase() === want);
+}

@@ -12,14 +12,15 @@
  * after from the button in the corner. Anything that talks at somebody on their
  * first morning and then vanishes is a leaflet, not help.
  *
- * MOSTLY NO NAVIGATION. The nav bar is on every page, so the steps that explain
- * a section can spotlight the real menu item from wherever the tour already is.
- * Only two steps move: branding and sending access, which are the two things an
- * agency has to actually DO, and pointing at the real form beats describing it.
+ * IT NEVER MOVES THE AGENT. An earlier version navigated for the two steps
+ * where pointing at the real form seemed worth it; each move remounted the
+ * portal shell, so pressing Next flashed the whole page and read as the tour
+ * reloading the site. The menu is on every page, so every step now points at
+ * something already on screen.
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { CoachTour, TourLauncher, tourInProgress, tourSeen } from '@/components/coach-tour';
+import { CoachTour, TourLauncher, tourSeen } from '@/components/coach-tour';
 import { STEPS } from './tour-steps';
 
 const TOUR_ID = 'agency';
@@ -27,16 +28,9 @@ const TOUR_ID = 'agency';
 export function AgencyTour() {
   const [running, setRunning] = useState(false);
 
-  // In an effect, not during render: both checks read browser storage, which
-  // does not exist on the server.
+  // In an effect, not during render: it reads localStorage, which does not
+  // exist on the server.
   useEffect(() => {
-    // A step navigated here and the tour is mid-flight — pick it straight back
-    // up. Without this a replay would die at the first page change, because the
-    // navigation unmounts everything and only a first run auto-starts.
-    if (tourInProgress(TOUR_ID)) {
-      setRunning(true);
-      return;
-    }
     if (tourSeen(TOUR_ID)) return;
     // A beat, so the portal has drawn and the tour opens onto a real page
     // rather than a loading spinner.

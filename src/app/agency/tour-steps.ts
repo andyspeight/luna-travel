@@ -25,24 +25,16 @@ export const STEPS: TourStep[] = [
       'Who is travelling soon, who has opened their app, and anything waiting on you. Start here each day.',
   },
   {
-    href: '/agency/branding',
-    target: 'branding-intro',
+    target: 'nav-branding',
     title: 'First job: make it yours',
     body:
-      'Your name, your colours, your logo, your welcome message. The phone on the right re-skins as you type. Travellers never see the word Travelgenix — as far as they are concerned this is your app.',
+      'Your name, your colours, your logo, your welcome message. The phone preview re-skins as you type. Do this before you send anyone a link — travellers never see the word Travelgenix, so as far as they are concerned this is your app.',
   },
   {
-    href: '/agency/access',
-    target: 'access-intro',
+    target: 'nav-access',
     title: 'This is how a traveller gets in',
     body:
-      'Enter the booking reference, the email on the booking and the departure date, and we create a link and QR code to send them. We check the booking really is reachable before the link is created, so you find out here rather than your customer finding out later.',
-  },
-  {
-    target: 'access-list',
-    title: 'See what happened to every link',
-    body:
-      'Sent, opened, or redeemed. If a traveller says they never got in, look here first. You can revoke a link at any time.',
+      'Booking reference, the email held on the booking, and the departure date. You get a link and a QR code to send them. We check the booking is really reachable before creating the link, so a problem surfaces here rather than on your customer\u2019s phone. The same page shows what happened to every link you have sent.',
   },
   {
     target: 'nav-travellers',

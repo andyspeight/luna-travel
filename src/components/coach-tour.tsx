@@ -15,23 +15,19 @@
  * own shell — its tabs, its sections, its `window.tgse` global — none of which
  * exists here.
  *
- * ONE REAL DIFFERENCE. The widgets editor is a single page with tabs, so its
- * tour never navigates. The agency portal is a dozen separate pages, and a tour
- * that cannot cross them could only ever describe the product from the front
- * door. So a step may name an `href`: the tour writes its position to
- * sessionStorage, navigates, and picks up where it left off when the next page
- * mounts. sessionStorage, not local: a second tab is not halfway through a tour.
+ * IT NEVER NAVIGATES, and that is load-bearing. The first version moved the
+ * agent to a page for the two steps where pointing at the real form seemed
+ * worth it. Each move remounted the portal shell, which refetches and redraws —
+ * so pressing Next flashed the whole page, and it read as the tour reloading
+ * the site under you. The widgets editor never navigates either (it has tabs,
+ * not pages), so this now matches it: every step points at something already on
+ * screen, and the nav bar is on every page, so a step can spotlight the menu
+ * item for a section from wherever the agent happens to be.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
 
 export interface TourStep {
-  /**
-   * Portal page this step belongs on. The tour navigates if it is not already
-   * there. Omit for a step that works wherever the tour happens to be.
-   */
-  href?: string;
   /**
    * The `data-tour` value of the element to spotlight. Attributes rather than
    * CSS selectors on purpose: a class name is a styling decision somebody will
@@ -53,9 +49,6 @@ const GAP = 14; // between spotlight and callout
 const PAD = 8; // spotlight padding around the target
 const CALLOUT_W = 340;
 
-function posKey(id: string) {
-  return `luna-travel.tour.${id}.pos`;
-}
 function seenKey(id: string) {
   return `luna-travel.tour.${id}.seen`;
 }
@@ -86,18 +79,6 @@ export function tourSeen(id: string): boolean {
 export function markTourSeen(id: string) {
   if (typeof window === 'undefined') return;
   write(window.localStorage, seenKey(id), '1');
-}
-
-/**
- * Is a tour part-way through, having just navigated to this page?
- *
- * The owner has to ask, because a navigation unmounts the whole tour: without
- * this, a replay would simply stop the moment it moved to another page, and
- * only a first run (which auto-starts) would survive.
- */
-export function tourInProgress(id: string): boolean {
-  if (typeof window === 'undefined') return false;
-  return read(window.sessionStorage, posKey(id)) !== null;
 }
 
 /**
@@ -193,6 +174,16 @@ function placeCallout(rect: Rect | null, preferred?: Placement): CalloutBox {
   return { top: rect.top + rect.height + GAP, left: clampX(rect.left, width, vw), width };
 }
 
+/**
+ * Comfortably on screen already — with a margin, so a control hard against the
+ * top or bottom edge still gets scrolled somewhere readable.
+ */
+function isWellInView(el: HTMLElement): boolean {
+  const r = el.getBoundingClientRect();
+  const margin = 48;
+  return r.top >= margin && r.bottom <= window.innerHeight - margin;
+}
+
 /** Is the keystroke going into something the user is editing? */
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -219,9 +210,6 @@ export function CoachTour({
   running: boolean;
   onFinish: () => void;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const targetRef = useRef<HTMLElement | null>(null);
@@ -229,21 +217,8 @@ export function CoachTour({
   const step = steps[index];
   const last = index >= steps.length - 1;
 
-  // Resume after a step navigated to another page.
-  useEffect(() => {
-    if (!running) return;
-    const saved = read(window.sessionStorage, posKey(id));
-    if (saved === null) return;
-    const n = Number(saved);
-    if (Number.isFinite(n) && n >= 0 && n < steps.length) setIndex(n);
-    write(window.sessionStorage, posKey(id), null);
-    // Only on mount: afterwards `index` is this component's own state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
-
   const finish = useCallback(() => {
     markTourSeen(id);
-    write(window.sessionStorage, posKey(id), null);
     targetRef.current = null;
     setRect(null);
     setIndex(0);
@@ -254,17 +229,9 @@ export function CoachTour({
     (next: number) => {
       if (next < 0) return;
       if (next >= steps.length) return finish();
-
-      const target = steps[next];
-      if (target.href && target.href !== pathname) {
-        // Hand the position to the next page and let it resume.
-        write(window.sessionStorage, posKey(id), String(next));
-        router.push(target.href);
-        return;
-      }
       setIndex(next);
     },
-    [steps, pathname, id, router, finish],
+    [steps.length, finish],
   );
 
   // Find and follow the current step's target.
@@ -287,12 +254,18 @@ export function CoachTour({
         setRect(null);
         return;
       }
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      // After the smooth scroll settles, or the spotlight lands where the
-      // element used to be.
-      window.setTimeout(() => {
-        if (!cancelled && targetRef.current) setRect(rectOf(targetRef.current));
-      }, 320);
+      // Only scroll if it is genuinely off screen. Scrolling regardless threw
+      // the page to the top on every nav step — the menu is sticky, so asking
+      // to centre it can only be satisfied by scrolling the document up, and
+      // the jump read as the page reloading.
+      if (!isWellInView(el)) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        // Re-measure once the smooth scroll has settled, or the spotlight
+        // lands where the element used to be.
+        window.setTimeout(() => {
+          if (!cancelled && targetRef.current) setRect(rectOf(targetRef.current));
+        }, 320);
+      }
       setRect(rectOf(el));
     });
 

@@ -1,15 +1,15 @@
 /**
- * The walkthrough's anchors still exist.
+ * The walkthrough's anchors still exist, and it still never navigates.
  *
- * A coach-mark tour points at elements by a `data-tour` attribute and at pages
- * by href. Both fail SILENTLY when somebody renames a page or a nav key: the
- * spotlight stops appearing, nothing throws, no test goes red, and the tour
- * quietly rots until an agency mentions it months later.
+ * A coach-mark tour points at elements by a `data-tour` attribute, which fails
+ * SILENTLY when somebody renames one or changes a nav key: the spotlight stops
+ * appearing, nothing throws, no other test goes red, and the tour quietly rots
+ * until an agency mentions it months later.
  *
- * So these read the actual source and check every anchor the steps name is
- * really there. Reading files rather than rendering is deliberate — the point
- * is to catch a rename in a file the tour does not import and would never pull
- * into a render test.
+ * So these read the actual source and check every anchor is really there.
+ * Reading files rather than rendering is deliberate — the point is to catch a
+ * rename in a file the tour does not import and would never pull into a render
+ * test.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -36,7 +36,6 @@ const ALL_SOURCE = sourceFiles(join(ROOT, 'src/app'))
   .join('\n');
 
 const targets = STEPS.map((s) => s.target).filter((t): t is string => !!t);
-const hrefs = STEPS.map((s) => s.href).filter((h): h is string => !!h);
 
 describe('walkthrough steps', () => {
   it('has steps at all', () => {
@@ -63,46 +62,45 @@ describe('walkthrough steps', () => {
 });
 
 describe('every anchor exists', () => {
-  // Nav anchors are rendered as data-tour={`nav-${n.key}`}, so the literal
-  // string never appears in the source — the key in the NAV list is what has
-  // to be checked.
-  const navTargets = targets.filter((t) => t.startsWith('nav-'));
-  const elementTargets = targets.filter((t) => !t.startsWith('nav-'));
-
-  it('uses nav keys that are really in the menu', () => {
-    expect(navTargets.length).toBeGreaterThan(0);
-    for (const t of navTargets) {
-      const key = t.slice('nav-'.length);
-      expect(CHROME, `nav key "${key}" is not in the portal menu`).toContain(`key: '${key}'`);
+  it('resolves every target, nav item or element alike', () => {
+    expect(targets.length).toBeGreaterThan(0);
+    for (const t of targets) {
+      if (t.startsWith('nav-')) {
+        // Nav anchors render as data-tour={`nav-${n.key}`}, so the literal
+        // string never appears in the source — the key in the NAV list is what
+        // has to be checked.
+        const key = t.slice('nav-'.length);
+        expect(CHROME, `nav key "${key}" is not in the portal menu`).toContain(`key: '${key}'`);
+      } else {
+        expect(ALL_SOURCE, `no element carries data-tour="${t}"`).toContain(`data-tour="${t}"`);
+      }
     }
   });
 
-  it('renders the data-tour attribute on the nav', () => {
-    // The templated attribute itself, without which none of the nav steps work.
+  it('renders the templated attribute on the nav', () => {
+    // Without this one line, none of the nav steps have anything to point at.
     expect(CHROME).toContain('data-tour={`nav-${n.key}`}');
-  });
-
-  it('names data-tour attributes that exist in the app', () => {
-    for (const t of elementTargets) {
-      expect(ALL_SOURCE, `no element carries data-tour="${t}"`).toContain(`data-tour="${t}"`);
-    }
   });
 });
 
-describe('every href is a real page', () => {
-  it('resolves to a page file', () => {
-    expect(hrefs.length).toBeGreaterThan(0);
-    for (const href of hrefs) {
-      const rel = href.replace(/^\//, '');
-      const page = join(ROOT, 'src/app', rel, 'page.tsx');
-      expect(existsSync(page), `${href} has no page at ${rel}/page.tsx`).toBe(true);
+describe('the tour never moves the agent', () => {
+  it('has no step that navigates', () => {
+    // Navigating remounted the portal shell, so pressing Next flashed the whole
+    // page and read as the tour reloading the site. Every step must point at
+    // something already on screen. The menu is on every page, so a step about a
+    // section spotlights its nav item — which is also why this is enforceable
+    // rather than a note somebody will forget.
+    for (const step of STEPS) {
+      expect(Object.keys(step)).not.toContain('href');
     }
   });
 
-  it('stays inside the agency portal', () => {
-    // A step that wandered onto the traveller side would cross the domain
-    // split and bounce the agent to my-booking.co mid-tour.
-    for (const href of hrefs) expect(href.startsWith('/agency')).toBe(true);
+  it('only points at things present on every page, or at nothing', () => {
+    // A target that lives on one page would leave the spotlight missing for an
+    // agent who started the tour somewhere else.
+    for (const t of targets) {
+      expect(t.startsWith('nav-'), `"${t}" is not on every page`).toBe(true);
+    }
   });
 });
 

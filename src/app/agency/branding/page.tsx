@@ -60,7 +60,7 @@ function BrandingForm() {
 
   return (
     <div>
-      <h1 data-tour="branding-intro" style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>App branding</h1>
+      <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>App branding</h1>
       <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
         This is what your travellers see when they open their trip. Every change previews live.
       </p>

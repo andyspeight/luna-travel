@@ -97,14 +97,34 @@ Real screens rather than drawings, because a drawing drifts from the product the
 first time somebody moves a button. Regenerate them when the traveller app
 changes.
 
-The traveller app falls back to a demo booking when nobody is signed in, which
-is what makes this possible at all. **The trip home is deliberately not
-captured**: `/` shows the "add your trip" onboarding until a real booking has
-loaded, and a signed session alone is not enough — it wants a booking it can
-actually fetch. Capturing it needs an environment with one behind it, and
-shipping a screenshot of the empty state dressed up as a trip would be worse
-than leaving it out.
+Two things make this work with no database behind it:
 
-The portal itself is not captured either. It needs a signed-in agency, and a
-picture of the portal the agent is already looking at teaches nobody anything —
-that is what the walkthrough is for.
+- The traveller app falls back to a **demo booking** when nobody is signed in,
+  and `?demo=<ref>` (the app's own deep-link) opens the trip home, which
+  otherwise shows the "add your trip" onboarding.
+- A **Control agency resolves entirely from its own session claims**
+  (`resolvePortalAgency`), so a session minted against the local dev
+  `JWT_SECRET` renders the whole portal.
+
+Only the two portal screens the setup steps talk about are captured. The rest of
+the portal is a list that is empty without a database, and an agent reading the
+guide is already looking at the real thing.
+
+## Smoke test
+
+`npm run smoke` drives a browser over every screen an agency or traveller
+opens, and walks the tour end to end:
+
+```
+npm run build
+JWT_SECRET=local-development-secret-at-least-32-chars npx next start
+npm run smoke                                   # in another terminal
+```
+
+It exists because the walkthrough shipped with a bug — pressing Next reloaded
+the page — that no unit test could have caught and one click would have. Two of
+its checks are that regression directly: *Next never changes the page* and
+*Next never jumps the scroll*.
+
+Same no-database trick as the screenshots, so it needs only a local server.
+Lists will be empty; this checks screens render, not that they render data.

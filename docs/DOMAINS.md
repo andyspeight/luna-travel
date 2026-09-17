@@ -124,6 +124,35 @@ Create the records Vercel gives you. For reference, the existing
 Travel app (it will still serve everything at this point — that is expected)
 and show a valid certificate.
 
+## The portal domain's front door
+
+`lunatravel.travelify.io/` serves **the agency portal**, not the traveller app.
+
+This needs a rule of its own because `/` is a *traveller* path — the app's root
+is the customer's trip. Without it the portal domain redirected its own home
+page to the traveller domain, so typing the portal address put you in the
+customer app and the two domains looked identical to anyone who did not know to
+add `/agency`.
+
+The whole routing table lives in one function, `routeForHost` in
+`src/lib/origins.ts`, with `src/lib/__tests__/origins.test.ts` holding it to a
+table of worked examples. The middleware just applies the answer. The bug it
+replaced was a *missing* case rather than a wrong one, which is what a table
+catches and reading an if-chain does not.
+
+| Request | Result |
+|---|---|
+| `my-booking.co/` | traveller app |
+| `my-booking.co/agency` | → `lunatravel.travelify.io/agency` |
+| `lunatravel.travelify.io/` | → `lunatravel.travelify.io/agency` |
+| `lunatravel.travelify.io/agency` | agency portal |
+| `lunatravel.travelify.io/install?invite=…` | → `my-booking.co/install?invite=…` |
+| anything on a `*.vercel.app` preview | served as-is |
+
+Control links agents straight to `/agency` (`PRODUCT_URLS` in
+`tg-widgets/api/dashboard/me-products.js`), so a launchpad click never relies on
+this redirect — but a bookmark, a typed address or an old link does.
+
 ### 3. Set the environment variables and redeploy
 
 In Vercel → Settings → Environment Variables, **Production**:

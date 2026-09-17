@@ -108,6 +108,84 @@ export function isPortalPath(pathname: string): boolean {
 }
 
 /**
+ * The portal host's front door.
+ *
+ * Nothing at `/` is portal-facing — the app's root IS the traveller's trip — so
+ * without a rule of its own the portal domain redirected its own home page to
+ * the traveller domain. Typing lunatravel.travelify.io put you in the customer
+ * app, which made the two domains look like they pointed at the same place when
+ * in fact only this one path did.
+ *
+ * /agency rather than /admin: the domain is where agents work. Travelgenix
+ * staff reach the console by typing /admin, which is a portal path already.
+ */
+export const PORTAL_HOME = '/agency';
+
+export interface HostRoute {
+  /** Absolute origin to send the request to. */
+  origin: string;
+  /** Path at that origin. Usually unchanged. */
+  path: string;
+}
+
+/** The hosts a routing decision is made against. Injectable so it can be tested. */
+export interface HostConfig {
+  travellerHost: string;
+  portalHost: string;
+  travellerOrigin: string;
+  portalOrigin: string;
+}
+
+function currentConfig(): HostConfig {
+  return {
+    travellerHost: TRAVELLER_HOST,
+    portalHost: PORTAL_HOST,
+    travellerOrigin: TRAVELLER_ORIGIN,
+    portalOrigin: PORTAL_ORIGIN,
+  };
+}
+
+/**
+ * Where a page request belongs, or null to serve it where it landed.
+ *
+ * Pulled out of the middleware so the rules can be read and tested in one
+ * place — the bug this fixes was a missing case, which is exactly the kind of
+ * thing a table of examples catches and a walk through an if-chain does not.
+ *
+ * An unrecognised host (vercel.app previews, localhost) always returns null, so
+ * preview deployments and local development keep serving everything.
+ */
+export function routeForHost(
+  requestHost: string,
+  pathname: string,
+  cfg: HostConfig = currentConfig(),
+): HostRoute | null {
+  const split = Boolean(
+    cfg.travellerOrigin && cfg.portalOrigin && cfg.travellerHost !== cfg.portalHost,
+  );
+  if (!split) return null;
+
+  const onPortalHost = hostMatches(requestHost, cfg.portalHost);
+  const onTravellerHost = hostMatches(requestHost, cfg.travellerHost);
+
+  if (isPortalPath(pathname)) {
+    // Agent and admin pages belong on the portal host.
+    return onTravellerHost ? { origin: cfg.portalOrigin, path: pathname } : null;
+  }
+
+  if (!onPortalHost) return null;
+
+  // The portal host's own home page. Checked before the catch-all below, which
+  // would otherwise send it to the traveller app.
+  if (pathname === '/') return { origin: cfg.portalOrigin, path: PORTAL_HOME };
+
+  // Any other traveller page that landed on the portal host — invite links
+  // already in the wild point here. Redirected rather than 404ed so they still
+  // work, and so the session cookie is set on the domain that owns it.
+  return { origin: cfg.travellerOrigin, path: pathname };
+}
+
+/**
  * Canonical absolute URL for a traveller-facing path (invite links, QR codes).
  * Falls back to the request's own origin when the split isn't configured, which
  * is the pre-split behaviour.

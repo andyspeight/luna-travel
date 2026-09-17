@@ -3,7 +3,10 @@
  *
  *   1. DOMAIN SPLIT. Luna Travel runs on two hosts (see lib/origins.ts): the
  *      traveller app and the agency/admin portal. This sends each page request
- *      to the host that owns it. Opt-in via env; off, nothing changes.
+ *      to the host that owns it, including the portal domain's own front door —
+ *      `/` is a traveller path, so without a rule of its own the portal domain
+ *      redirected its home page into the customer app. Opt-in via env; off,
+ *      nothing changes.
  *   2. Gates the admin APIs using the central Travelgenix ID session
  *      (tg_session cookie).
  *
@@ -38,15 +41,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/admin-session';
-import {
-  DOMAIN_SPLIT_ENABLED,
-  PORTAL_HOST,
-  PORTAL_ORIGIN,
-  TRAVELLER_HOST,
-  TRAVELLER_ORIGIN,
-  hostMatches,
-  isPortalPath,
-} from '@/lib/origins';
+import { routeForHost } from '@/lib/origins';
 
 export const config = {
   /**
@@ -91,25 +86,14 @@ export async function middleware(req: NextRequest) {
   // 307 (temporary) not 308: during rollout a permanently-cached redirect in
   // every traveller's browser would be painful to undo. Promote to 308 once
   // the split has been stable for a while.
-  if (
-    DOMAIN_SPLIT_ENABLED &&
-    !pathname.startsWith('/api/') &&
-    (req.method === 'GET' || req.method === 'HEAD')
-  ) {
-    const host = (req.headers.get('host') || '').toLowerCase();
-    const wantsPortal = isPortalPath(pathname);
-
-    // hostMatches treats www.x and x as the same site — the apex/www redirect
-    // is a Vercel domain rule that runs before middleware, so whichever half of
-    // the pair is not the configured origin still has to be recognised here.
-    if (wantsPortal && hostMatches(host, TRAVELLER_HOST)) {
-      return NextResponse.redirect(new URL(pathname + req.nextUrl.search, PORTAL_ORIGIN), 307);
+  if (!pathname.startsWith('/api/') && (req.method === 'GET' || req.method === 'HEAD')) {
+    // One rule, in lib/origins.ts, where it can be read as a table and tested.
+    // It returns null for an unrecognised host (vercel.app previews, localhost)
+    // and when the split is not configured, so both keep serving everything.
+    const target = routeForHost((req.headers.get('host') || '').toLowerCase(), pathname);
+    if (target) {
+      return NextResponse.redirect(new URL(target.path + req.nextUrl.search, target.origin), 307);
     }
-    if (!wantsPortal && hostMatches(host, PORTAL_HOST)) {
-      return NextResponse.redirect(new URL(pathname + req.nextUrl.search, TRAVELLER_ORIGIN), 307);
-    }
-    // Any other host (vercel.app previews, localhost) serves everything, which
-    // keeps preview deployments and local development working untouched.
   }
 
   // Everything the old matcher did not cover passes straight through.

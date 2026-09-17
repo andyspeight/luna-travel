@@ -132,7 +132,7 @@ function AccessPage() {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 data-tour="access-intro" style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Send app access</h1>
+          <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Send app access</h1>
           <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5, maxWidth: 520 }}>
             Create a sign-in link + QR for a booking so your traveller can open their trip in the app.
           </p>
@@ -197,7 +197,7 @@ function AccessPage() {
       )}
 
       {/* Sent invites */}
-      <div data-tour="access-list" style={{ marginTop: 28 }}>
+      <div style={{ marginTop: 28 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <h2 style={{ fontFamily: SERIF, fontSize: 20, color: P.ink, margin: 0 }}>Invites you&rsquo;ve sent</h2>
           {invites.length > 0 && <span style={{ fontSize: 12, color: P.ink3 }}>{invites.length}</span>}

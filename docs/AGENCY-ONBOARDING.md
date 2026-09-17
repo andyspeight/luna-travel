@@ -31,48 +31,80 @@ vanishes is a leaflet, not help.
 
 ### Adding or editing a step
 
-Edit `tour-steps.ts`. A step is `{ href?, target?, title, body, placement? }`.
+Edit `tour-steps.ts`. A step is `{ target?, title, body, placement? }`.
 
 - **`target`** is a `data-tour` attribute value, *not* a CSS selector. A class
   name is a styling decision somebody will reasonably change one day; the tour
-  should not break when they do. Add `data-tour="thing"` to the element.
-- **`href`** moves the tour to another page first. The nav bar is on every page,
-  so a step explaining a section needs no `href` — spotlight `nav-<key>` from
-  wherever the tour already is. Only branding and Send access navigate, because
-  those are the two things an agency has to actually *do*.
+  should not break when they do. Today every target is a `nav-<key>` menu item,
+  because those are the only anchors present on every page.
 - **No `target`** gives a centred callout, which is how the welcome and the
   sign-off are drawn.
+- **There is no `href`.** Steps must not navigate — see below.
 
 ### Why a test reads the source
 
 `src/lib/__tests__/tour-steps.test.ts` checks every anchor a step names really
-exists — nav keys against the menu, `data-tour` attributes against every page,
-hrefs against the route files.
+exists: nav keys against the menu, and any other `data-tour` value against every
+page in the app.
 
 This is not ceremony. An attribute-anchored tour fails **silently** when a page
 is renamed or a nav key changes: the spotlight stops appearing, nothing throws,
 no other test goes red, and nobody finds out until an agency mentions it months
-later. Rename `data-tour="access-list"` or the `content` nav key and that test
-goes red immediately — both verified by doing it.
+later. Rename a `data-tour` value or the `content` nav key and that test goes red
+immediately — both verified by doing it.
 
-### Crossing pages
+### It never navigates, and that is load-bearing
 
-The agency portal is a dozen separate pages, so a step with an `href` writes its
-position to `sessionStorage`, navigates, and the next page picks the tour back
-up on mount. `sessionStorage`, not local: a second tab is not halfway through a
-tour.
+The first version moved the agent to a page for the two steps where pointing at
+the real form seemed worth it. Every move remounted the portal shell, which
+refetches and redraws — so **pressing Next flashed the whole page**, and it read
+as the tour reloading the site underneath you. Reported as a bug within a day of
+shipping, and rightly.
 
-`tourInProgress()` is why a **replay** survives a page change. Without it the
-navigation unmounts everything and only a first run — which auto-starts — would
-come back.
+Every step now points at something already on screen. The menu is on every page,
+so a step about a section spotlights its nav item. The test enforces this: a
+step with an `href` fails, and so does a target that is not a `nav-` one.
+
+Scrolling had the same flavour of problem. `scrollIntoView` ran for every step,
+and asking to centre the *sticky* menu can only be satisfied by throwing the
+document to the top — so most steps jumped the page. It now scrolls only when
+the target is genuinely off screen.
 
 ## The guide
 
 `src/app/agency/guide/page.tsx`. Written for somebody who has never seen the
-product and wants to be live today: a four-step checklist first, what a
-traveller actually does second, every section third, and troubleshooting last.
+product and wants to be live today: a step-by-step setup they can work straight
+down, each step carrying a tip; then real screenshots of what their travellers
+will see; then what a traveller actually does; then every section; then
+troubleshooting.
 
 **The troubleshooting is not padding.** Every entry is something that has
 already gone wrong for a real agency, and the first one — *the email must be the
 address held on the booking* — accounts for more failed sign-ins than everything
 else put together. If that section is ever trimmed, keep that one.
+
+### The screenshots are real
+
+`npm run guide:shots` drives a real browser at a running app and captures the
+traveller screens at phone size, into `public/guide/`:
+
+```
+npm run build && npm start     # in one terminal
+npm run guide:shots            # in another
+```
+
+Real screens rather than drawings, because a drawing drifts from the product the
+first time somebody moves a button. Regenerate them when the traveller app
+changes.
+
+The traveller app falls back to a demo booking when nobody is signed in, which
+is what makes this possible at all. **The trip home is deliberately not
+captured**: `/` shows the "add your trip" onboarding until a real booking has
+loaded, and a signed session alone is not enough — it wants a booking it can
+actually fetch. Capturing it needs an environment with one behind it, and
+shipping a screenshot of the empty state dressed up as a trip would be worse
+than leaving it out.
+
+The portal itself is not captured either. It needs a signed-in agency, and a
+picture of the portal the agent is already looking at teaches nobody anything —
+that is what the walkthrough is for.

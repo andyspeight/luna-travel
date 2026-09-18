@@ -34,6 +34,20 @@ export interface EssentialsContext {
   packing?: PackingGroup[];
   /** A verified tipping answer, where Luna Brain holds one. */
   tipping?: string;
+
+  /**
+   * Luna Brain's structured country facts. Each one is a verified field with a
+   * Last Verified date behind it, and none of them were being used — a
+   * traveller asking "is the water safe to drink" got the handoff while Brain
+   * held the answer.
+   */
+  tapWaterSafe?: string;
+  vaccinations?: string;
+  drivingSide?: string;
+  diallingCode?: string;
+  ukEmbassy?: string;
+  timeZone?: string;
+  lastVerified?: string;
 }
 
 export interface EssentialsReply {
@@ -131,6 +145,66 @@ export function essentialsAnswer(question: string, ctx: EssentialsContext): Esse
         `A little ${set.language} goes a long way. Hello is "${hello.local}" (${hello.say}), ` +
         `and thank you is "${thanks.local}" (${thanks.say}).\n\n` +
         'There are a dozen more in Trip essentials, and the app will say them out loud for you.',
+      pills: [MORE],
+    };
+  }
+
+  // ── Tap water ──
+  if (/\b(tap water|drink the water|water safe|bottled water|safe to drink)\b/.test(q)) {
+    const safe = (ctx.tapWaterSafe || '').trim();
+    if (!safe) return null;
+    const yes = /^yes|generally safe/i.test(safe);
+    return {
+      text: yes
+        ? `Yes — tap water in ${ctx.destinationLabel} is safe to drink (${safe}). Take a refillable bottle and you will save a fortune.`
+        : `No — stick to bottled or filtered water in ${ctx.destinationLabel} (${safe}). That includes ice outside hotels and resorts, and brushing your teeth if you are being careful.`,
+      pills: [MORE],
+    };
+  }
+
+  // ── Vaccinations ──
+  if (/\b(vaccin|jab|jabs|injection|immunis|immuniz|malaria|shots)\b/.test(q)) {
+    const vax = (ctx.vaccinations || '').trim();
+    if (!vax) return null;
+    return {
+      text:
+        `${vax}\n\nThat is the general position for ${ctx.destinationLabel} — your GP or a travel clinic should confirm it against your own history, ideally six to eight weeks before you go.`,
+      pills: [MORE],
+    };
+  }
+
+  // ── Driving ──
+  if (/\b(driv|drive|driving|car hire|hire car|which side of the road|licence|license)\b/.test(q)) {
+    const side = (ctx.drivingSide || '').trim();
+    if (!side) return null;
+    return {
+      text: `They drive on the ${side.toLowerCase()} in ${ctx.destinationLabel}${/left/i.test(side) ? ', the same as home' : ', the opposite of home'}. Most hire companies want a full licence held for a year or more, and some ask for an international permit — worth checking before you book.`,
+      pills: [MORE],
+    };
+  }
+
+  // ── Phoning home, and the embassy ──
+  if (/\b(dial|dialling|calling code|country code|phone home|ring home|embassy|consulate|high commission)\b/.test(q)) {
+    const wantsEmbassy = /\b(embassy|consulate|high commission)\b/.test(q);
+    if (wantsEmbassy) {
+      const embassy = (ctx.ukEmbassy || '').trim();
+      if (!embassy) return null;
+      return { text: embassy, pills: [MORE] };
+    }
+    const code = (ctx.diallingCode || '').trim();
+    if (!code) return null;
+    return {
+      text: `${ctx.destinationLabel}'s dialling code is ${code}. To ring a UK number from there, dial +44 and drop the leading zero.`,
+      pills: [MORE],
+    };
+  }
+
+  // ── Time difference ──
+  if (/\b(time difference|what time is it|ahead|behind|time zone|timezone|clocks)\b/.test(q)) {
+    const tz = (ctx.timeZone || '').trim();
+    if (!tz) return null;
+    return {
+      text: `${ctx.destinationLabel} is on ${tz}. Your itinerary already shows every time in local time, so there is nothing to convert.`,
       pills: [MORE],
     };
   }

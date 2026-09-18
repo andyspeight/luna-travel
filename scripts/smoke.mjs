@@ -296,8 +296,24 @@ async function main() {
   check('a lost passport gets the embassy, not expiry rules', /embassy or consulate/.test(lost));
 
   // "How much is a taxi" was answered by naming the currency.
-  const taxi = await ask('how much is a taxi from the airport?');
-  check('a price question is not answered with the currency', /rather not guess/.test(taxi));
+  // Answered from the booking on the device, not from a country list. These are
+  // the questions that used to get the handoff while the answer sat in the app.
+  const land = await ask('what time do we land?');
+  check('Luna reads the flight off the booking', /EY20 lands at/.test(land), land.match(/EY\d+ lands at [^.]{0,30}/)?.[0] ?? '');
+  check('and does not double the carrier code', !/EYEY/.test(land));
+
+  const bags = await ask('how much luggage can I take?');
+  check('Luna quotes the real baggage allowance', /23kg/.test(bags));
+
+  const owed = await ask('how much do I still owe?');
+  check('Luna reads the payment off the booking', /£6,240/.test(owed));
+
+  // Every unanswerable question used to get the same shrug.
+  const club = await ask('is there a kids club?');
+  check('an unanswerable question is signposted, not shrugged', !/rather not guess/.test(club) && /to answer/.test(club));
+
+  const cancelled = await ask('my flight is cancelled what do I do');
+  check('a cancellation gets help, not a timetable', /airline desk/.test(cancelled));
   await lunaPage.close();
 
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));

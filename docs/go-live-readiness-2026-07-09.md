@@ -170,6 +170,11 @@ That makes an explicit production env audit essential — a silent fallback is w
   honestly and either wire real push or relabel the preferences UI.
 - **Luna concierge is 100% canned** (`src/app/luna/page.tsx` — deterministic per-country
   strings, no AI). Acceptable as a stated v1 limitation; otherwise wire the real API.
+  **RESOLVED 18 Sep 2026** — not by wiring a model, but by making the router read the
+  data the app already held: the booking, the content base, and Luna Brain's verified
+  facts and Q&A. Measured against 24 real questions in a browser: 12/24 answered
+  before, 24/24 after. Still not an AI, and the screen no longer implies it is
+  ("Ask about your trip", not "anything"). See `docs/ASK-LUNA.md`.
 - **Minor:** PDF-imported bookings are stored as `source:'manual'` (never `'pdf'`);
   normalise timing-safe compares for `x-tg-internal-key` and `CRON_SECRET` (the webhook already
   uses `timingSafeEqual`); the sync sweep is sequential over all travellers (a scaling risk, not
@@ -213,7 +218,7 @@ That makes an explicit production env audit essential — a silent fallback is w
 - [ ] Decide role enforcement (owner vs admin) (§6) — *decision pending*
 - [x] Surface off-platform invite-creation failures (§6) — **done** (invite retried; explicit `inviteError` returned, booking kept; success screen shows a warning + "Retry invite")
 - [x] Fix "sync" wording / document-count honesty (§6) — **done** ("Booking refreshed" → "Booking verified"; the sweep is now described as the reachability check it is)
-- [ ] Decide + label the push-notifications and Luna-concierge v1 limitations (§6) — **notifications done** (page now says in-app-only, no false "encrypted push" claim); Luna-concierge labelling *still pending*
+- [x] Decide + label the push-notifications and Luna-concierge v1 limitations (§6) — **notifications done** (page now says in-app-only, no false "encrypted push" claim); **Luna-concierge done 18 Sep** — placeholder no longer promises "anything", limitation documented in `docs/ASK-LUNA.md`, and the router now answers 24/24 of the test questions from real data. This sat open for two months while the screen went on promising more than it did.
 - [x] Refresh README / docs; commit the missing base migrations for reproducibility (§7) — **done** (README current to 0.15.0 + go-live work; `luna_travel_baseline.sql` captures the 8 base tables/enums/indexes/RLS, validated idempotent against prod)
 
 **Nice-to-have / track**

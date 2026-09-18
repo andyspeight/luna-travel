@@ -13,6 +13,74 @@ const greece: EssentialsContext = {
 
 const bare: EssentialsContext = { destinationLabel: 'Somewhere' };
 
+// Luna Brain's structured country facts, as the live payload returns them.
+const brainy: EssentialsContext = {
+  ...greece,
+  destinationLabel: 'Maldives',
+  tapWaterSafe: 'No',
+  vaccinations: 'Required: None. Recommended: Routine UK vaccinations. Hep A, Typhoid considered. Malaria: No risk.',
+  drivingSide: 'Left',
+  diallingCode: '+960',
+  ukEmbassy: 'British High Commission, Male. +960 301 0100.',
+  timeZone: 'GMT +5',
+};
+
+describe("Luna Brain's structured facts", () => {
+  it('answers whether the tap water is safe, and says what that covers', () => {
+    const r = essentialsAnswer('is the water safe to drink?', brainy);
+    expect(r?.text).toMatch(/^No —/);
+    expect(r?.text).toMatch(/ice|teeth/);
+  });
+
+  it('gets the sense the right way round when it IS safe', () => {
+    const safe = { ...brainy, destinationLabel: 'Greece', tapWaterSafe: 'Yes' };
+    expect(essentialsAnswer('can I drink the tap water?', safe)?.text).toMatch(/^Yes —/);
+  });
+
+  it('answers a question about jabs, and sends them to a clinic', () => {
+    const r = essentialsAnswer('do I need a jab for this?', brainy);
+    expect(r?.text).toContain('Malaria: No risk');
+    expect(r?.text).toMatch(/travel clinic/);
+  });
+
+  it('answers which side they drive on, relative to home', () => {
+    expect(essentialsAnswer('which side of the road do they drive on?', brainy)?.text)
+      .toMatch(/left.*same as home/i);
+    const right = { ...brainy, drivingSide: 'Right' };
+    expect(essentialsAnswer('is it hard to drive there?', right)?.text)
+      .toMatch(/right.*opposite of home/i);
+  });
+
+  it('gives the dialling code and how to ring home', () => {
+    const r = essentialsAnswer('what is the country dialling code?', brainy);
+    expect(r?.text).toContain('+960');
+    expect(r?.text).toContain('+44');
+  });
+
+  it('gives the embassy when that is what was asked', () => {
+    expect(essentialsAnswer('where is the British embassy?', brainy)?.text)
+      .toContain('British High Commission');
+  });
+
+  it('answers the time difference', () => {
+    expect(essentialsAnswer('what is the time difference?', brainy)?.text).toContain('GMT +5');
+  });
+
+  // Rule 8: Brain not holding a field is a normal outcome, not an error.
+  it('declines every one of them when Brain has nothing', () => {
+    for (const q of [
+      'is the water safe to drink',
+      'do I need a jab',
+      'which side do they drive on',
+      'what is the dialling code',
+      'where is the embassy',
+      'what is the time difference',
+    ]) {
+      expect(essentialsAnswer(q, bare), q).toBeNull();
+    }
+  });
+});
+
 describe('power', () => {
   it('answers what plug to bring', () => {
     const reply = essentialsAnswer('what plug do I need?', greece);

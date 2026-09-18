@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { useI18n } from '@/lib/locale-context';
 import { NavBar } from '@/components/nav-bar';
@@ -13,6 +14,7 @@ import {
   IconShield,
   IconPin,
   IconPlane,
+  IconChevR,
 } from '@/components/icons';
 import {
   ClimateStrip,
@@ -30,8 +32,10 @@ import { ParkPanel } from '@/components/park-panel';
 import { destinationHero } from '@/lib/hero';
 import { getDestinationGuide } from '@/data/destinations';
 import { usePlace } from '@/lib/use-place';
+import { useBrainGuide, type BrainAnswer, type BrainGuide } from '@/lib/use-brain';
 import { isEmptyGuide, resolveGuide, type ResolvedGuide } from '@/lib/guide-merge';
 import { splitEvents } from '@/lib/destination-dates';
+import { emergencyNumbers } from '@/lib/emergency';
 import { haversineKm, matchTicketsToParks } from '@/lib/park-match';
 import type {
   ParkRecord,
@@ -41,51 +45,6 @@ import type {
   PlaceView,
 } from '@/types/destination-content';
 import type { ExperienceKind } from '@/types/booking';
-
-// ───────── Luna Brain shapes (mirror src/lib/luna-brain.ts) ─────────
-
-interface BrainAnswer {
-  id: string;
-  question: string;
-  answer: string;
-  category: string;
-  confidence?: string;
-  source?: string;
-  seasonal: boolean;
-  fcdoSensitive: boolean;
-  lastVerified?: string;
-}
-
-interface BrainGuide {
-  configured: boolean;
-  destination?: {
-    name: string;
-    currency?: string;
-    capital?: string;
-    languages?: string;
-    timeZone?: string;
-    emergencyNumber?: string;
-    drivingSide?: string;
-    plugType?: string;
-    voltage?: string;
-    ukVisaRequired?: string;
-    tapWaterSafe?: string;
-    fcdoStatus?: string;
-    bestMonths?: string;
-    cheapestToFly?: string;
-    vaccinations?: string;
-    lastVerified?: string;
-  } | null;
-  byCategory?: { category: string; items: BrainAnswer[] }[];
-  forYourDates?: {
-    travelLabel: string;
-    bestMonths?: string;
-    cheapestToFly?: string;
-    climate: BrainAnswer[];
-    events: BrainAnswer[];
-    thingsToDo: BrainAnswer[];
-  } | null;
-}
 
 // ───────── Live conditions shapes (mirror weather.ts / holidays.ts) ─────────
 
@@ -137,8 +96,7 @@ export default function DestinationGuidePage() {
   const { booking } = useBooking();
   const { t } = useI18n();
   const { place, loading: placeLoading } = usePlace(booking);
-  const [brain, setBrain] = useState<BrainGuide | null>(null);
-  const [brainLoading, setBrainLoading] = useState(true);
+  const { brain, loading: brainLoading } = useBrainGuide(booking);
   const [conditions, setConditions] = useState<Conditions | null>(null);
   const [tab, setTab] = useState<string>(TAB_OVERVIEW);
 
@@ -166,46 +124,6 @@ export default function DestinationGuidePage() {
     // through, so this can never make a cover worse than it was.
     place?.slug,
   );
-
-  // Pull the verified Luna Brain layer for this booking's destination + dates.
-  // Additive: any failure (offline, no key) simply leaves the static guide.
-  useEffect(() => {
-    let alive = true;
-    setBrainLoading(true);
-    const labelParts = booking.destinationLabel.split(/[&,/]+/);
-    const tokens = Array.from(
-      new Set(
-        [
-          ...labelParts,
-          ...booking.hotels.map((h) => h.city),
-          ...booking.hotels.map((h) => h.resort || ''),
-        ]
-          .map((s) => s.trim())
-          .filter(Boolean),
-      ),
-    ).join(',');
-
-    const qs = new URLSearchParams({
-      cc: booking.primaryCountryCode,
-      tokens,
-      from: booking.tripStart,
-      to: booking.tripEnd,
-    });
-    fetch(`/api/traveller/destination?${qs.toString()}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: BrainGuide | null) => {
-        if (alive && data && data.configured) setBrain(data);
-      })
-      .catch(() => {
-        /* ignore — static guide stands */
-      })
-      .finally(() => {
-        if (alive) setBrainLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [booking.primaryCountryCode, booking.destinationLabel, booking.tripStart, booking.tripEnd, booking.hotels]);
 
   // Pull the live weather + holidays layer, one segment per stay location
   // (consecutive stays in the same place are merged). Additive + graceful.
@@ -603,6 +521,22 @@ export default function DestinationGuidePage() {
                 </>
               )}
 
+              {/* The facts above are read-only. The tools that USE them — the
+                  converter, the packing list, the phrases — have their own
+                  screen, because they need room and this page has none. */}
+              <Link
+                href="/essentials"
+                className="mt-4 flex items-center justify-between gap-3 p-4 rounded-xl bg-surface border border-line-light"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-semibold text-ink">Trip essentials</span>
+                  <span className="block text-[12px] text-ink-3 leading-snug">
+                    Currency converter, packing list, phrases to try
+                  </span>
+                </span>
+                <IconChevR size={18} />
+              </Link>
+
               <ProseStack sections={sections} sectionKey="getting-there" title={t('place.gettingThere')} />
               <ProseStack sections={sections} sectionKey="getting-around" title={t('place.gettingAround')} />
               <ProseStack sections={sections} sectionKey="nearby-excursions" title="Nearby excursions" />
@@ -649,12 +583,28 @@ export default function DestinationGuidePage() {
                     <div className="text-[11px] uppercase tracking-wider font-semibold text-danger mb-1">
                       Emergency number
                     </div>
-                    <a
-                      href={`tel:${guide.emergencyNumber.replace(/[^\d+]/g, '')}`}
-                      className="text-base font-semibold text-ink"
-                    >
-                      {guide.emergencyNumber}
-                    </a>
+                    {/* One link over the whole field stripped
+                        "102 (police) · 119 (medical)" to tel:102119 — not a
+                        number anywhere, on the screen reached for in an
+                        emergency. Each service is its own button now. */}
+                    {emergencyNumbers(guide.emergencyNumber).length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {emergencyNumbers(guide.emergencyNumber).map((n) => (
+                          <a
+                            key={n.dial}
+                            href={`tel:${n.dial}`}
+                            className="inline-flex items-baseline gap-1.5 text-base font-semibold text-ink"
+                          >
+                            {n.display}
+                            {n.service && (
+                              <span className="text-[12px] font-normal text-ink-3">{n.service}</span>
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-base font-semibold text-ink">{guide.emergencyNumber}</span>
+                    )}
                   </div>
                 </>
               )}

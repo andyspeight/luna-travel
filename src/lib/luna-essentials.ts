@@ -106,7 +106,10 @@ export function essentialsAnswer(question: string, ctx: EssentialsContext): Esse
   }
 
   // ── Money ──
-  if (/\b(currency|money|cash|exchange|convert|atm|how much is|what's a pound)\b/.test(q)) {
+  // Deliberately NOT "how much is" — that opens a question about the price of
+  // something ("how much is a taxi from the airport"), which naming the
+  // currency does not answer. It displaced the honest handoff with a non-answer.
+  if (/\b(currency|cash|exchange rate|money to take|convert|atms?)\b/.test(q) || /\bwhat.{0,6}(currency|money)\b/.test(q)) {
     const name = currencyName(ctx.currencyLabel);
     if (!name) return null;
     return {

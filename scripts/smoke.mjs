@@ -266,6 +266,40 @@ async function main() {
   }
   await ess.close();
 
+  // ── Ask Luna ──────────────────────────────────────────────────────────────
+  //
+  // Luna is a keyword router, not a model, so its failure mode is a question
+  // landing in the wrong branch. These are the three that were landing wrong.
+  const lunaPage = await util.newPage();
+  lunaPage.on('pageerror', (e) => jsErrors.push(`luna: ${e.message}`));
+  await lunaPage.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await lunaPage.waitForTimeout(2000);
+  await lunaPage.goto(`${BASE}/luna`, { waitUntil: 'domcontentloaded' });
+  await lunaPage.waitForTimeout(2000);
+
+  const ask = async (question) => {
+    const box = lunaPage.locator('input[aria-label="Ask Luna"]');
+    await box.fill(question);
+    await box.press('Enter');
+    await lunaPage.waitForTimeout(1200);
+    return (await lunaPage.textContent('body')) || '';
+  };
+
+  // Saying hello got "I can't answer that one for certain, and I'd rather not
+  // guess" — before the traveller had asked anything.
+  const hi = await ask('hello');
+  check('Luna says hello back', /What can I help with for/.test(hi));
+
+  // This was answered with passport VALIDITY rules. The expiry date is not the
+  // problem when the passport is gone.
+  const lost = await ask('I have lost my passport');
+  check('a lost passport gets the embassy, not expiry rules', /embassy or consulate/.test(lost));
+
+  // "How much is a taxi" was answered by naming the currency.
+  const taxi = await ask('how much is a taxi from the airport?');
+  check('a price question is not answered with the currency', /rather not guess/.test(taxi));
+  await lunaPage.close();
+
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
   await browser.close();

@@ -301,6 +301,14 @@ function initialMessages(booking: Booking, firstName: string): ChatMessage[] {
   return [starter];
 }
 
+/** The handoff options this agency actually offers. */
+function agentPillsFor(booking: Booking): string[] {
+  const pills: string[] = [];
+  if (booking.agency.email) pills.push('Email my agent');
+  if (booking.agency.phone) pills.push('Call my agent');
+  return pills;
+}
+
 function pillsFor(booking: Booking): string[] {
   const dest = booking.destinationLabel;
   const hasFlights = booking.flights.length > 0;
@@ -322,16 +330,40 @@ function lunaAnswer(
   booking: Booking,
   essentials: EssentialsContext,
 ): { text: string; pills?: string[] } {
-  // The shared data layer gets first refusal. It answers from the booking's own
-  // destination, so it covers every country in the content base rather than the
-  // handful with written replies below — and it returns null when it has no
-  // data, which lands on the honest handoff at the bottom of this function.
-  const fromData = essentialsAnswer(question, essentials);
-  if (fromData) return fromData;
-
   const q = question.toLowerCase();
   const cc = booking.primaryCountryCode;
   const dest = booking.destinationLabel;
+
+  // Pleasantries first, BEFORE the data layer. "Hello" reaches the phrase book
+  // otherwise, and a traveller who says hello to their concierge gets taught to
+  // say it in Greek. Answering it with "I can't answer that one for certain"
+  // was no better — it read as broken before they had asked anything.
+  if (/^(hi|hey|hello|good morning|good afternoon|good evening|yo)\b[\s!.?]*$/.test(q)) {
+    return { text: `Hello. What can I help with for ${dest}?`, pills: pillsFor(booking) };
+  }
+  if (/^(thanks|thank you|ta|cheers|great|perfect|lovely|ok|okay)\b[\s!.?]*$/.test(q)) {
+    return { text: "You're welcome. Anything else?" };
+  }
+
+  // Losing a passport is an emergency, and it was being answered with the
+  // validity rules — the expiry date is not the problem when the passport is
+  // gone. Ahead of the passport branch below, which handles the ordinary
+  // "how long does mine need left on it" question.
+  if (/\b(lost|lose|losing|stolen|stole|missing)\b/.test(q) && /\b(passport|documents?)\b/.test(q)) {
+    return {
+      text:
+        `That needs handling today. Report it to the local police and get a written report, then contact the nearest British embassy or consulate — they issue an emergency travel document, usually within a couple of working days. Tell ${booking.agency.name} as well, because they may need to change your return flight.\n\n` +
+        'Report it lost or stolen at gov.uk/report-a-lost-or-stolen-passport so nobody else can use it.',
+      pills: agentPillsFor(booking),
+    };
+  }
+
+  // Then the shared data layer, which answers from the booking's own
+  // destination and so covers every country in the content base rather than the
+  // handful with written replies below. It returns null when it has no data,
+  // which lands on the honest handoff at the bottom of this function.
+  const fromData = essentialsAnswer(question, essentials);
+  if (fromData) return fromData;
 
   // Visa
   if (q.includes('visa')) {
@@ -401,9 +433,7 @@ function lunaAnswer(
   }
 
   // Generic fallback — be honest, hand off to the agent (no unrelated topic pills)
-  const agentPills: string[] = [];
-  if (booking.agency.email) agentPills.push('Email my agent');
-  if (booking.agency.phone) agentPills.push('Call my agent');
+  const agentPills = agentPillsFor(booking);
   return {
     text: `I can't answer that one for certain, and I'd rather not guess. Your agent at ${booking.agency.name} will be able to help. Want me to put you in touch?`,
     pills: agentPills.length ? agentPills : undefined,

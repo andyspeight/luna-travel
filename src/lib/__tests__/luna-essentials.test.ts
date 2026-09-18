@@ -108,4 +108,27 @@ describe('questions it should not intercept', () => {
       expect(essentialsAnswer(q, greece), q).toBeNull();
     }
   });
+
+  // "how much is a taxi from the airport" was answered with "Greece uses the
+  // Euro" — a non-answer that displaced the honest handoff to the agent.
+  it('does not answer a price question by naming the currency', () => {
+    for (const q of [
+      'how much is a taxi from the airport',
+      'how much is a beer',
+      'how much are the excursions',
+    ]) {
+      expect(essentialsAnswer(q, greece), q).toBeNull();
+    }
+  });
+
+  it('still answers a genuine money question', () => {
+    for (const q of [
+      'what currency do they use',
+      'should I take cash',
+      "what's the exchange rate",
+      'are there ATMs',
+    ]) {
+      expect(essentialsAnswer(q, greece), q).not.toBeNull();
+    }
+  });
 });

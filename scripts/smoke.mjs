@@ -266,6 +266,56 @@ async function main() {
   }
   await ess.close();
 
+  // ── Ask Luna ──────────────────────────────────────────────────────────────
+  //
+  // Luna is a keyword router, not a model, so its failure mode is a question
+  // landing in the wrong branch. These are the three that were landing wrong.
+  const lunaPage = await util.newPage();
+  lunaPage.on('pageerror', (e) => jsErrors.push(`luna: ${e.message}`));
+  await lunaPage.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await lunaPage.waitForTimeout(2000);
+  await lunaPage.goto(`${BASE}/luna`, { waitUntil: 'domcontentloaded' });
+  await lunaPage.waitForTimeout(2000);
+
+  const ask = async (question) => {
+    const box = lunaPage.locator('input[aria-label="Ask Luna"]');
+    await box.fill(question);
+    await box.press('Enter');
+    await lunaPage.waitForTimeout(1200);
+    return (await lunaPage.textContent('body')) || '';
+  };
+
+  // Saying hello got "I can't answer that one for certain, and I'd rather not
+  // guess" — before the traveller had asked anything.
+  const hi = await ask('hello');
+  check('Luna says hello back', /What can I help with for/.test(hi));
+
+  // This was answered with passport VALIDITY rules. The expiry date is not the
+  // problem when the passport is gone.
+  const lost = await ask('I have lost my passport');
+  check('a lost passport gets the embassy, not expiry rules', /embassy or consulate/.test(lost));
+
+  // "How much is a taxi" was answered by naming the currency.
+  // Answered from the booking on the device, not from a country list. These are
+  // the questions that used to get the handoff while the answer sat in the app.
+  const land = await ask('what time do we land?');
+  check('Luna reads the flight off the booking', /EY20 lands at/.test(land), land.match(/EY\d+ lands at [^.]{0,30}/)?.[0] ?? '');
+  check('and does not double the carrier code', !/EYEY/.test(land));
+
+  const bags = await ask('how much luggage can I take?');
+  check('Luna quotes the real baggage allowance', /23kg/.test(bags));
+
+  const owed = await ask('how much do I still owe?');
+  check('Luna reads the payment off the booking', /£6,240/.test(owed));
+
+  // Every unanswerable question used to get the same shrug.
+  const club = await ask('is there a kids club?');
+  check('an unanswerable question is signposted, not shrugged', !/rather not guess/.test(club) && /to answer/.test(club));
+
+  const cancelled = await ask('my flight is cancelled what do I do');
+  check('a cancellation gets help, not a timetable', /airline desk/.test(cancelled));
+  await lunaPage.close();
+
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
   await browser.close();

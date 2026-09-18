@@ -17,7 +17,12 @@ const GUIDES: Record<string, DestinationGuide> = {
       'Fridays are quiet — most local shops close for prayers. Carry small denomination USD or rufiyaa for boat trips. Reef-safe sunscreen only on the bikini beach. Speedboat transfers run on a fixed schedule.',
     visaSummary:
       'UK passport holders get a free 30-day visa on arrival. Passport must be valid for one month past your return date. Proof of onward travel required (your return ticket covers this).',
-    emergencyNumber: '102 (police) · 119 (medical)',
+    // 119 is police and 102 is ambulance, not the other way round. This had
+    // them swapped, which mattered: it is the fallback shown whenever Luna
+    // Brain is unavailable — i.e. offline, which is when a traveller is most
+    // likely to be reading it. Both the Brain record and the content base's
+    // practical section say 119 police.
+    emergencyNumber: '119 (police) · 102 (ambulance)',
   },
 
   ES: {

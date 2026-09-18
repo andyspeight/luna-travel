@@ -43,7 +43,9 @@ export type BrainDestinationFacts = {
   capital?: string;
   languages?: string;
   timeZone?: string;
+  diallingCode?: string;
   emergencyNumber?: string;
+  ukEmbassy?: string;
   drivingSide?: string;
   plugType?: string;
   voltage?: string;

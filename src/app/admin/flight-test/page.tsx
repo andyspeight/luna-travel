@@ -18,7 +18,7 @@ import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
 interface FlightHealth {
   status: 'operational' | 'degraded' | 'down';
   reasons: string[];
-  config: { apiKey: boolean; webhookToken: boolean; publicUrl: boolean; internalKey: boolean };
+  config: { apiKey: boolean; webhookToken: boolean; publicUrl: boolean; internalKey: boolean; push: boolean };
   apiReachable: boolean;
   probeStatus: number | null;
   balanceOk: boolean;
@@ -107,11 +107,15 @@ function FlightHealthPanel() {
           </div>
 
           {/* Config checklist */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4">
             <Check ok={health.config.apiKey} label="API key" />
             <Check ok={health.apiReachable} label="API reachable" />
             <Check ok={health.config.webhookToken} label="Webhook token" />
             <Check ok={health.config.publicUrl} label="Callback URL" />
+            <Check ok={health.config.internalKey} label="Auto-subscribe" />
+            {/* The last link in the chain: everything above can be green and a
+                traveller still never hears about a cancellation. */}
+            <Check ok={health.config.push} label="Notifications" />
           </div>
 
           <div className="mt-3 text-[11px] text-tg-text-tertiary">

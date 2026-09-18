@@ -75,6 +75,7 @@ const PORTAL_PAGES = [
 
 const TRAVELLER_PAGES = [
   ['/?demo=DEMO81297', 'Maldives'],
+  ['/essentials', 'Trip essentials'],
   ['/itinerary', 'Itinerary'],
   ['/documents', 'Documents'],
   ['/destination', ''],
@@ -209,6 +210,61 @@ async function main() {
     );
     await p.close();
   }
+
+  // ── Trip essentials ───────────────────────────────────────────────────────
+  //
+  // The utilities screen, exercised rather than just loaded. A rate is seeded
+  // into storage first: the FX provider is not reachable from CI, and the
+  // saved-rate path is the offline behaviour this screen promises, so proving
+  // that is worth more than proving a live call.
+  const util = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await util.addInitScript(() => {
+    try {
+      window.localStorage.setItem(
+        'luna-travel.fx.GBP.MVR',
+        JSON.stringify({ rate: 19.42, asOf: '2026-09-15T00:00:02Z', fetchedAt: '2026-09-15T08:00:00Z' }),
+      );
+    } catch {
+      /* private window — the rest of the screen still renders */
+    }
+  });
+  const ess = await util.newPage();
+  ess.on('pageerror', (e) => jsErrors.push(`essentials: ${e.message}`));
+  await ess.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await ess.waitForTimeout(2500);
+  await ess.goto(`${BASE}/essentials`, { waitUntil: 'domcontentloaded' });
+  await ess.waitForTimeout(3000);
+
+  const essBody = (await ess.textContent('body')) || '';
+  check('the packing list is built from the trip', /Packing list/.test(essBody) && /Passport/.test(essBody));
+  check('a saved rate converts with no network', /19\.42/.test(essBody));
+  check('and says it is a saved copy', /saved copy/.test(essBody));
+
+  const amountField = ess.getByLabel(/Amount in pounds/i).first();
+  if (await amountField.count()) {
+    await amountField.fill('25');
+    await ess.waitForTimeout(500);
+    check('the converter converts', /485\.50/.test((await ess.textContent('body')) || ''));
+  } else {
+    check('the converter converts', false, 'no amount field');
+  }
+
+  // THE regression: one tel: link over "102 (police) · 119 (medical)" dialled
+  // 102119, which is not a number anywhere.
+  const dials = await ess.$$eval('a[href^="tel:"]', (els) => els.map((e) => e.getAttribute('href')));
+  check('each emergency service dials its own number', dials.includes('tel:102') && dials.includes('tel:119'), dials.join(' '));
+
+  const tickable = ess.locator('[aria-pressed]');
+  if (await tickable.count()) {
+    await tickable.first().click();
+    await ess.waitForTimeout(400);
+    await ess.reload({ waitUntil: 'domcontentloaded' });
+    await ess.waitForTimeout(2500);
+    check('a ticked item stays ticked', (await ess.locator('[aria-pressed="true"]').count()) === 1);
+  } else {
+    check('a ticked item stays ticked', false, 'nothing tickable');
+  }
+  await ess.close();
 
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 

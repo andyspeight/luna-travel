@@ -1,7 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { usePlace } from '@/lib/use-place';
+import { useBrainGuide } from '@/lib/use-brain';
+import { packingList } from '@/lib/packing';
+import { getDestinationGuide } from '@/data/destinations';
+import { resolveGuide } from '@/lib/guide-merge';
+import { essentialsAnswer, type EssentialsContext } from '@/lib/luna-essentials';
 import { PageEnter } from '@/components/page-enter';
 import {
   IconInfo,
@@ -31,8 +37,48 @@ interface ChatMessage {
  */
 export default function LunaPage() {
   const { booking } = useBooking();
+  const { place } = usePlace(booking);
+  const { brain } = useBrainGuide(booking);
   const lead = leadTraveller(booking);
   const safeContext = buildSafeContext(booking);
+
+  // The same data the essentials screen renders. Built here so a question about
+  // plugs or packing is answered from the booking's own destination rather than
+  // from a country-by-country list that only ever covered four of them.
+  const essentials = useMemo<EssentialsContext>(() => {
+    // The same three-source merge the destination and essentials screens use,
+    // rather than reading place content alone. Brain composes a plug string
+    // from its own voltage + plug type, and the static guide carries emergency
+    // numbers, so going straight to `place` silently answered nothing for any
+    // destination whose facts live in the other two layers.
+    const guide = resolveGuide({
+      countryCode: booking.primaryCountryCode,
+      place,
+      brain: brain ? { destination: brain.destination ?? undefined } : null,
+      staticGuide: getDestinationGuide(booking.primaryCountryCode),
+    });
+    const plug = guide.voltageAndPlug || '';
+    const tipping = (brain?.byCategory ?? [])
+      .flatMap((c) => c.items)
+      .find((a) => /tip|gratuit|service charge/i.test(`${a.question} ${a.answer}`))?.answer;
+    return {
+      destinationLabel: booking.destinationLabel,
+      currencyLabel: guide.currency || '',
+      languageLabel: guide.languages || '',
+      voltageAndPlug: plug,
+      emergencyNumber: guide.emergencyNumber || '',
+      tipping,
+      packing: packingList({
+        tripStart: booking.tripStart,
+        tripEnd: booking.tripEnd,
+        climate: place?.climate ?? null,
+        tags: [...(place?.bestForTags ?? []), ...(place?.audienceTags ?? [])],
+        voltageAndPlug: plug,
+        travellerTypes: booking.travellers.map((t) => t.type),
+        hasFlights: booking.flights.length > 0,
+      }),
+    };
+  }, [booking, place, brain]);
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessages(booking, lead.firstName));
   const [typing, setTyping] = useState(false);
@@ -74,7 +120,7 @@ export default function LunaPage() {
 
     // Simulate Luna thinking, then respond
     window.setTimeout(() => {
-      const reply = lunaAnswer(text, booking);
+      const reply = lunaAnswer(text, booking, essentials);
       setMessages((prev) => [
         ...prev,
         { id: `l-${Date.now()}`, from: 'luna', text: reply.text, pills: reply.pills },
@@ -273,8 +319,16 @@ function pillsFor(booking: Booking): string[] {
  */
 function lunaAnswer(
   question: string,
-  booking: Booking
+  booking: Booking,
+  essentials: EssentialsContext,
 ): { text: string; pills?: string[] } {
+  // The shared data layer gets first refusal. It answers from the booking's own
+  // destination, so it covers every country in the content base rather than the
+  // handful with written replies below — and it returns null when it has no
+  // data, which lands on the honest handoff at the bottom of this function.
+  const fromData = essentialsAnswer(question, essentials);
+  if (fromData) return fromData;
+
   const q = question.toLowerCase();
   const cc = booking.primaryCountryCode;
   const dest = booking.destinationLabel;
@@ -313,15 +367,6 @@ function lunaAnswer(
         pills: ['Hotel contact details?', 'Local taxi options'],
       };
     }
-  }
-
-  // Packing
-  if (q.includes('pack') || q.includes('what to wear') || q.includes('what to bring')) {
-    const list = PACKING_LISTS[cc] ?? `For ${dest}: comfortable layers, walking shoes, sun protection, and your travel adapter. Want me to tailor it for kids in the party, or for any specific activities?`;
-    return {
-      text: list,
-      pills: ['What about kids?', 'Sun protection tips'],
-    };
   }
 
   // Things to do / food
@@ -377,13 +422,6 @@ const WEATHER_ANSWERS: Record<string, string> = {
   ES: 'July and August in Mallorca are reliably hot — 26–30°C, dry, sea around 25°C. Mornings and evenings stay warm. Pack swimwear, light cottons, and a light cover for after-sunset.',
   AE: 'Early October in Dubai is hot but easing — 30–35°C in the day, dropping mid-month. Low humidity, almost no rain. Bring lightweight clothes plus a layer for over-air-conditioned indoors and evenings near the water.',
   GR: 'Mid-September in Athens averages 24–29°C with warm evenings. Sea still around 24°C if you fancy a beach day at Vouliagmeni. Pack light layers and decent walking shoes for the Acropolis.',
-};
-
-const PACKING_LISTS: Record<string, string> = {
-  MV: 'For the Maldives I\'d pack: swimwear (2–3 sets so they can dry), reef-safe sunscreen, a rash vest for snorkelling, light cottons for evenings, flip-flops + closed-toe shoes for the boat, a brimmed hat, and a small dry bag for excursions. Want me to add anything for the kids in your party?',
-  ES: 'For Mallorca in summer: swimwear, beach cover-up, light cottons, sandals + comfortable walking shoes (for inland villages), strong sunscreen, sun hat, refillable water bottle. If you\'re planning Tramuntana drives, layers for evenings.',
-  AE: 'For Dubai in October: lightweight long sleeves (the malls run cold), modest cover-ups for cultural sites, sunglasses, comfortable shoes for desert excursions, swimwear, and one smart-casual outfit for premium restaurants. Avoid black — heat retains.',
-  GR: 'For Athens in September: comfortable walking shoes (essential for the Acropolis), light cottons, a wider sun hat, water bottle, and a light layer for tavernas after dark. Lots of marble and uneven ground — leave the heels at home.',
 };
 
 const FOOD_TIPS: Record<string, string> = {

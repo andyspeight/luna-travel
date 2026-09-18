@@ -11,22 +11,41 @@
  *   3. For each flight item, find every trip_flights row on this subscription,
  *      diff the new state, update the row.
  *   4. On a MEANINGFUL change, emit one flight-category message per affected
- *      traveller via the existing messages + message_recipients pipeline.
+ *      traveller via the existing messages + message_recipients pipeline, AND
+ *      wake their devices with a Web Push notification.
  *
  * One inbound alert can fan out to several travellers (subscription is by flight
  * number; multiple bookings may share a flight).
  *
  * Built on the pre-existing luna_travel.messages + message_recipients schema,
  * matching the send pattern in admin/agencies/[id]/messages/route.ts.
+ *
+ * The push matters more here than anywhere else in the app. A cancellation at
+ * 2am that only writes a message row is a message nobody reads until morning,
+ * which is exactly when it is no longer useful. What to say and how loudly is
+ * decided in src/lib/flight-alerts.ts, which is pure and tested; this file does
+ * the I/O.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import type { FlightStatusCode } from '@/types/booking';
+import { sendPushToTravellers } from '@/lib/push';
+import {
+  mapStatus,
+  priorityFor,
+  buildMessage,
+  isMeaningfulChange,
+  pushForFlightAlert,
+  type FlightSnapshot,
+} from '@/lib/flight-alerts';
 import { timingSafeEqual } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// One inbound alert can touch several bookings, and each one now sends to every
+// device its travellers own. Sends are awaited (see below), so give the
+// invocation room rather than having it cut off mid-fan-out.
+export const maxDuration = 60;
 
 const WEBHOOK_TOKEN = process.env.AERODATABOX_WEBHOOK_TOKEN || '';
 
@@ -39,82 +58,35 @@ function tokenValid(provided: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-// ---- Status mapping (AeroDataBox FlightStatus -> ours) ---------------------
-function mapStatus(s?: string): FlightStatusCode {
-  switch (s) {
-    case 'CheckIn': return 'CheckIn';
-    case 'Boarding': return 'Boarding';
-    case 'GateClosed': return 'GateClosed';
-    case 'EnRoute':
-    case 'Departed': return 'Departed';
-    case 'Delayed': return 'Delayed';
-    case 'Approaching': return 'Approaching';
-    case 'Arrived': return 'Landed';
-    case 'Canceled': return 'Cancelled';
-    case 'Diverted': return 'Diverted';
-    case 'CanceledUncertain': return 'CancelledUncertain';
-    case 'Expected': return 'Scheduled';
-    default: return 'Unknown';
+/**
+ * Display names for the agencies in this callback, keyed by id.
+ *
+ * Best effort by design: a lookup failure must not cost a traveller their
+ * cancellation notice, so it returns an empty map and the notification falls
+ * back to generic wording rather than not being sent.
+ */
+async function agencyNameMap(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  agencyIds: string[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (!agencyIds.length) return names;
+  try {
+    const { data, error } = await supabase
+      .from('agencies')
+      .select('id, name')
+      .in('id', agencyIds);
+    if (error) {
+      console.error('[flights.webhook] agency names', error.message);
+      return names;
+    }
+    for (const row of (data ?? []) as Array<{ id: string; name: string | null }>) {
+      if (row.name) names.set(row.id, row.name);
+    }
+  } catch (e) {
+    console.error('[flights.webhook] agency names threw', e instanceof Error ? e.message : e);
   }
-}
-
-// Priority for the traveller-facing message, by status.
-function priorityFor(status: FlightStatusCode): 'info' | 'important' | 'urgent' {
-  if (status === 'Cancelled' || status === 'Diverted') return 'urgent';
-  if (status === 'Boarding' || status === 'GateClosed' || status === 'Delayed') return 'important';
-  return 'info';
-}
-
-// Build a short human message. AeroDataBox gives notificationSummary; prefer it.
-function buildMessage(
-  carrierFlight: string,
-  status: FlightStatusCode,
-  dep: Record<string, unknown> | undefined,
-  arr: Record<string, unknown> | undefined,
-  summary?: string,
-): { subject: string; body: string } | null {
-  const gate = (dep?.gate as string | null) || null;
-  const depTerminal = (dep?.terminal as string | null) || null;
-  const belt = (arr?.baggageBelt as string | null) || null;
-
-  let body = '';
-  switch (status) {
-    case 'CheckIn': body = `Check-in is open for ${carrierFlight}.`; break;
-    case 'Boarding': body = gate ? `${carrierFlight} is boarding at gate ${gate}.` : `${carrierFlight} is boarding now.`; break;
-    case 'GateClosed': body = `The gate for ${carrierFlight} has closed.`; break;
-    case 'Delayed': body = `${carrierFlight} is delayed. Check the app for the latest time.`; break;
-    case 'Departed': body = `${carrierFlight} has departed.`; break;
-    case 'Approaching': body = `${carrierFlight} is on approach.`; break;
-    case 'Landed': body = belt ? `${carrierFlight} has landed. Baggage on belt ${belt}.` : `${carrierFlight} has landed.`; break;
-    case 'Cancelled': body = `${carrierFlight} has been cancelled. Please contact your agent.`; break;
-    case 'Diverted': body = `${carrierFlight} has been diverted. Please contact your agent.`; break;
-    case 'CancelledUncertain': body = `There may be a disruption to ${carrierFlight}. Check the app for updates.`; break;
-    default: return null; // Scheduled/Unknown alone isn't worth a push
-  }
-  // If the provider gave a richer summary, use it as the body instead.
-  if (summary && summary.trim().length > 0) body = summary.trim();
-
-  let subject = `${carrierFlight} update`;
-  if (status === 'Boarding' && gate) subject = `Gate ${gate} — boarding`;
-  else if (depTerminal && (status === 'CheckIn')) subject = `Check-in open — Terminal ${depTerminal}`;
-  else if (status === 'Cancelled' || status === 'Diverted') subject = `${carrierFlight} — important`;
-
-  return { subject, body };
-}
-
-// Decide if the change is worth alerting on (vs a no-op tick).
-function isMeaningful(
-  prev: Record<string, unknown>,
-  nextStatus: FlightStatusCode,
-  nextGate: string | null,
-  nextDepTerminal: string | null,
-  nextBelt: string | null,
-): boolean {
-  if ((prev.status_code as string) !== nextStatus) return true;
-  if ((prev.dep_gate as string | null) !== nextGate && nextGate) return true;
-  if ((prev.dep_terminal_live as string | null) !== nextDepTerminal && nextDepTerminal) return true;
-  if ((prev.baggage_belt as string | null) !== nextBelt && nextBelt) return true;
-  return false;
+  return names;
 }
 
 export async function POST(req: NextRequest) {
@@ -169,13 +141,39 @@ export async function POST(req: NextRequest) {
   const estArr = (((arr?.revisedTime as Record<string, unknown>) || {}).utc as string | null) ?? null;
   const summary = (f.notificationSummary as string | null) ?? undefined;
 
+  // The provider reports one flight; every watching row is compared against it.
+  const next: FlightSnapshot = {
+    statusCode: status,
+    depGate: nextGate,
+    depTerminal: nextDepTerminal,
+    baggageBelt: nextBelt,
+  };
+
+  // Agency names for the notification title. Resolved once per callback rather
+  // than per row, and only for Luna-store agencies — a Control-sourced agency
+  // carries its name in session claims, which a webhook has none of, so those
+  // fall back inside pushForFlightAlert.
+  const agencyNames = await agencyNameMap(
+    supabase,
+    [...new Set(tripRows.map((r) => r.agency_id as string))],
+  );
+
   const nowIso = new Date().toISOString();
   let updated = 0;
   let messaged = 0;
+  let pushed = 0;
 
   for (const row of tripRows) {
     const carrierFlight = `${row.carrier_code}${row.flight_number}`;
-    const meaningful = isMeaningful(row, status, nextGate, nextDepTerminal, nextBelt);
+    const meaningful = isMeaningfulChange(
+      {
+        statusCode: row.status_code as FlightSnapshot['statusCode'],
+        depGate: (row.dep_gate as string | null) ?? null,
+        depTerminal: (row.dep_terminal_live as string | null) ?? null,
+        baggageBelt: (row.baggage_belt as string | null) ?? null,
+      },
+      next,
+    );
 
     // Update the live row regardless (keep it fresh even on minor ticks)
     const { error: updErr } = await supabase
@@ -200,7 +198,12 @@ export async function POST(req: NextRequest) {
 
     if (!meaningful) continue;
 
-    const msg = buildMessage(carrierFlight, status, dep, arr, summary);
+    const msg = buildMessage(
+      carrierFlight,
+      status,
+      { gate: nextGate, depTerminal: nextDepTerminal, baggageBelt: nextBelt },
+      summary,
+    );
     if (!msg) continue;
 
     // Find the travellers on this booking to message them.
@@ -247,7 +250,34 @@ export async function POST(req: NextRequest) {
       continue;
     }
     messaged++;
+
+    // 3) wake the devices.
+    //
+    // AWAITED, not fire-and-forget. Vercel freezes the invocation the moment
+    // the response is returned, so a pending promise is killed before it runs —
+    // the same trap that silently disabled notifications on the agency message
+    // path. sendPushToTravellers never throws and runs ten at a time, so the
+    // worst case is a slower 200 back to AeroDataBox, never a lost update: the
+    // message row is already committed above.
+    const travellerIds = (travs as Array<Record<string, unknown>>).map((t) => t.id as string);
+    const result = await sendPushToTravellers(
+      travellerIds,
+      pushForFlightAlert({
+        agencyName: agencyNames.get(row.agency_id as string),
+        flightLegId: row.flight_leg_id as string,
+        body: msg.body,
+        priority: priorityFor(status),
+      }),
+    );
+    pushed += result.sent;
+    console.log('[flights.webhook] push', {
+      bookingRef: row.booking_ref,
+      leg: carrierFlight,
+      status,
+      travellers: travellerIds.length,
+      sent: result.sent,
+    });
   }
 
-  return NextResponse.json({ ok: true, updated, messaged });
+  return NextResponse.json({ ok: true, updated, messaged, pushed });
 }

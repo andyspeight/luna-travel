@@ -4,11 +4,14 @@
  * change / cancellation can't silently fail to reach a traveller.
  *
  * Checks, in order of "will it even work":
- *   1. config — are the four env vars the pipeline needs set?
+ *   1. config — is everything the pipeline needs set?
  *        AERODATABOX_API_KEY   — flight lookups + subscription registration
  *        AERODATABOX_WEBHOOK_TOKEN — the webhook rejects updates without it
  *        LUNA_TRAVEL_PUBLIC_URL — the callback URL AeroDataBox posts back to
  *        TG_INTERNAL_KEY       — auth for the internal subscribe routes
+ *        VAPID keys            — the last step: waking the traveller's phone.
+ *          Without them the whole chain works and nobody is told, which is the
+ *          exact silent failure this endpoint exists to catch.
  *   2. balance — a LIVE call to AeroDataBox for the alert-credit balance. This
  *        both proves the key/API work AND surfaces the thing that silently
  *        kills alerts: running out of credits (no credits → no new
@@ -25,6 +28,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-session';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { adaConfigured, probeAeroDataBox } from '@/lib/aerodatabox';
+import { isPushConfigured } from '@/lib/push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,6 +46,7 @@ export async function GET(req: Request) {
     webhookToken: !!process.env.AERODATABOX_WEBHOOK_TOKEN,
     publicUrl: !!process.env.LUNA_TRAVEL_PUBLIC_URL,
     internalKey: !!process.env.TG_INTERNAL_KEY,
+    push: isPushConfigured(),
   };
 
   // Robust live probe: reachable if ANY of balance / feed-health / a real flight
@@ -101,6 +106,15 @@ export async function GET(req: Request) {
     reasons.push(
       `Flight lookups work, but the subscription-balance endpoint returned ${probe.status ? `HTTP ${probe.status}` : 'an error'} — ` +
         'subscriptions may still register fine; verify on the API.Market dashboard.',
+    );
+  } else if (!config.push) {
+    // Degraded, not down: the flight card still updates and still carries its
+    // "Updated HH:MM" stamp, so a traveller who looks sees the truth. They just
+    // are not told to look, which is most of the value.
+    status = 'degraded';
+    reasons.push(
+      'VAPID keys are not set — flight changes reach the app but nothing wakes the traveller\'s phone. ' +
+        'Generate with `npx web-push generate-vapid-keys` and set VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and VAPID_SUBJECT.',
     );
   } else {
     status = 'operational';

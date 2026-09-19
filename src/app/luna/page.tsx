@@ -10,6 +10,7 @@ import { resolveGuide } from '@/lib/guide-merge';
 import { essentialsAnswer, type EssentialsContext } from '@/lib/luna-essentials';
 import { bookingAnswer, signpostAnswer } from '@/lib/luna-booking';
 import { findKnowledge, knowledgeReply, type KnowledgeItem } from '@/lib/luna-knowledge';
+import { buildLunaContext } from '@/lib/luna-context';
 import { PageEnter } from '@/components/page-enter';
 import {
   IconInfo,
@@ -132,20 +133,55 @@ export default function LunaPage() {
     }
 
     setDraft('');
-    // Add user message
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, from: 'user', text };
     setMessages((prev) => [...prev, userMsg]);
     setTyping(true);
 
-    // Simulate Luna thinking, then respond
-    window.setTimeout(() => {
-      const reply = lunaAnswer(text, booking, essentials, knowledge);
+    const say = (reply: { text: string; pills?: string[] }) => {
       setMessages((prev) => [
         ...prev,
         { id: `l-${Date.now()}`, from: 'luna', text: reply.text, pills: reply.pills },
       ]);
       setTyping(false);
-    }, 700);
+    };
+
+    // The deterministic layers first, and instantly. They are exact, they are
+    // free, and they work with no signal — which is when half these questions
+    // get asked. The pause is cosmetic; the answer is already in hand.
+    const local = lunaAnswer(text, booking, essentials, knowledge);
+    if (local) {
+      window.setTimeout(() => say(local), 500);
+      return;
+    }
+
+    // Nothing local could answer it. Hand the question to the model, grounded
+    // in the same data — and fall back to the agent the moment anything goes
+    // wrong, including being offline.
+    void (async () => {
+      try {
+        const res = await fetch('/api/traveller/luna', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            question: text,
+            context: buildLunaContext({
+              booking,
+              place,
+              brain: brain?.destination ?? null,
+              knowledge,
+            }),
+          }),
+        });
+        const data = (await res.json()) as { ok?: boolean; text?: string };
+        if (data?.ok && data.text) {
+          say({ text: data.text, pills: agentPillsFor(booking) });
+          return;
+        }
+      } catch {
+        /* offline, or the model is down — the handoff below is the answer */
+      }
+      say(handoff(booking));
+    })();
   };
 
   return (
@@ -344,12 +380,32 @@ function pillsFor(booking: Booking): string[] {
  * Pre-canned answers. Returns reply text plus optional follow-up pills.
  * Keyed by destination country code and question topic.
  */
+/**
+ * The honest ending: we do not know, and here is somebody who does.
+ *
+ * Used when the model declines, is unreachable, or is not configured — all of
+ * which look the same to a traveller and should.
+ */
+function handoff(booking: Booking): { text: string; pills?: string[] } {
+  const agentPills = agentPillsFor(booking);
+  return {
+    text: `I can't answer that one for certain, and I'd rather not guess. Your agent at ${booking.agency.name} will be able to help. Want me to put you in touch?`,
+    pills: agentPills.length ? agentPills : undefined,
+  };
+}
+
+/**
+ * Everything answerable without a network, or null.
+ *
+ * Null is not failure — it is the signal to try the model. Returning the
+ * handoff from here would have meant never asking it.
+ */
 function lunaAnswer(
   question: string,
   booking: Booking,
   essentials: EssentialsContext,
   knowledge: KnowledgeItem[],
-): { text: string; pills?: string[] } {
+): { text: string; pills?: string[] } | null {
   const q = question.toLowerCase();
   const cc = booking.primaryCountryCode;
   const dest = booking.destinationLabel;
@@ -473,12 +529,8 @@ function lunaAnswer(
   const signpost = signpostAnswer(question, booking);
   if (signpost) return signpost;
 
-  // Generic fallback — be honest, hand off to the agent (no unrelated topic pills)
-  const agentPills = agentPillsFor(booking);
-  return {
-    text: `I can't answer that one for certain, and I'd rather not guess. Your agent at ${booking.agency.name} will be able to help. Want me to put you in touch?`,
-    pills: agentPills.length ? agentPills : undefined,
-  };
+  // Nothing here could answer it. The caller asks the model.
+  return null;
 }
 
 const VISA_ANSWERS: Record<string, string> = {

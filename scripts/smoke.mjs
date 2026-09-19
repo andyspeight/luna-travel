@@ -314,6 +314,16 @@ async function main() {
 
   const cancelled = await ask('my flight is cancelled what do I do');
   check('a cancellation gets help, not a timetable', /airline desk/.test(cancelled));
+
+  // Open-ended questions go to the model, which is NOT configured here. What
+  // this checks is the failure path: the traveller gets the agent handoff
+  // rather than a hang, an error, or an empty bubble.
+  const open = await ask('what is there to do with teenagers on a wet afternoon?');
+  check(
+    'an open-ended question falls back gracefully with no model',
+    /rather not guess/.test(open),
+    open.length > 40 ? 'got a reply' : 'empty',
+  );
   await lunaPage.close();
 
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));

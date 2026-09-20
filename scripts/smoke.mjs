@@ -326,6 +326,19 @@ async function main() {
   );
   await lunaPage.close();
 
+  // ── The flight-alert self-test must stay shut to the public ──
+  //
+  // It makes two real outbound requests every time it is called. An open door
+  // here is a free traffic generator pointed at our own webhook.
+  const selfTest = await browser.newPage();
+  const gate = await selfTest.goto(`${BASE}/api/admin/flight-selftest`, { waitUntil: 'domcontentloaded' });
+  check(
+    'the flight self-test is shut without an admin session',
+    gate.status() === 401 || gate.status() === 403 || gate.status() === 307,
+    String(gate.status()),
+  );
+  await selfTest.close();
+
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
   await browser.close();

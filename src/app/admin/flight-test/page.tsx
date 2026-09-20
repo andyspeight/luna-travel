@@ -11,9 +11,10 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio, Route, Database, Play } from 'lucide-react';
+import { Plane, Search, AlertTriangle, CheckCircle2, XCircle, RefreshCw, CreditCard, Radio, Route, Database, Play, ShieldCheck } from 'lucide-react';
 import { FlightHero, LiveNowPanel, AircraftPanel } from '@/components/flight-card';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
+import type { SelfTestResult } from '@/lib/flight-selftest';
 
 interface FlightHealth {
   status: 'operational' | 'degraded' | 'down';
@@ -306,6 +307,113 @@ interface RouteProbe {
  * be answered in one go. Each origin is a billed Tier 3 call, so nothing runs
  * until the button is pressed and the call count is always shown.
  */
+/**
+ * The half of the loop the health panel cannot check.
+ *
+ * Health reads config and asks AeroDataBox if it is alive. Both can be green
+ * while the callback URL points at a different deployment, or the token in our
+ * environment is not the token this deployment expects — and nobody finds out
+ * until a traveller's flight is cancelled and their phone stays silent.
+ *
+ * Not run on mount: it makes two real requests out to the public hostname and
+ * back. Somebody has to mean it.
+ */
+function WebhookSelfTestPanel() {
+  const [result, setResult] = useState<SelfTestResult | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState(false);
+
+  const run = async () => {
+    setRunning(true);
+    setError(false);
+    setResult(null);
+    try {
+      const res = await fetch('/api/admin/flight-selftest', { credentials: 'include', cache: 'no-store' });
+      if (!res.ok) throw new Error();
+      setResult((await res.json()) as SelfTestResult);
+    } catch {
+      setError(true);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <section className="mb-8 rounded-xl border border-tg-border bg-tg-bg-elevated overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-tg-border">
+        <ShieldCheck size={16} className="text-tg-accent" />
+        <h2 className="text-[15px] font-semibold text-tg-text-primary">Can AeroDataBox actually reach us?</h2>
+        <button
+          onClick={run}
+          disabled={running}
+          className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-tg-accent text-white text-[13px]
+                     font-medium disabled:opacity-50 cursor-pointer"
+        >
+          {running ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+          {running ? 'Testing…' : 'Run test'}
+        </button>
+      </div>
+
+      <div className="p-5">
+        <p className="text-[13px] text-tg-text-secondary">
+          Calls our own webhook URL the way AeroDataBox will — once with a wrong token, once with the real one.
+          Proves the address resolves, the endpoint is reachable from outside, the token matches and a bad one is
+          refused. Costs nothing and writes nothing.
+        </p>
+
+        {error && (
+          <div className="mt-4 text-sm text-red-600">Could not run the test — try again.</div>
+        )}
+
+        {result && (
+          <>
+            <div
+              className="mt-4 rounded-lg border p-4"
+              style={
+                result.ok
+                  ? { background: '#f0fdf4', borderColor: '#bbf7d0' }
+                  : { background: '#fef2f2', borderColor: '#fecaca' }
+              }
+            >
+              <div className={`flex items-center gap-2 font-semibold ${result.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+                {result.ok ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+                {result.ok ? 'The webhook loop works' : 'The webhook loop is broken'}
+              </div>
+              <p className={`mt-2 text-[13px] ${result.ok ? 'text-emerald-800' : 'text-red-800'}`}>{result.summary}</p>
+            </div>
+
+            <ul className="mt-4 space-y-3">
+              {result.steps.map((s, i) => (
+                <li key={i} className="flex gap-2">
+                  {s.ok ? (
+                    <CheckCircle2 size={15} className="text-emerald-600 mt-0.5 shrink-0" />
+                  ) : (
+                    <XCircle size={15} className="text-red-500 mt-0.5 shrink-0" />
+                  )}
+                  <div>
+                    <div className={`text-[13px] font-medium ${s.ok ? 'text-tg-text-primary' : 'text-red-600'}`}>
+                      {s.name}
+                    </div>
+                    <div className="text-[12px] text-tg-text-secondary">{s.detail}</div>
+                    {/* Only on failure, and only when there is something to do about it. */}
+                    {s.fix && <div className="text-[12px] text-amber-700 mt-0.5">{s.fix}</div>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {result.callbackUrl && (
+              <div className="mt-4 text-[11px] text-tg-text-tertiary break-all">
+                Tested: <code>{result.callbackUrl}</code>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function RouteProbePanel() {
   const [from, setFrom] = useState('CLJ');
   const [to, setTo] = useState('AGP');
@@ -762,6 +870,8 @@ export default function FlightTestPage() {
       </header>
 
       <FlightHealthPanel />
+
+      <WebhookSelfTestPanel />
 
       <RouteProbePanel />
 

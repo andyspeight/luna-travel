@@ -103,6 +103,38 @@ which is the whole reason it exists.
 For a live check, `/admin/flight-test` looks up any flight number and date
 against the real provider without subscribing or writing anything.
 
+### Proving the loop before a traveller does
+
+Everything above can pass while no alert ever arrives. The health panel reads
+config and asks AeroDataBox if it is alive; neither tells you whether the
+callback URL we *register* is a URL this deployment actually *serves*, or
+whether the token in our environment is the token the endpoint expects. A
+mismatch is silent — subscriptions succeed, updates go nowhere, and the first
+person to find out is standing at a gate.
+
+**Can AeroDataBox actually reach us?** on `/admin/flight-test` closes that gap.
+It calls our own public webhook URL — the exact string the subscribe route
+builds — twice: once with a deliberately wrong token, once with the real one.
+That proves the address resolves to this deployment, the endpoint is reachable
+from outside (DNS, TLS, routing, middleware), the token matches, a bad token is
+refused, and the handler parses and answers. A real round trip, not an internal
+call, because an internal call proves none of it.
+
+It costs nothing and writes nothing: the good-token probe carries a
+subscription id that matches no row, so the handler finds nothing to update and
+says so.
+
+**What it does not prove**, and says so on screen: that AeroDataBox will accept
+a subscription, and that it will call us when a flight moves. Those need credits
+and a real flight. This is the half that is free to check and, on the evidence
+of every integration ever, the half more likely to be wrong.
+
+The decision logic lives in `src/lib/flight-selftest.ts` so it can be tested
+away from the network; the endpoint is `/api/admin/flight-selftest`, admin-gated
+like the rest of `/api/admin/*`, and `npm run smoke` checks that it is shut
+without a session — it makes outbound requests, so an open door is a free
+traffic generator pointed at our own webhook.
+
 ## Known edge
 
 The row is updated before the message is written. If the message insert fails,

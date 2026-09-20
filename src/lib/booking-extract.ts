@@ -68,6 +68,63 @@ export type ExtractResult =
   | { ok: true; source: 'luna-chat' | 'anthropic'; draft: FormDraft }
   | { ok: false; configured: boolean; error: string };
 
+/**
+ * Why an extraction failed, which decides what the admin is told.
+ *
+ * The distinction is the whole point of this type. Every failure used to
+ * produce "Could not read this PDF automatically. Try a clearer file" — which
+ * blames the document. An admin hitting a misconfigured backend would try three
+ * more PDFs, conclude the feature was rubbish, and never report it. That is how
+ * a broken setting survives for months without anybody noticing.
+ */
+type FailureKind =
+  /** Our credentials or our model id. Nothing about the document will fix it. */
+  | 'config'
+  /** Busy or briefly down. Trying again is genuinely worth it. */
+  | 'transient'
+  /** The backend worked and could not read this particular file. */
+  | 'document';
+
+class ExtractionFailure extends Error {
+  constructor(message: string, readonly kind: FailureKind) {
+    super(message);
+    this.name = 'ExtractionFailure';
+  }
+}
+
+function kindOf(err: unknown): FailureKind {
+  return err instanceof ExtractionFailure ? err.kind : 'document';
+}
+
+/**
+ * What an HTTP failure from an extraction backend means.
+ *
+ * Exported so it can be tested directly: getting this wrong is how a broken
+ * setting gets reported to an admin as a bad scan.
+ *
+ * 401 and 403 are our credentials. 404 is nearly always the model id — a real
+ * key pointed at a model that does not exist. A 400 that mentions the model is
+ * the same problem wearing a different status. 429 and 5xx are worth retrying.
+ * Everything else is genuinely about the document we sent.
+ */
+export function classifyStatus(status: number, detail = ''): FailureKind {
+  if (status === 401 || status === 403 || status === 404) return 'config';
+  if (status === 400 && /model/i.test(detail)) return 'config';
+  if (status === 429 || status >= 500) return 'transient';
+  return 'document';
+}
+
+/** What an admin should read, by cause. */
+export function messageFor(kind: FailureKind): string {
+  if (kind === 'config') {
+    return 'PDF import is misconfigured — the AI backend rejected our credentials or model. This is a settings problem, not a problem with your file, so a different PDF will not help. Please tell your administrator. You can enter the booking manually below.';
+  }
+  if (kind === 'transient') {
+    return 'The extraction service is busy or briefly unavailable. Try again in a moment, or enter the booking manually below.';
+  }
+  return 'Could not read this PDF automatically. Try a clearer file, or enter the booking manually.';
+}
+
 const CABINS = ['Economy', 'PremiumEconomy', 'Business', 'First'];
 const BOARDS = ['RO', 'BB', 'HB', 'FB', 'AI'];
 const EXP_KINDS = ['excursion', 'car-hire', 'transfer', 'activity', 'other'];
@@ -96,10 +153,12 @@ export async function extractBookingFromPdf(
       const raw = await extractViaLunaChat(lunaUrl, internalKey, { filename, mediaType, dataBase64, profile: profile ?? undefined });
       return { ok: true, source: 'luna-chat', draft: toFormDraft(raw) };
     } catch (err) {
-      console.error('[booking-extract] luna-chat failed:', err instanceof Error ? err.message : err);
-      // fall through to Anthropic if available
+      const kind = kindOf(err);
+      console.error(`[booking-extract] luna-chat failed (${kind}):`, err instanceof Error ? err.message : err);
+      // Fall through to Anthropic where we have it — the point of two backends
+      // is that one being down is survivable.
       if (!anthropicKey) {
-        return { ok: false, configured: true, error: 'The Luna Chat extraction service is unavailable. Try again, or enter the booking manually.' };
+        return { ok: false, configured: true, error: messageFor(kind) };
       }
     }
   }
@@ -110,8 +169,11 @@ export async function extractBookingFromPdf(
       const raw = await extractViaAnthropic(anthropicKey, { mediaType, dataBase64, profile: profile ?? undefined });
       return { ok: true, source: 'anthropic', draft: toFormDraft(raw) };
     } catch (err) {
-      console.error('[booking-extract] anthropic failed:', err instanceof Error ? err.message : err);
-      return { ok: false, configured: true, error: 'Could not read this PDF automatically. Try a clearer file, or enter the booking manually.' };
+      const kind = kindOf(err);
+      // A config failure is logged at error level with the model id in the
+      // message, because it is the one an operator has to see in the logs.
+      console.error(`[booking-extract] anthropic failed (${kind}):`, err instanceof Error ? err.message : err);
+      return { ok: false, configured: true, error: messageFor(kind) };
     }
   }
 
@@ -136,9 +198,11 @@ async function extractViaLunaChat(
     cache: 'no-store',
     signal: AbortSignal.timeout(60_000),
   });
-  if (!res.ok) throw new Error(`luna-chat ${res.status}`);
+  if (!res.ok) throw new ExtractionFailure(`luna-chat ${res.status}`, classifyStatus(res.status));
   const json = (await res.json()) as { ok?: boolean; booking?: unknown; error?: string };
-  if (json.ok === false || !json.booking) throw new Error(json.error || 'luna-chat returned no booking');
+  if (json.ok === false || !json.booking) {
+    throw new ExtractionFailure(json.error || 'luna-chat returned no booking', 'document');
+  }
   return asRecord(json.booking);
 }
 
@@ -239,7 +303,13 @@ async function extractViaAnthropic(
   apiKey: string,
   payload: { mediaType: string; dataBase64: string; profile?: ExtractionProfile },
 ): Promise<RawExtraction> {
-  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+  // The previous default was 'claude-sonnet-4-6', which is not a model id that
+  // exists. Unless ANTHROPIC_MODEL happened to be set, every fallback
+  // extraction 404'd — and the admin was told their PDF was unreadable. The
+  // July go-live review flagged exactly this and it went unticked for months,
+  // which is an argument for the default being right rather than for a note
+  // asking somebody to set it.
+  const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -270,12 +340,17 @@ async function extractViaAnthropic(
     try {
       const e = (await res.json()) as { error?: { message?: string } };
       detail = e?.error?.message || '';
-    } catch { /* ignore */ }
-    throw new Error(`anthropic ${res.status}${detail ? `: ${detail}` : ''}`);
+    } catch { /* the status alone is enough to classify */ }
+
+    throw new ExtractionFailure(
+      `anthropic ${res.status}${detail ? `: ${detail}` : ''} (model ${model})`,
+      classifyStatus(res.status, detail),
+    );
   }
   const json = (await res.json()) as { content?: Array<{ type?: string; name?: string; input?: unknown }> };
   const toolUse = (json.content || []).find((b) => b?.type === 'tool_use' && b?.name === 'save_booking');
-  if (!toolUse?.input) throw new Error('anthropic returned no tool_use');
+  // The model answered but would not fill the form — that is about the file.
+  if (!toolUse?.input) throw new ExtractionFailure('anthropic returned no tool_use', 'document');
   return asRecord(toolUse.input);
 }
 

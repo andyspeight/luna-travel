@@ -30,7 +30,8 @@ export type AuditEventType =
   | 'document.deleted'
   | 'hero.uploaded'
   | 'hero.removed'
-  | 'content.updated';
+  | 'content.updated'
+  | 'storage.purged';
 
 export type AuditLogInput = {
   eventType: AuditEventType;
@@ -64,12 +65,12 @@ export async function logAuditEvent(input: AuditLogInput): Promise<void> {
   }
 }
 
-// ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 // Request context helpers — extract IP and user-agent shorthand from
 // an incoming Next request. The full user-agent string is huge and
 // rarely useful in audit logs; we shorten to "Chrome on Mac", "iPhone
 // Safari", etc. for the common cases.
-// ────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 
 export function getRequestIp(req: NextRequest): string {
   const xff = req.headers.get('x-forwarded-for');

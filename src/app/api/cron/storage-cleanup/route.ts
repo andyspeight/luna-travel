@@ -51,16 +51,23 @@ export async function GET(req: NextRequest) {
   }
 
   // Worth an audit row: this is the only process that destroys a customer's
-  // file, and "when did that go" should have an answer.
-  if (!dryRun && result.purge.length > 0) {
-    void logAuditEvent({
+  // file, and "when did that go" should have an answer. Awaited rather than
+  // fired and forgotten — a floating promise on a serverless function races
+  // the runtime freezing the instance once the response is flushed.
+  const audited =
+    dryRun ||
+    result.purge.length === 0 ||
+    (await logAuditEvent({
       eventType: 'storage.purged',
       actor: 'cron',
       targetId: BUCKET,
       targetLabel: result.summary,
       metadata: auditMetadata(result),
-    });
+    }));
+
+  if (!audited) {
+    console.error('[cron.storage-cleanup] files were removed but the audit row did not write');
   }
 
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, audited });
 }

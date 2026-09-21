@@ -172,6 +172,26 @@ schedule does another is how a file goes missing with nobody expecting it.
 An admin removal is audited under that person's email rather than `cron`: if
 somebody cleared a customer's file by hand, the trail should say who.
 
+### The audit row is awaited, not fired and forgotten
+
+Most callers of `logAuditEvent` use `void` — audit is observational and must
+never block the operation. This one awaits it and reports the result as
+`audited`, because here the trail is part of the deliverable: the files are
+gone, and "we cannot tell you when" is worth saying out loud. If it fails, the
+panel says so in amber rather than showing a clean green result.
+
+**This was found the hard way, on the first real run.** The seven files went
+correctly and the audit row did not write — silently, because `logAuditEvent`
+swallowed the error. The cause was PostgREST's schema cache: it caches enum
+types, so `storage.purged` was rejected through the API for hours after the
+migration that added it, while plain SQL accepted it happily.
+`notify pgrst, 'reload schema';` forces the reload.
+
+That is also the likeliest reason `hero.uploaded`, `hero.removed` and
+`content.updated` have never written a row: they were missing from the enum
+entirely, every insert was rejected, and nothing surfaced it. `logAuditEvent`
+now returns whether it wrote, so the next one cannot hide.
+
 The planning lives in `src/lib/storage-cleanup.ts`, away from the network, so
 the judgements can be tested — and the tests that matter are the ones about what
 it must *not* touch: a live document, a recently removed one, an upload in

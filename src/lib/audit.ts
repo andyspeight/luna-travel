@@ -42,10 +42,29 @@ export type AuditLogInput = {
 };
 
 /**
- * Log an audit event. Never throws. Fire-and-forget — callers do not need
- * to await unless they want to ensure ordering for tests.
+ * Log an audit event. Never throws.
+ *
+ * Returns whether the row was actually written, which most callers can ignore
+ * — `void logAuditEvent(...)` is still correct for anything where the audit is
+ * observational and must not block the operation.
+ *
+ * Callers where the trail is part of the deliverable should await it and act on
+ * false. /api/admin/storage-cleanup does, because it destroys customers' files
+ * and "we removed them but cannot tell you when" is worth saying out loud.
+ *
+ * WHY THIS RETURNS ANYTHING. It used to swallow failures entirely. Three event
+ * types — hero.uploaded, hero.removed, content.updated — were in this union for
+ * months without ever being added to the Postgres enum, so every one of those
+ * inserts was rejected and discarded in silence. Nobody noticed, because
+ * nothing could. An audit trail with holes in it is worse than none, because
+ * you trust it.
+ *
+ * If a write fails right after an enum value is added, suspect PostgREST's
+ * schema cache rather than the migration: it caches enum types, so a value that
+ * SQL accepts can still be rejected through the API until the cache reloads.
+ * `notify pgrst, 'reload schema';` forces it.
  */
-export async function logAuditEvent(input: AuditLogInput): Promise<void> {
+export async function logAuditEvent(input: AuditLogInput): Promise<boolean> {
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase
@@ -59,9 +78,12 @@ export async function logAuditEvent(input: AuditLogInput): Promise<void> {
       });
     if (error) {
       console.error('[audit] insert failed:', error.message, 'for event', input.eventType);
+      return false;
     }
+    return true;
   } catch (e) {
     console.error('[audit] threw:', (e as Error).message, 'for event', input.eventType);
+    return false;
   }
 }
 

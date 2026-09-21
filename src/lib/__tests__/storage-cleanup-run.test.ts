@@ -132,3 +132,48 @@ describe('the grace period reaches the planner', () => {
     expect(remove).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The audit trail is part of this operation's deliverable, not a side effect.
+ * It used to fail silently; three event types went unrecorded for months and
+ * nobody could have noticed.
+ */
+describe('logAuditEvent reports whether it wrote', () => {
+  it('returns false rather than throwing when the insert is rejected', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/supabase', () => ({
+      getSupabaseAdmin: () => ({
+        from: () => ({ insert: async () => ({ error: { message: 'invalid input value for enum' } }) }),
+      }),
+    }));
+    const { logAuditEvent } = await import('@/lib/audit');
+
+    await expect(
+      logAuditEvent({ eventType: 'storage.purged', actor: 'test' }),
+    ).resolves.toBe(false);
+  });
+
+  it('returns true on a clean write', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/supabase', () => ({
+      getSupabaseAdmin: () => ({ from: () => ({ insert: async () => ({ error: null }) }) }),
+    }));
+    const { logAuditEvent } = await import('@/lib/audit');
+
+    await expect(
+      logAuditEvent({ eventType: 'storage.purged', actor: 'test' }),
+    ).resolves.toBe(true);
+  });
+
+  it('returns false rather than throwing when the client itself blows up', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/supabase', () => ({
+      getSupabaseAdmin: () => { throw new Error('SUPABASE_URL is not set'); },
+    }));
+    const { logAuditEvent } = await import('@/lib/audit');
+
+    await expect(
+      logAuditEvent({ eventType: 'storage.purged', actor: 'test' }),
+    ).resolves.toBe(false);
+  });
+});

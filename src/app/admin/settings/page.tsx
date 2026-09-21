@@ -52,6 +52,8 @@ interface CleanupResult {
   notes: string[];
   error?: string;
   detail?: string;
+  /** False when files went but the audit row did not write. */
+  audited?: boolean;
 }
 
 export default function SettingsPage() {
@@ -305,6 +307,20 @@ function StorageCard() {
               </div>
             ))}
           </div>
+
+          {/* The files are gone either way. Not being able to say when is its
+              own problem, and it must not pass quietly. */}
+          {result.audited === false && (
+            <div style={{ marginTop: 10, ...panel('#FFFBEB', '#FDE68A') }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#B45309' }}>
+                The files were removed, but the audit record did not write.
+              </div>
+              <div style={{ fontSize: 12, color: '#92400E', marginTop: 4 }}>
+                Nothing is lost that was not meant to go, but there is now no trail for it.
+                Worth reporting — check the function logs for the reason.
+              </div>
+            </div>
+          )}
 
           {result.purge.length > 0 && (
             <div style={{ marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>

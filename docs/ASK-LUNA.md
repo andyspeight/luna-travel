@@ -131,6 +131,32 @@ Unconfigured, down, timed out and refused all look identical to the traveller:
 the agent handoff. That is deliberate — none of them is the traveller's problem
 and none should look like a bug.
 
+### Knowing whether it is actually on
+
+Because all four failures look alike from the outside, you cannot tell a working
+model layer from a dead one by using the app. `/admin/settings` carries a
+**Luna (open questions)** tile that says which backend a question would reach.
+
+It exists because the env checklist on that page tracked eleven variables and
+none of them was this one — so the page could read 11/11, all green, with the
+model layer entirely switched off. That is the same shape of problem as the
+flight webhook that had never fired and the retention job that never ran: off,
+with nothing saying so.
+
+The tile is deliberately stricter than the code. `lunaAiConfigured()` is
+optimistic — if a backend looks present it tries, and a wasted attempt ends in
+the agent handoff, which is where an early return would land the traveller
+anyway. `lunaAiStatus()` is pessimistic, because a green tile that lies is worse
+than no tile.
+
+The case only the tile catches: **`LUNA_CHAT_URL` set without
+`TG_INTERNAL_KEY`**. `lunaAiConfigured()` returns true, `viaLunaChat` returns
+immediately without calling anything, and the request falls through to
+Anthropic — so with no direct key it is configured-looking and permanently dead.
+The tile shows amber and names the missing variable. Amber rather than red on
+purpose: red reads as "nothing set", and this is the worse case, something set
+that cannot work.
+
 ## Adding an answer
 
 Put it in the layer that owns the data, not in the page:

@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-session';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { probeAeroDataBox } from '@/lib/aerodatabox';
+import { lunaAiStatus } from '@/lib/luna-ai';
 import {
   getPlatformSettings,
   setPlatformSetting,
@@ -82,6 +83,9 @@ export async function GET(req: NextRequest) {
       aerodatabox: { reachable: ada.reachable, status: ada.status },
       control,
       cron: !!process.env.CRON_SECRET,
+      // Not an env boolean: the model layer has two backends and a
+      // half-configured state that no single variable reveals.
+      lunaAi: lunaAiStatus(),
       env,
       envSet,
       envTotal: Object.keys(env).length,

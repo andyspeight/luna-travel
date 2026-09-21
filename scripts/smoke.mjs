@@ -266,6 +266,40 @@ async function main() {
   }
   await ess.close();
 
+  // ── Allergies ──
+  //
+  // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so
+  // this uses the Athens booking. Greek is the right one to check anyway: it
+  // carries the warning about μαλάκια, which sits one slip from an insult.
+  const allergy = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const alg = await allergy.newPage();
+  alg.on('pageerror', (e) => jsErrors.push(`allergies: ${e.message}`));
+  await alg.goto(`${BASE}/?demo=DEMO52188`, { waitUntil: 'domcontentloaded' });
+  await alg.waitForTimeout(2500);
+  await alg.goto(`${BASE}/essentials`, { waitUntil: 'domcontentloaded' });
+  await alg.waitForTimeout(3000);
+
+  const algBody = (await alg.textContent('body')) || '';
+  check('the allergy picker appears for a supported language', /Allergies/.test(algBody));
+  check(
+    'all fourteen allergens are offered',
+    /Peanuts/.test(algBody) && /Lupin/.test(algBody) && /Sulphites/.test(algBody),
+  );
+
+  // THE fix: a finished sentence, not a stem the traveller completes in
+  // English. "Soy al\u00e9rgico a\u2026 peanuts" is the bug this closes.
+  const molluscs = alg.getByRole('button', { name: 'Molluscs', exact: true });
+  if (await molluscs.count()) {
+    await molluscs.first().click();
+    await alg.waitForTimeout(600);
+    const picked = (await alg.textContent('body')) || '';
+    check('picking one gives the whole sentence in Greek', /Έχω αλλεργία στα μαλάκια/.test(picked));
+    check('and warns where the word is a slip from an insult', /θαλασσινά/.test(picked));
+  } else {
+    check('picking one gives the whole sentence in Greek', false, 'no allergen buttons');
+  }
+  await alg.close();
+
   // ── Ask Luna ─────────────────────────────────────────────────────
   //
   // Luna is a keyword router, not a model, so its failure mode is a question

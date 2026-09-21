@@ -102,3 +102,70 @@ never the only way to reach a document.
 Worth checking, in order: the traveller has a live `lt_session`; the supplier
 link has not expired (a 415 in the logs means it returned a login page); and
 Control can still resolve the order.
+
+## Removing a document, and meaning it
+
+Removing is a soft delete: the row gets a `deleted_at` and drops out of every
+query. That is the right behaviour — an agency that removes the wrong file
+should be able to get it back — but it was only ever half the story. The delete
+route's own comment said so: *"storage cleanup happens via a separate cron later
+(not built yet)."*
+
+It was never built. Nothing had ever left the bucket. An agency removed a
+customer's insurance certificate, the app said done, and the file stayed there
+indefinitely for anyone holding the service key.
+
+That is not clutter, it is an erasure that does not erase — the kind of thing
+you want to find before a customer asks you to remove their data, not after.
+
+`/api/cron/storage-cleanup` is the missing half. It runs weekly (Sunday 03:00)
+and covers exactly two cases:
+
+| | What | When |
+|---|---|---|
+| **Past the grace period** | the file behind a soft-deleted document | 30 days after `deleted_at` |
+| **No record at all** | a file no `documents` row points at | 24 hours after it was written |
+
+### Why each number is what it is
+
+**Thirty days**, because soft delete is a promise that a mistake can be undone,
+and acting on day one makes that promise a lie. It is finite because "removed"
+has to eventually mean removed.
+
+**Twenty-four hours** for a file with no row, because upload writes the object
+first and the row second. A file with no row might be debris from a crashed
+upload — or a document that arrived four seconds ago whose row is still in
+flight. Acting on the second kind would lose a customer's document at the exact
+moment it was handed to us.
+
+### The refusals
+
+This is the only process in the system that can destroy a customer's file, so it
+is built to stop rather than guess:
+
+- **A failed `documents` query aborts the run.** A query error is not "there are
+  no documents", and by the time the planner sees an empty array the two are
+  indistinguishable — one of them means clear everything.
+- **A failed bucket listing aborts the run**, for the same reason: a folder that
+  could not be read must not look empty.
+- **A file whose timestamp will not parse is kept**, never touched.
+- **200 files per run**, and a capped run says so loudly. A runaway should be
+  survivable and obvious rather than total.
+- **`?dryRun=1`** reports the plan without acting. The first run on any
+  environment should be a dry run, and the output is the plan verbatim.
+
+The planning lives in `src/lib/storage-cleanup.ts`, away from the network, so
+the judgements can be tested — and the tests that matter are the ones about what
+it must *not* touch: a live document, a recently removed one, an upload in
+flight, or a neighbour in the same folder.
+
+Every run writes a `storage.purged` audit row, because "when did that file go"
+needs an answer.
+
+### One thing this fixed on the way past
+
+`audit_event_type` is a Postgres enum, and it was missing three values the
+TypeScript union had been using for months: `hero.uploaded`, `hero.removed` and
+`content.updated`. `logAuditEvent` catches and logs rather than throwing, so
+those rows had been failing to write in complete silence. An audit trail with
+holes in it is worse than none, because you trust it.

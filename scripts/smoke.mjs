@@ -90,7 +90,7 @@ async function main() {
   });
   const jsErrors = [];
 
-  // ── The portal ────────────────────────────────────────────────────────────
+  // ── The portal ──────────────────────────────────────────────────────
   const desk = await browser.newContext({ viewport: { width: 1200, height: 900 } });
   await desk.addCookies([await agencyCookie()]);
   // Suppress the walkthrough for the page checks; it gets its own section below.
@@ -125,7 +125,7 @@ async function main() {
   );
   await guide.close();
 
-  // ── The walkthrough ───────────────────────────────────────────────────────
+  // ── The walkthrough ────────────────────────────────────────────────
   const tourCtx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
   await tourCtx.addCookies([await agencyCookie()]);
   const page = await tourCtx.newPage();
@@ -195,7 +195,7 @@ async function main() {
   check('Escape always gets you out', !(await dialog.isVisible().catch(() => false)));
   await page.close();
 
-  // ── The traveller app ─────────────────────────────────────────────────────
+  // ── The traveller app ──────────────────────────────────────────────
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
   for (const [path, expected] of TRAVELLER_PAGES) {
     const p = await phone.newPage();
@@ -211,7 +211,7 @@ async function main() {
     await p.close();
   }
 
-  // ── Trip essentials ───────────────────────────────────────────────────────
+  // ── Trip essentials ────────────────────────────────────────────────
   //
   // The utilities screen, exercised rather than just loaded. A rate is seeded
   // into storage first: the FX provider is not reachable from CI, and the
@@ -266,7 +266,7 @@ async function main() {
   }
   await ess.close();
 
-  // ── Ask Luna ──────────────────────────────────────────────────────────────
+  // ── Ask Luna ─────────────────────────────────────────────────────
   //
   // Luna is a keyword router, not a model, so its failure mode is a question
   // landing in the wrong branch. These are the three that were landing wrong.
@@ -338,6 +338,21 @@ async function main() {
     String(gate.status()),
   );
   await selfTest.close();
+
+  // ── The file-removal job must refuse anyone without the secret ──
+  //
+  // It is the only thing in the system that destroys a customer's document.
+  // An unauthenticated caller must get nowhere near it.
+  const cleanup = await browser.newPage();
+  const cleanupGate = await cleanup.goto(`${BASE}/api/cron/storage-cleanup?dryRun=1`, {
+    waitUntil: 'domcontentloaded',
+  });
+  check(
+    'the file-removal job refuses a caller with no secret',
+    cleanupGate.status() === 401,
+    String(cleanupGate.status()),
+  );
+  await cleanup.close();
 
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 

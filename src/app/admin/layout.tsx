@@ -1,7 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+
+/** Marks that we have already bounced to sign-in this tab — see the effect. */
+const RETURNED_KEY = 'lt-admin-signin-attempted';
+
+type AuthState =
+  | { state: 'ok' }
+  | { state: 'signed-out' }
+  | { state: 'no-permission'; email: string }
+  | { state: 'unavailable' };
 import { usePathname, useRouter } from 'next/navigation';
+import { signInUrl } from '@/lib/admin-session';
 import Link from 'next/link';
 import {
   LayoutDashboard, Building2, Users, RefreshCw,
@@ -70,6 +80,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [auth, setAuth] = useState<AuthState | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -81,16 +92,74 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     // pages that default to light.)
     setTheme(stored === 'dark' ? 'dark' : 'light');
 
-    // Fetch the signed-in admin's identity. If this fails, middleware
-    // should have already redirected to /admin/signin — but we handle
-    // the case defensively.
-    fetch('/api/admin/me', { credentials: 'include' })
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => {
-        if (data?.email) setAdminEmail(data.email);
-      })
-      .catch(() => { /* silent — middleware will redirect if truly broken */ });
+    // Resolve who is signed in, and what to do if nobody is.
+    //
+    // This used to swallow the failure, on the stated assumption that
+    // "middleware should have already redirected to /admin/signin". It does
+    // not: admin PAGES stopped being gated in the SSO migration on the
+    // understanding that a client-side tg-auth-gate.js would take over, and
+    // that script was never added to this app. So the shell rendered for
+    // anyone, every API answered 401, and the only control on screen was a
+    // Try again button that re-ran the same doomed request. Somebody hit that
+    // dead end two weeks running before it was reported.
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/me', { credentials: 'include' });
+        if (res.ok) {
+          const data = (await res.json()) as { email?: string };
+          setAuth(data?.email ? { state: 'ok' } : { state: 'signed-out' });
+          if (data?.email) setAdminEmail(data.email);
+          return;
+        }
+        const body = (await res.json().catch(() => ({}))) as {
+          reason?: string;
+          email?: string;
+        };
+        if (body.reason === 'no-permission') {
+          setAuth({ state: 'no-permission', email: body.email || '' });
+        } else if (body.reason === 'unavailable') {
+          setAuth({ state: 'unavailable' });
+        } else {
+          setAuth({ state: 'signed-out' });
+        }
+      } catch {
+        // Reaching our own API failed, which is not the same as being signed
+        // out. Saying "sign in again" here would be a guess.
+        setAuth({ state: 'unavailable' });
+      }
+    })();
   }, []);
+
+  // Send a signed-out admin to Travelgenix ID, once.
+  //
+  // Once, deliberately. If Control sends them back still signed out, a second
+  // automatic redirect is an infinite loop with no way to read the screen. The
+  // mark survives the round trip, so the second landing offers a button
+  // instead and the person stays in control of it.
+  useEffect(() => {
+    if (auth?.state !== 'signed-out') return;
+    let alreadyTried = false;
+    try {
+      alreadyTried = sessionStorage.getItem(RETURNED_KEY) === '1';
+      sessionStorage.setItem(RETURNED_KEY, '1');
+    } catch {
+      // Private window, or storage blocked. Offer the button rather than risk
+      // bouncing somebody who cannot remember they have been here.
+      alreadyTried = true;
+    }
+    if (!alreadyTried) window.location.href = signInUrl(window.location.href);
+  }, [auth]);
+
+  // A good sign-in clears the mark, so the next lapse redirects automatically
+  // again rather than making them press a button forever.
+  useEffect(() => {
+    if (auth?.state !== 'ok') return;
+    try {
+      sessionStorage.removeItem(RETURNED_KEY);
+    } catch {
+      /* nothing to clear */
+    }
+  }, [auth]);
 
   // Close menu on outside click
   useEffect(() => {
@@ -144,6 +213,48 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // can't use, an avatar that says "loading", etc).
   if (pathname === '/admin/signin' || pathname === '/admin/signin/') {
     return <>{children}</>;
+  }
+
+  // Nothing decided yet. Showing the full shell here is what produced a
+  // working-looking admin panel where every button failed.
+  if (auth === null) {
+    return <AuthScreen c={c} title="Checking your access…" body="One moment." />;
+  }
+
+  // Signed in, but not for this product. The message names the account and
+  // what to ask for, because "your session has expired" sent somebody round
+  // the sign-in loop twice a week to be told the same thing.
+  if (auth.state === 'no-permission') {
+    return (
+      <AuthScreen
+        c={c}
+        title="You don’t have access to Luna Travel"
+        body={`You are signed in${auth.email ? ` as ${auth.email}` : ''}, so signing in again will not change this. Ask an administrator to grant you the Luna Travel permission in Travelgenix ID, then reload this page.`}
+        action={{ label: 'Open Travelgenix ID', href: 'https://id.travelify.io' }}
+      />
+    );
+  }
+
+  if (auth.state === 'unavailable') {
+    return (
+      <AuthScreen
+        c={c}
+        title="Can’t reach Travelgenix ID"
+        body="Your sign-in could not be checked, which is a problem at our end rather than anything you have done. Try again in a moment."
+        action={{ label: 'Try again', onClick: () => window.location.reload() }}
+      />
+    );
+  }
+
+  if (auth.state === 'signed-out') {
+    return (
+      <AuthScreen
+        c={c}
+        title="Please sign in"
+        body="Your session has ended. Signing in again through Travelgenix ID will bring you straight back here."
+        action={{ label: 'Sign in', onClick: () => { window.location.href = signInUrl(window.location.href); } }}
+      />
+    );
   }
 
   return (
@@ -330,6 +441,81 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <main style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The screen somebody sees instead of an admin panel they cannot use.
+ *
+ * Deliberately replaces the shell rather than sitting inside it. A sidebar
+ * full of links that all 401 reads as "the product is broken"; a single plain
+ * screen reads as "here is where you are and here is what to do about it".
+ */
+function AuthScreen({
+  c,
+  title,
+  body,
+  action,
+}: {
+  c: { bg: string; bgElevated: string; border: string; text: string; textSecondary: string; accent: string };
+  title: string;
+  body: string;
+  action?: { label: string; href?: string; onClick?: () => void };
+}) {
+  const btn: React.CSSProperties = {
+    display: 'inline-block',
+    marginTop: 20,
+    padding: '10px 18px',
+    borderRadius: 8,
+    background: c.accent,
+    color: '#fff',
+    border: 'none',
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+    textDecoration: 'none',
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        background: c.bg,
+        fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 460,
+          width: '100%',
+          background: c.bgElevated,
+          border: `1px solid ${c.border}`,
+          borderRadius: 14,
+          padding: 28,
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: c.textSecondary }}>
+          Luna Travel
+        </div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: c.text, margin: '10px 0 8px' }}>{title}</h1>
+        <p style={{ fontSize: 14, lineHeight: 1.55, color: c.textSecondary, margin: 0 }}>{body}</p>
+        {action &&
+          (action.href ? (
+            <a href={action.href} style={btn}>
+              {action.label}
+            </a>
+          ) : (
+            <button onClick={action.onClick} style={btn}>
+              {action.label}
+            </button>
+          ))}
       </div>
     </div>
   );

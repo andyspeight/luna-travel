@@ -266,6 +266,41 @@ async function main() {
   }
   await ess.close();
 
+  // ── The admin dead end ──
+  //
+  // Admin pages stopped being gated in the SSO migration, on the understanding
+  // that a client-side tg-auth-gate.js would take over. It was never added, so
+  // the shell rendered for anyone, every API answered 401, and the only button
+  // on screen re-ran the same doomed request. Somebody hit that two weeks
+  // running. These guard the way out.
+  const gateCtx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+  let bounced = null;
+  await gateCtx.route('**://id.travelify.io/**', (route) => {
+    bounced = route.request().url();
+    route.abort();
+  });
+  const gp = await gateCtx.newPage();
+  await gp.goto(`${BASE}/admin/dashboard`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  await gp.waitForTimeout(3500);
+
+  check('a signed-out admin is sent to Travelgenix ID', !!bounced && bounced.includes('/signin'), String(bounced).slice(0, 60));
+  check(
+    'and is brought back to the page they wanted',
+    !!bounced && decodeURIComponent(String(bounced)).includes('/admin/dashboard'),
+  );
+
+  // Bouncing twice is an infinite loop nobody can read their way out of.
+  bounced = null;
+  await gp.goto(`${BASE}/admin/dashboard`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  await gp.waitForTimeout(3000);
+  const gateBody = (await gp.textContent('body')) || '';
+
+  check('a second visit does not bounce again', bounced === null);
+  check('it offers a sign-in button instead', /Sign in/.test(gateBody));
+  check('the unusable admin shell is gone', !/Sync monitor/.test(gateBody));
+  check('and the misleading expiry message with it', !/session has expired/.test(gateBody));
+  await gp.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

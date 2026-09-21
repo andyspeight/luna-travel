@@ -11,10 +11,14 @@
  *      (tg_session cookie).
  *
  * WHAT CHANGED (SSO migration, 26 May 2026):
- *   - Admin PAGES (/admin/*) are no longer gated here. They are gated
- *     client-side by tg-auth-gate.js, which is included in the admin layout
- *     <head>. That script handles sign-in redirect and the luna_travel
- *     permission check, consistent with every other Travelgenix product.
+ *   - Admin PAGES (/admin/*) are no longer gated here. The migration note
+ *     used to say they were gated client-side by tg-auth-gate.js, "included
+ *     in the admin layout <head>". That script was never added to this app,
+ *     so for four months admin pages were gated by nothing at all: the shell
+ *     rendered for anyone, every API answered 401, and no code anywhere sent
+ *     a signed-out person to sign in. The admin layout now does that itself
+ *     (see AuthScreen there) rather than waiting for a script that is not
+ *     coming.
  *   - Admin API ROUTES are still gated here, server-side, because a
  *     client-side gate cannot protect an API endpoint. We validate the
  *     central session by calling id.travelify.io/api/auth/me (see
@@ -40,7 +44,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminSession } from '@/lib/admin-session';
+import { checkAdminSession } from '@/lib/admin-session';
 import { routeForHost } from '@/lib/origins';
 
 export const config = {
@@ -135,16 +139,28 @@ export async function middleware(req: NextRequest) {
   }
 
   // 2. Validate the central session. We forward the whole Cookie header to
-  //    Travelgenix ID; verifyAdminSession returns claims only if the
-  //    session is valid AND the user holds a luna_travel permission.
-  const claims = await verifyAdminSession(req.headers.get('cookie'));
-  if (!claims) {
-    return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
+  //    Travelgenix ID; the check passes only if the session is valid AND the
+  //    user holds a luna_travel permission.
+  //
+  //    The 401 body now carries WHY. It used to be a bare "unauthorised", and
+  //    the admin screen turned every cause into "your session has expired" —
+  //    which for a missing permission is false, and leaves somebody signing in
+  //    over and over to be told the same thing.
+  const auth = await checkAdminSession(req.headers.get('cookie'));
+  if (auth.state !== 'ok') {
+    return NextResponse.json(
+      {
+        error: 'unauthorised',
+        reason: auth.state,
+        ...(auth.state === 'no-permission' ? { email: auth.email } : {}),
+      },
+      { status: 401 },
+    );
   }
 
   // 3. Pass through, making identity available to downstream handlers.
   const res = NextResponse.next();
-  res.headers.set('x-admin-email', claims.email);
-  res.headers.set('x-admin-role', claims.role);
+  res.headers.set('x-admin-email', auth.claims.email);
+  res.headers.set('x-admin-role', auth.claims.role);
   return res;
 }

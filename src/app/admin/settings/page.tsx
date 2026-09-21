@@ -27,11 +27,17 @@ interface Settings {
   maintenance: { enabled: boolean; message: string };
   inviteExpiryDays: number;
 }
+interface LunaAiStatus {
+  state: 'ready' | 'off' | 'incomplete';
+  detail: string;
+  via: 'luna-chat' | 'anthropic' | null;
+}
 interface Status {
   supabase: boolean;
   aerodatabox: { reachable: boolean; status: number | null };
   control: boolean;
   cron: boolean;
+  lunaAi: LunaAiStatus;
   env: Record<string, boolean>;
   envSet: number;
   envTotal: number;
@@ -117,6 +123,14 @@ export default function SettingsPage() {
               <StatusTile ok={status.aerodatabox.reachable} label="AeroDataBox" detail={status.aerodatabox.reachable ? 'Reachable' : `No response${status.aerodatabox.status ? ` (${status.aerodatabox.status})` : ''}`} />
               <StatusTile ok={status.control} label="Control (Travelgenix ID)" detail={status.control ? 'Reachable' : 'Unreachable'} />
               <StatusTile ok={status.cron} label="Cron" detail={status.cron ? 'Configured' : 'CRON_SECRET unset'} />
+              {/* The model layer had no tile at all, so 11/11 green said
+                  nothing about whether Luna could answer an open question. */}
+              <StatusTile
+                ok={status.lunaAi?.state === 'ready'}
+                warn={status.lunaAi?.state === 'incomplete'}
+                label="Luna (open questions)"
+                detail={status.lunaAi?.detail || 'Unknown'}
+              />
             </div>
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.textSecondary }}>
@@ -406,14 +420,20 @@ function Card({ title, subtitle, icon, action, children }: { title: string; subt
   );
 }
 
-function StatusTile({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+function StatusTile({ ok, warn, label, detail }: { ok: boolean; warn?: boolean; label: string; detail: string }) {
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, background: C.bg }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {ok ? <CheckCircle2 size={15} color={C.success} /> : <XCircle size={15} color={C.danger} />}
+        {ok ? (
+          <CheckCircle2 size={15} color={C.success} />
+        ) : (
+          // Amber, not red, for half-configured: red reads as "nothing set",
+          // and this is the worse case — something set that cannot work.
+          <XCircle size={15} color={warn ? C.warning : C.danger} />
+        )}
         <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{label}</span>
       </div>
-      <div style={{ fontSize: 12, color: ok ? C.textSecondary : C.danger, marginTop: 4 }}>{detail}</div>
+      <div style={{ fontSize: 12, color: ok ? C.textSecondary : warn ? C.warning : C.danger, marginTop: 4 }}>{detail}</div>
     </div>
   );
 }

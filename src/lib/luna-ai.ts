@@ -36,8 +36,78 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
 /** The marker the model returns when the context cannot answer the question. */
 export const CANNOT_ANSWER = 'CANNOT_ANSWER';
 
+/**
+ * Is it worth attempting a call at all?
+ *
+ * Deliberately optimistic: if a backend looks present, try it. A failed attempt
+ * costs one request and ends in the agent handoff, which is the same place an
+ * early return would land the traveller. Do not use this to report status —
+ * see lunaAiStatus below, which is allowed to be pessimistic.
+ */
 export function lunaAiConfigured(): boolean {
   return !!(process.env.LUNA_CHAT_URL || process.env.ANTHROPIC_API_KEY);
+}
+
+export type LunaAiState = 'ready' | 'off' | 'incomplete';
+
+export interface LunaAiStatus {
+  state: LunaAiState;
+  /** One line for an operator, saying what is true and what to do about it. */
+  detail: string;
+  /** Which backend a question would actually reach, if any. */
+  via: 'luna-chat' | 'anthropic' | null;
+}
+
+/**
+ * What an admin screen should say about the model layer.
+ *
+ * Separate from lunaAiConfigured because a dashboard has the opposite duty. A
+ * green tile that lies is worse than no tile: it is how something stays broken
+ * for months, which this project has now watched happen twice.
+ *
+ * The case worth catching is LUNA_CHAT_URL set without TG_INTERNAL_KEY.
+ * lunaAiConfigured says true, viaLunaChat returns immediately without calling
+ * anything, and the request falls through to Anthropic — so with no Anthropic
+ * key it is configured-looking and permanently dead. Nothing else reports that.
+ */
+export function lunaAiStatus(): LunaAiStatus {
+  const chatUrl = !!process.env.LUNA_CHAT_URL;
+  const internalKey = !!process.env.TG_INTERNAL_KEY;
+  const anthropic = !!process.env.ANTHROPIC_API_KEY;
+
+  if (chatUrl && internalKey) {
+    return {
+      state: 'ready',
+      via: 'luna-chat',
+      detail: anthropic
+        ? 'Luna Chat, with a direct fallback'
+        : 'Luna Chat',
+    };
+  }
+
+  if (chatUrl && !internalKey) {
+    return anthropic
+      ? {
+          state: 'ready',
+          via: 'anthropic',
+          detail: 'Direct only — LUNA_CHAT_URL is set but TG_INTERNAL_KEY is not, so Luna Chat is skipped',
+        }
+      : {
+          state: 'incomplete',
+          via: null,
+          detail: 'LUNA_CHAT_URL is set but TG_INTERNAL_KEY is not, and there is no direct key either',
+        };
+  }
+
+  if (anthropic) {
+    return { state: 'ready', via: 'anthropic', detail: 'Direct' };
+  }
+
+  return {
+    state: 'off',
+    via: null,
+    detail: 'No LUNA_CHAT_URL and no ANTHROPIC_API_KEY',
+  };
 }
 
 const SYSTEM = `You are Luna, a travel concierge inside a holiday app. You are answering one traveller about one trip they have already booked and paid for.

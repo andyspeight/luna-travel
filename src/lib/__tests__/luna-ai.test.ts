@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { isRefusal, CANNOT_ANSWER } from '@/lib/luna-ai';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { isRefusal, CANNOT_ANSWER, lunaAiStatus, lunaAiConfigured } from '@/lib/luna-ai';
 
 // The model is told to return a bare marker when the context cannot answer.
 // Treating a wrapped one as an answer would show a traveller the word
@@ -31,5 +31,73 @@ describe('isRefusal', () => {
   it('does not mistake a long answer that mentions the marker', () => {
     const essay = `There is plenty to do on a wet afternoon. ${CANNOT_ANSWER} `.padEnd(400, 'x');
     expect(isRefusal(essay)).toBe(false);
+  });
+});
+
+/**
+ * What the admin screen is allowed to claim.
+ *
+ * lunaAiConfigured is optimistic on purpose — a wasted attempt ends in the
+ * agent handoff, which is where an early return would land the traveller
+ * anyway. A dashboard has the opposite duty: a green tile that lies is how
+ * something stays broken for months.
+ */
+describe('lunaAiStatus', () => {
+  const real = { ...process.env };
+  beforeEach(() => {
+    delete process.env.LUNA_CHAT_URL;
+    delete process.env.TG_INTERNAL_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+  afterEach(() => { process.env = { ...real }; });
+
+  it('says off when nothing is set', () => {
+    const s = lunaAiStatus();
+    expect(s.state).toBe('off');
+    expect(s.via).toBeNull();
+    expect(s.detail).toMatch(/LUNA_CHAT_URL|ANTHROPIC_API_KEY/);
+  });
+
+  it('says ready on Luna Chat when the URL and the internal key are both set', () => {
+    process.env.LUNA_CHAT_URL = 'https://x';
+    process.env.TG_INTERNAL_KEY = 'k';
+    const s = lunaAiStatus();
+    expect(s.state).toBe('ready');
+    expect(s.via).toBe('luna-chat');
+  });
+
+  it('says ready on the direct key alone', () => {
+    process.env.ANTHROPIC_API_KEY = 'k';
+    const s = lunaAiStatus();
+    expect(s.state).toBe('ready');
+    expect(s.via).toBe('anthropic');
+  });
+
+  // THE case. lunaAiConfigured returns true here, viaLunaChat returns without
+  // calling anything, and there is no fallback — configured-looking and dead.
+  it('catches a URL with no internal key and no fallback', () => {
+    process.env.LUNA_CHAT_URL = 'https://x';
+    const s = lunaAiStatus();
+    expect(s.state).toBe('incomplete');
+    expect(s.via).toBeNull();
+    expect(s.detail).toMatch(/TG_INTERNAL_KEY/);
+    // The optimistic gate disagrees, which is exactly why this exists.
+    expect(lunaAiConfigured()).toBe(true);
+  });
+
+  it('reports the direct key when the chat URL is unusable but a fallback exists', () => {
+    process.env.LUNA_CHAT_URL = 'https://x';
+    process.env.ANTHROPIC_API_KEY = 'k';
+    const s = lunaAiStatus();
+    expect(s.state).toBe('ready');
+    expect(s.via).toBe('anthropic');
+    expect(s.detail).toMatch(/TG_INTERNAL_KEY/);
+  });
+
+  it('mentions the fallback when both backends are available', () => {
+    process.env.LUNA_CHAT_URL = 'https://x';
+    process.env.TG_INTERNAL_KEY = 'k';
+    process.env.ANTHROPIC_API_KEY = 'k';
+    expect(lunaAiStatus().detail).toMatch(/fallback/i);
   });
 });

@@ -154,6 +154,24 @@ is built to stop rather than guess:
 - **`?dryRun=1`** reports the plan without acting. The first run on any
   environment should be a dry run, and the output is the plan verbatim.
 
+### Running it from the admin panel
+
+`/admin/settings` → **Stored documents**. **Preview what would be removed**
+reports the plan; if there is anything to remove, a second button appears and
+arms on the first click, acting only on the second.
+
+Preview is a `GET` and removal is a `POST`, so a refresh, a browser prefetch or
+a pasted URL cannot destroy anything. Both are admin-gated, and `npm run smoke`
+checks that an unauthenticated `POST` gets 401 — that one would let anyone on
+the internet clear a customer's documents.
+
+The button and the weekly schedule share one implementation
+(`src/lib/storage-cleanup-run.ts`). A button that says one thing while the
+schedule does another is how a file goes missing with nobody expecting it.
+
+An admin removal is audited under that person's email rather than `cron`: if
+somebody cleared a customer's file by hand, the trail should say who.
+
 The planning lives in `src/lib/storage-cleanup.ts`, away from the network, so
 the judgements can be tested — and the tests that matter are the ones about what
 it must *not* touch: a live document, a recently removed one, an upload in

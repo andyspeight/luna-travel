@@ -354,6 +354,31 @@ async function main() {
   );
   await cleanup.close();
 
+  // ── The admin button must be shut to the public, POST most of all ──
+  //
+  // GET previews and POST destroys. An unauthenticated POST here would let
+  // anyone on the internet clear a customer's documents.
+  const adminCleanup = await browser.newPage();
+  const previewGate = await adminCleanup.goto(`${BASE}/api/admin/storage-cleanup`, {
+    waitUntil: 'domcontentloaded',
+  });
+  check(
+    'the admin preview is shut without a session',
+    [401, 403, 307].includes(previewGate.status()),
+    String(previewGate.status()),
+  );
+
+  const postGate = await adminCleanup.evaluate(async (base) => {
+    const r = await fetch(`${base}/api/admin/storage-cleanup`, { method: 'POST' });
+    return r.status;
+  }, BASE);
+  check(
+    'an unauthenticated POST cannot remove anything',
+    [401, 403, 307].includes(postGate),
+    String(postGate),
+  );
+  await adminCleanup.close();
+
   check('no uncaught JavaScript anywhere', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 
   await browser.close();

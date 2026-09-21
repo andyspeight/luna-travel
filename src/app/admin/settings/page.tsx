@@ -2,8 +2,9 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Activity, CheckCircle2, XCircle, Power, Plane, Wrench, Clock, Users, CreditCard, ExternalLink, RefreshCw,
+  Activity, CheckCircle2, XCircle, Power, Plane, Wrench, Clock, Users, CreditCard, ExternalLink, RefreshCw, HardDrive,
 } from 'lucide-react';
+import { humanBytes } from '@/lib/storage-cleanup';
 
 const C = {
   bg: '#F8FAFC',
@@ -34,6 +35,23 @@ interface Status {
   env: Record<string, boolean>;
   envSet: number;
   envTotal: number;
+}
+
+interface PurgeItem { path: string; reason: 'soft-deleted' | 'orphaned'; sizeBytes: number }
+interface CleanupResult {
+  ok: boolean;
+  dryRun: boolean;
+  summary: string;
+  graceDays: number;
+  scanned: number;
+  documents: number;
+  purge: PurgeItem[];
+  kept: number;
+  bytes: number;
+  capped: boolean;
+  notes: string[];
+  error?: string;
+  detail?: string;
 }
 
 export default function SettingsPage() {
@@ -174,6 +192,8 @@ export default function SettingsPage() {
             </div>
           </Card>
 
+          <StorageCard />
+
           {/* Team & billing — honest pointers */}
           <Card title="Team & billing" icon={<Users size={16} />}>
             <Pointer icon={<Users size={15} />} label="Admin access" body="Admins are granted the luna_travel permission in Control (Travelgenix ID) — that's the single source of truth. Manage the team there.">
@@ -187,6 +207,171 @@ export default function SettingsPage() {
       <style>{`.spin{animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
+}
+
+/**
+ * Stored documents — the retention job, without a terminal.
+ *
+ * Removing a document is a soft delete; the file itself goes when the weekly
+ * job runs. This is the same job, on a button, so nobody has to hold a secret
+ * and a curl command to see what is about to happen.
+ *
+ * Preview is a GET and removing is a POST, so a refresh, a prefetch or a pasted
+ * URL cannot destroy anything. The removal button arms on the first click and
+ * only acts on the second.
+ */
+function StorageCard() {
+  const [result, setResult] = useState<CleanupResult | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'apply' | null>(null);
+  const [armed, setArmed] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const run = async (apply: boolean) => {
+    setBusy(apply ? 'apply' : 'preview');
+    setFailed(false);
+    if (!apply) setResult(null);
+    try {
+      const res = await fetch('/api/admin/storage-cleanup', {
+        method: apply ? 'POST' : 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      setResult((await res.json()) as CleanupResult);
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(null);
+      setArmed(false);
+    }
+  };
+
+  const removable = result?.ok && !!result.dryRun && result.purge.length > 0;
+  const done = result?.ok && result.dryRun === false;
+
+  return (
+    <Card
+      title="Stored documents"
+      icon={<HardDrive size={16} />}
+      subtitle="Removing a document hides it immediately. The file itself goes on a 30-day delay, or here."
+    >
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={() => run(false)} disabled={busy !== null} style={primaryBtn}>
+          {busy === 'preview' ? 'Checking…' : 'Preview what would be removed'}
+        </button>
+        <span style={{ fontSize: 12, color: C.textTertiary }}>
+          Reads only. Nothing is removed until you say so.
+        </span>
+      </div>
+
+      {failed && (
+        <div style={{ marginTop: 14, fontSize: 13, color: C.danger }}>
+          Couldn&rsquo;t reach the server. Try again.
+        </div>
+      )}
+
+      {result && !result.ok && (
+        <div style={{ marginTop: 14, ...panel('#FEF2F2', '#FECACA') }}>
+          <div style={{ fontWeight: 600, color: '#B91C1C', fontSize: 13 }}>
+            It refused to run — and that is the safe outcome.
+          </div>
+          <div style={{ fontSize: 13, color: '#7F1D1D', marginTop: 4 }}>
+            {result.detail || result.error}
+          </div>
+          <div style={{ fontSize: 12, color: '#7F1D1D', marginTop: 6 }}>
+            It will not plan a removal from an incomplete picture. Nothing was touched.
+          </div>
+        </div>
+      )}
+
+      {result?.ok && (
+        <>
+          <div
+            style={{
+              marginTop: 14,
+              ...panel(done ? '#F0FDF4' : '#F8FAFC', done ? '#BBF7D0' : C.border),
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600, color: done ? '#15803D' : C.text }}>
+              {result.summary}
+            </div>
+            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 6 }}>
+              Scanned {result.scanned} file{result.scanned === 1 ? '' : 's'} in the bucket
+              against {result.documents} document record{result.documents === 1 ? '' : 's'}.
+              Grace period {result.graceDays} days.
+            </div>
+            {result.notes.map((n, i) => (
+              <div key={i} style={{ fontSize: 12, color: C.warning, marginTop: 6, fontWeight: 600 }}>
+                {n}
+              </div>
+            ))}
+          </div>
+
+          {result.purge.length > 0 && (
+            <div style={{ marginTop: 12, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+              {result.purge.slice(0, 50).map((p) => (
+                <div
+                  key={p.path}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 12px',
+                    borderTop: `1px solid ${C.border}`,
+                    fontSize: 12,
+                  }}
+                >
+                  <span style={{ flex: 1, fontFamily: 'ui-monospace, monospace', color: C.text, wordBreak: 'break-all' }}>
+                    {p.path}
+                  </span>
+                  <span style={{ color: C.textSecondary, whiteSpace: 'nowrap' }}>
+                    {p.reason === 'orphaned' ? 'no record' : 'past grace period'}
+                  </span>
+                  <span style={{ color: C.textTertiary, whiteSpace: 'nowrap' }}>{humanBytes(p.sizeBytes)}</span>
+                </div>
+              ))}
+              {result.purge.length > 50 && (
+                <div style={{ padding: '8px 12px', borderTop: `1px solid ${C.border}`, fontSize: 12, color: C.textTertiary }}>
+                  …and {result.purge.length - 50} more.
+                </div>
+              )}
+            </div>
+          )}
+
+          {removable && (
+            <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => (armed ? run(true) : setArmed(true))}
+                disabled={busy !== null}
+                style={{ ...primaryBtn, background: armed ? C.danger : '#fff', color: armed ? '#fff' : C.danger, border: `1px solid ${C.danger}` }}
+              >
+                {busy === 'apply'
+                  ? 'Removing…'
+                  : armed
+                    ? `Yes — remove ${result.purge.length} file${result.purge.length === 1 ? '' : 's'} permanently`
+                    : `Remove ${result.purge.length} file${result.purge.length === 1 ? '' : 's'}`}
+              </button>
+              {armed && (
+                <button onClick={() => setArmed(false)} style={ghost}>Cancel</button>
+              )}
+              <span style={{ fontSize: 12, color: C.textTertiary }}>
+                {armed ? 'This cannot be undone.' : 'You will be asked to confirm.'}
+              </span>
+            </div>
+          )}
+
+          {result.dryRun && result.purge.length === 0 && (
+            <div style={{ marginTop: 10, fontSize: 12, color: C.textTertiary }}>
+              Nothing to do. The weekly job runs Sunday at 03:00 regardless, so this rarely needs pressing.
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function panel(bg: string, border: string): React.CSSProperties {
+  return { background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: 12 };
 }
 
 function Card({ title, subtitle, icon, action, children }: { title: string; subtitle?: string; icon: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {

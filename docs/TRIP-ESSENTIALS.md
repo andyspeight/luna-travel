@@ -75,10 +75,34 @@ decoration. Speaking uses the device's own synthesiser, so it works offline.
 English destinations get no phrase book. A phrase book for somewhere they
 already speak your language is clutter.
 
-> **These have not been checked by a native speaker.** `reviewedBy` on each set
-> is empty and should be filled when someone has been through it. They are the
-> most standard phrases in travel and the risk is low, but low is not checked —
-> the same gate the multi-language work uses.
+### Written in-house, and staying that way
+
+Decided 21 Sep 2026: these are not getting a native-speaker pass, because
+staffing one for every language a traveller might need does not scale, and
+holding the feature back for a review that will never happen helps nobody.
+`reviewedBy` stays on the type so a set can carry a name when somebody does
+read one, but empty means in-house rather than outstanding.
+
+The scope is what makes that defensible. Twelve stock phrases in twelve
+languages: "Hello", "the bill please", "where is the toilet" have one obvious
+form each, and the places machine translation slips — idiom, register, regional
+variation — barely apply.
+
+### The one that is not a phrase
+
+`I'm allergic to…` is a stem, not a sentence, and the traveller finishes it
+themselves — in English. "Soy alérgico a… **peanuts**" puts the one word that
+carries the whole meaning into a language the listener may not have.
+
+That is not a translation problem and no native-speaker review would have
+caught it: every one of the twelve is individually correct. It is a design
+problem, and it sits on the single phrase where being misunderstood has a
+medical consequence rather than an awkward one.
+
+The fix is a short closed list — nuts, peanuts, shellfish, fish, eggs, milk,
+gluten, soy, sesame — rendered in the local language under that phrase, so the
+traveller points instead of guessing. Not built yet. Worth doing before the
+phrase book is pointed at anywhere with a serious allergy story.
 
 ## A bug worth knowing about
 

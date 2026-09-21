@@ -55,17 +55,21 @@ export async function POST(req: NextRequest) {
   const result = await runStorageCleanup({ dryRun: false, graceDays });
   if (!result.ok) return NextResponse.json(result, { status: 500 });
 
-  if (result.purge.length > 0) {
-    // Named, unlike the scheduled run. If a person removed a customer's file by
-    // hand, the audit trail should say which person.
-    void logAuditEvent({
+  // Awaited, not fire-and-forget. For this one operation the trail is part of
+  // the deliverable: files are gone, and "we cannot tell you when" is worth
+  // saying out loud rather than discovering months later.
+  //
+  // Named, unlike the scheduled run. If a person removed a customer's file by
+  // hand, the audit trail should say which person.
+  const audited =
+    result.purge.length === 0 ||
+    (await logAuditEvent({
       eventType: 'storage.purged',
       actor: claims.email || 'admin',
       targetId: BUCKET,
       targetLabel: result.summary,
       metadata: { ...auditMetadata(result), via: 'admin' },
-    });
-  }
+    }));
 
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, audited });
 }

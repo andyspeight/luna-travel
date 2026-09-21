@@ -1,95 +1,32 @@
 /**
- * GET /api/cron/storage-cleanup — the deletion that actually deletes.
+ * GET /api/cron/storage-cleanup — the weekly retention run.
  *
- * Deleting a document sets deleted_at and leaves the file in the bucket. The
- * delete route has always said a cron would come along and remove it; it never
- * did, so in two years nothing has ever left storage. An agency deletes a
- * customer's insurance certificate, the app says done, and the file is still
- * sitting there for anyone with the service key.
- *
- * This is that cron. It removes two things and nothing else:
- *   - files whose document was soft-deleted longer ago than the grace period
- *   - files with no document row at all, old enough not to be a live upload
+ * Removing a document sets deleted_at and leaves the file in the bucket. The
+ * delete route has always said a scheduled job would come along and finish the
+ * work; it never existed, so nothing had ever left storage.
  *
  * Deliberately NOT under /api/admin, so the edge middleware (which wants a
- * tg_session) does not block the cron. Gated by CRON_SECRET, same as
+ * tg_session) does not block the scheduler. Gated by CRON_SECRET, same as
  * /api/cron/sync and /api/cron/refresh-routes.
  *
- * ?dryRun=1 plans without deleting — which is how you look before you leap, and
- * how the first run of this should always be done. ?graceDays=N overrides the
- * window. Both need the secret.
+ * ?dryRun=1 reports the plan without acting. ?graceDays=N overrides the window.
+ * Both still need the secret.
+ *
+ * The work itself lives in lib/storage-cleanup-run.ts, shared with the admin
+ * button at /api/admin/storage-cleanup — one implementation, because a button
+ * that says one thing while the schedule does another is how a file goes
+ * missing with nobody expecting it.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
 import { safeEqual } from '@/lib/constant-time';
 import { logAuditEvent } from '@/lib/audit';
-import {
-  planCleanup,
-  describePlan,
-  DEFAULTS,
-  type StoredObject,
-  type DocumentRow,
-} from '@/lib/storage-cleanup';
+import { DEFAULTS } from '@/lib/storage-cleanup';
+import { runStorageCleanup, auditMetadata, BUCKET } from '@/lib/storage-cleanup-run';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 120;
-
-const BUCKET = 'luna-travel-documents';
-const PAGE = 100;
-/** agency / traveller / file. One more than needed, so a stray level is still seen. */
-const MAX_DEPTH = 4;
-
-interface ListedEntry {
-  name: string;
-  id: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  metadata?: { size?: number } | null;
-}
-
-/**
- * Walk the bucket.
- *
- * Supabase's list() is one level at a time and paginated, and a folder comes
- * back with a null id. Anything that is not a folder is a file.
- */
-async function listAll(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  prefix = '',
-  depth = 0,
-): Promise<StoredObject[]> {
-  if (depth >= MAX_DEPTH) return [];
-
-  const found: StoredObject[] = [];
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .list(prefix, { limit: PAGE, offset, sortBy: { column: 'name', order: 'asc' } });
-
-    // A failed listing must never be read as "this folder is empty" — that is
-    // the difference between skipping a folder and deleting everything else.
-    if (error) throw new Error(`list ${prefix || '/'}: ${error.message}`);
-
-    const entries = (data || []) as ListedEntry[];
-    for (const e of entries) {
-      const path = prefix ? `${prefix}/${e.name}` : e.name;
-      if (e.id === null) {
-        found.push(...(await listAll(supabase, path, depth + 1)));
-      } else {
-        found.push({
-          path,
-          createdAt: e.created_at || e.updated_at || new Date().toISOString(),
-          sizeBytes: e.metadata?.size ?? 0,
-        });
-      }
-    }
-
-    if (entries.length < PAGE) break;
-  }
-  return found;
-}
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -106,91 +43,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_graceDays' }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdmin();
+  const result = await runStorageCleanup({ dryRun, graceDays });
+  console.log('[cron.storage-cleanup]', dryRun ? 'DRY RUN' : 'live', result.summary);
 
-  // EVERY row, live and deleted alike. Filtering to the deleted ones here would
-  // make every live document look like an orphan.
-  const { data: docs, error: docErr } = await supabase
-    .from('documents')
-    .select('storage_path, deleted_at');
-
-  // Abort rather than plan. An error is not "there are no documents", and the
-  // two are indistinguishable by the time the planner sees an empty array.
-  if (docErr) {
-    console.error('[cron.storage-cleanup] could not read documents:', docErr.message);
-    return NextResponse.json(
-      { error: 'documents_unreadable', detail: 'Refusing to plan a deletion from an incomplete picture.' },
-      { status: 500 },
-    );
+  if (!result.ok) {
+    return NextResponse.json(result, { status: 500 });
   }
 
-  const documents: DocumentRow[] = (docs || []).map((d: { storage_path: string; deleted_at: string | null }) => ({
-    storagePath: d.storage_path,
-    deletedAt: d.deleted_at,
-  }));
-
-  let objects: StoredObject[];
-  try {
-    objects = await listAll(supabase);
-  } catch (e) {
-    console.error('[cron.storage-cleanup]', e instanceof Error ? e.message : e);
-    return NextResponse.json(
-      { error: 'bucket_unreadable', detail: 'Refusing to plan a deletion from a partial listing.' },
-      { status: 500 },
-    );
-  }
-
-  const plan = planCleanup(objects, documents, { graceDays });
-
-  if (dryRun || plan.purge.length === 0) {
-    const summary = describePlan(plan, true);
-    console.log('[cron.storage-cleanup]', dryRun ? 'DRY RUN' : 'nothing to do', summary);
-    return NextResponse.json({
-      ok: true,
-      dryRun,
-      summary,
-      graceDays,
-      scanned: objects.length,
-      documents: documents.length,
-      ...plan,
+  // Worth an audit row: this is the only process that destroys a customer's
+  // file, and "when did that go" should have an answer.
+  if (!dryRun && result.purge.length > 0) {
+    void logAuditEvent({
+      eventType: 'storage.purged',
+      actor: 'cron',
+      targetId: BUCKET,
+      targetLabel: result.summary,
+      metadata: auditMetadata(result),
     });
   }
 
-  // Remove in one batch. Supabase treats a path that is already gone as a
-  // success, so a half-finished previous run costs nothing to repeat.
-  const paths = plan.purge.map((p) => p.path);
-  const { error: rmErr } = await supabase.storage.from(BUCKET).remove(paths);
-  if (rmErr) {
-    console.error('[cron.storage-cleanup] remove failed:', rmErr.message);
-    return NextResponse.json({ error: 'remove_failed', detail: rmErr.message }, { status: 500 });
-  }
-
-  const summary = describePlan(plan, false);
-  console.log('[cron.storage-cleanup]', summary);
-
-  // Worth an audit row: this is the only process in the system that destroys a
-  // customer's file, and "when did that go" should have an answer.
-  void logAuditEvent({
-    eventType: 'storage.purged',
-    actor: 'cron',
-    targetId: BUCKET,
-    targetLabel: summary,
-    metadata: {
-      graceDays,
-      removed: plan.purge.length,
-      bytes: plan.bytes,
-      softDeleted: plan.purge.filter((p) => p.reason === 'soft-deleted').length,
-      orphaned: plan.purge.filter((p) => p.reason === 'orphaned').length,
-    },
-  });
-
-  return NextResponse.json({
-    ok: true,
-    dryRun: false,
-    summary,
-    graceDays,
-    scanned: objects.length,
-    documents: documents.length,
-    ...plan,
-  });
+  return NextResponse.json(result);
 }

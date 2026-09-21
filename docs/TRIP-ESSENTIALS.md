@@ -99,10 +99,57 @@ caught it: every one of the twelve is individually correct. It is a design
 problem, and it sits on the single phrase where being misunderstood has a
 medical consequence rather than an awkward one.
 
-The fix is a short closed list — nuts, peanuts, shellfish, fish, eggs, milk,
-gluten, soy, sesame — rendered in the local language under that phrase, so the
-traveller points instead of guessing. Not built yet. Worth doing before the
-phrase book is pointed at anywhere with a serious allergy story.
+**Fixed.** `src/lib/allergens.ts` carries the finished sentence for each
+allergen in each of the twelve languages, and the Allergies section on this
+screen lets the traveller pick one rather than complete a stem.
+
+#### Whole sentences, never composed
+
+The obvious implementation is one stem per language with a noun slotted in. It
+breaks in most of them:
+
+| | |
+|---|---|
+| Turkish | puts the allergen **first**: *Yer fıstığı alerjim var* |
+| Greek | contracts preposition and article by gender: στα / στο / στη |
+| Spanish, Italian | need the matching article: *a los* / *a la* / *al* |
+| Polish | needs the accusative: soja → **soję**, gorczyca → **gorczycę** |
+
+A template would produce confident nonsense in exactly the situation where
+nonsense is dangerous, so all 168 lines are written out. The tests assert each
+of those four traps specifically, because they are what a future refactor into
+a template would quietly undo.
+
+#### "I have an allergy to", not "I am allergic to"
+
+Chosen deliberately. The possessive construction avoids gender agreement in
+almost every language here, so one line serves every traveller — *Tengo alergia
+a* needs one line where *Soy alérgico/alérgica* needs two. Thai is the
+exception, because the polite pronoun itself is gendered; it is left off, which
+is normal in speech.
+
+#### The list is the UK's regulated fourteen
+
+Not a guess at the common ones. It is the list a British traveller will have
+been told to avoid and the one their menus at home declare — so celery, lupin,
+mustard and sulphites are in. If somebody has a celery allergy, nobody else is
+going to write this down for them.
+
+Where a precise term would not be understood by the person actually serving the
+food, the broader one is used and the note says so. For an allergy, too broad is
+safe and too narrow is not.
+
+#### One warning worth having
+
+Greek for molluscs is μαλάκια, which sits one slip from a well-known insult.
+That entry carries a note and offers θαλασσινά instead for saying out loud. It
+is the sort of thing a phrase book exists to know.
+
+#### Show it, do not say it
+
+The chosen sentence renders large and high-contrast, for holding up to whoever
+is serving, and the screen says as much. Speech synthesis is there as a second
+best: a mispronounced word can turn an allergy into a preference.
 
 ## A bug worth knowing about
 

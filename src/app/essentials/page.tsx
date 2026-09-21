@@ -30,6 +30,7 @@ import { resolveGuide } from '@/lib/guide-merge';
 import { currencyIso, currencyName, currencySymbol } from '@/lib/currency-iso';
 import { packingList, type PackingGroup } from '@/lib/packing';
 import { phrasesFor, type PhraseSet } from '@/lib/phrasebook';
+import { allergensFor, SHOW_DONT_SAY, type AllergenPhrase } from '@/lib/allergens';
 import { emergencyNumbers } from '@/lib/emergency';
 import {
   IconCoin,
@@ -266,6 +267,106 @@ function Money({ label }: { label: string }) {
   );
 }
 
+// ───────── Allergies ─────────
+
+/**
+ * The completed sentence, picked rather than composed.
+ *
+ * "I'm allergic to…" in the phrase book is a stem, and a traveller finishes a
+ * stem in English — which puts the one word that matters into a language the
+ * listener may not have. Here they choose the allergen and get the whole
+ * sentence.
+ *
+ * Built to be SHOWN first and spoken second. A mispronounced word can turn an
+ * allergy into a preference, so the chosen line is set large and high-contrast,
+ * for holding up to whoever is serving.
+ */
+function AllergyCard({ set, allergens }: { set: PhraseSet; allergens: AllergenPhrase[] }) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [canSpeak, setCanSpeak] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCanSpeak(typeof window !== 'undefined' && 'speechSynthesis' in window);
+    } catch {
+      setCanSpeak(false);
+    }
+  }, []);
+
+  const picked = allergens.find((a) => a.en === chosen) || null;
+
+  return (
+    <div className="space-y-3">
+      <Card>
+        <div className="flex flex-wrap gap-2">
+          {allergens.map((a) => {
+            const on = a.en === chosen;
+            return (
+              <button
+                key={a.en}
+                type="button"
+                onClick={() => setChosen(on ? null : a.en)}
+                aria-pressed={on}
+                className={`px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors ${
+                  on
+                    ? 'bg-teal-dark text-white border-teal-dark dark:bg-teal-light dark:text-ink dark:border-teal-light'
+                    : 'bg-surface-3 text-ink-2 border-line-light'
+                }`}
+              >
+                {a.en}
+              </button>
+            );
+          })}
+        </div>
+
+        {!picked && (
+          <p className="mt-3 text-[12px] text-ink-3 leading-snug">
+            Tap whichever applies. You will get the whole sentence — not a phrase to finish
+            in English, which is what leaves the important word untranslated.
+          </p>
+        )}
+      </Card>
+
+      {picked && (
+        <Card>
+          <div className="text-[11px] uppercase tracking-wider text-ink-3">
+            {picked.en} &middot; {set.language}
+          </div>
+
+          {/* Large and plain: this gets held up to somebody across a counter. */}
+          <p
+            className="mt-2 text-[22px] font-semibold text-ink leading-tight"
+            lang={set.speechLang}
+            dir={set.speechLang.startsWith('ar') ? 'rtl' : undefined}
+          >
+            {picked.local}
+          </p>
+
+          <p className="mt-1.5 text-[13px] text-ink-2 italic">{picked.say}</p>
+
+          {picked.note && (
+            <p className="mt-2 text-[12px] text-ink-3 leading-snug">{picked.note}</p>
+          )}
+
+          {canSpeak && (
+            <button
+              type="button"
+              onClick={() => speak(picked.local, set.speechLang)}
+              className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-3 text-teal-dark dark:text-teal-light text-[13px] font-medium"
+            >
+              <IconChat size={15} /> Say it out loud
+            </button>
+          )}
+
+          <p className="mt-3 pt-3 border-t border-line-light text-[12px] text-ink-3 leading-snug">
+            {SHOW_DONT_SAY}
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ───────── Phrases ─────────
 
 function speak(text: string, lang: string): void {
@@ -440,6 +541,7 @@ export default function EssentialsPage() {
   const languageLabel = place?.facts.language?.value || guide.languages || '';
   const plug = place?.facts.voltageAndPlug?.value || guide.voltageAndPlug || '';
   const phrases = phrasesFor(languageLabel);
+  const allergens = allergensFor(phrases?.language);
 
   const packing = useMemo(
     () =>
@@ -486,6 +588,16 @@ export default function EssentialsPage() {
         >
           <PackingList groups={packing} />
         </Section>
+
+        {phrases && allergens && (
+          <Section
+            icon={<IconInfo size={15} />}
+            title="Allergies"
+            subtitle={`Say exactly which one, in ${phrases.language}.`}
+          >
+            <AllergyCard set={phrases} allergens={allergens} />
+          </Section>
+        )}
 
         {phrases && (
           <Section

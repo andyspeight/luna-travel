@@ -10,10 +10,25 @@
  * you cannot say out loud is decoration. Speaking is handled by the device's
  * own speech synthesiser — no network, no audio files, works on a plane.
  *
- * REVIEW STATUS: these were written in-house and want a native speaker's pass
- * before they are promoted in marketing, the same gate the multi-language work
- * uses. They are the most standard phrases in travel and the risk is low, but
- * "low" is not "checked". `reviewedBy` records who has looked at each one.
+ * REVIEW STATUS: written in-house, and that is the settled position rather than
+ * a gap waiting to be filled. Staffing a native speaker for every language a
+ * traveller might need does not scale, and holding the feature back for a
+ * review that will never happen helps nobody. Decided 21 Sep 2026.
+ *
+ * What makes that defensible is the scope: these are the dozen most standard
+ * phrases in travel, in the twelve languages our destinations actually use.
+ * "Hello", "the bill please" and "where is the toilet" have one obvious form
+ * each, and the places a machine translation goes wrong — idiom, register,
+ * regional variation — barely apply.
+ *
+ * Where it would matter is the last group. "I need a doctor" and "Help!" are
+ * still fixed phrases with one right answer, but "I'm allergic to…" is not a
+ * phrase at all: it is a stem the traveller completes, and they will complete
+ * it in English. See ALLERGEN NOTE below.
+ *
+ * `reviewedBy` stays on the type so a set CAN carry a name when somebody does
+ * read one — a Greek-speaking agent, a colleague. Empty means in-house, not
+ * outstanding.
  */
 
 export interface Phrase {
@@ -32,7 +47,7 @@ export interface PhraseSet {
   language: string;
   /** BCP-47 tag for speechSynthesis. */
   speechLang: string;
-  /** Empty until a native speaker has been through it. */
+  /** Who read it, if anyone did. Empty means in-house — see the header. */
   reviewedBy: string;
   groups: Array<{ title: string; phrases: Phrase[] }>;
 }

@@ -34,6 +34,12 @@ export type TripPhase = 'before' | 'travel-day' | 'in-trip' | 'returning' | 'aft
  */
 export const TRAVEL_DAY_LEAD_HOURS = 8;
 
+/**
+ * The longest gap still counted as changing planes rather than as the holiday
+ * itself. Overnight layovers happen; six-day ones do not.
+ */
+const CONNECTION_MAX_HOURS = 24;
+
 function ms(iso: string | undefined | null): number {
   if (!iso) return NaN;
   return new Date(iso).getTime();
@@ -46,41 +52,96 @@ function localDay(t: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** The first flight out, by departure time — not merely the first in the array. */
-export function outboundFlight(booking: Booking): FlightLeg | null {
-  const withTimes = (booking.flights || []).filter((f) => Number.isFinite(ms(f.depTime)));
-  if (!withTimes.length) return null;
-  return withTimes.reduce((a, b) => (ms(a.depTime) <= ms(b.depTime) ? a : b));
+/** Every flight with a usable departure time, earliest first. */
+function legs(booking: Booking): FlightLeg[] {
+  return (booking.flights || [])
+    .filter((f) => Number.isFinite(ms(f.depTime)))
+    .slice()
+    .sort((a, b) => ms(a.depTime) - ms(b.depTime));
 }
 
-/** The last flight, which for a return trip is the one home. */
-export function returnFlight(booking: Booking): FlightLeg | null {
-  const withTimes = (booking.flights || []).filter((f) => Number.isFinite(ms(f.depTime)));
-  if (withTimes.length < 2) return null;
-  return withTimes.reduce((a, b) => (ms(a.depTime) >= ms(b.depTime) ? a : b));
+/** When this leg is down. Falls back to departure rather than to nothing. */
+function landsAt(f: FlightLeg): number {
+  const arr = ms(f.arrTime);
+  return Number.isFinite(arr) ? arr : ms(f.depTime);
+}
+
+function sameAirport(a: string | undefined, b: string | undefined): boolean {
+  return !!a && !!b && a.trim().toUpperCase() === b.trim().toUpperCase();
 }
 
 /**
- * Which flight, if any, the traveller is taking around now.
+ * The journey out and the journey home.
  *
- * Used by the screen to decide what to put at the top, so it answers for the
- * whole travel day rather than only while airborne.
+ * A long-haul trip is not two flights, it is four — and treating the first and
+ * last as "out" and "back" is how the app came to tell somebody flying home
+ * from Malé that their flight left Abu Dhabi at 21:15, while the plane they
+ * actually had to catch left Malé at half past two.
+ *
+ * The rule: the journey home is the run of connecting legs at the end that
+ * lands you back where you started. Walk backwards from the last leg for as
+ * long as each leg continues from where the one before it landed, and as long
+ * as the wait between them is a connection rather than a stay.
+ *
+ * It claims nothing it cannot see. A one-way, or an itinerary that never
+ * returns to its origin, simply has no journey home, and the screen says
+ * "outbound" — which is true — instead of guessing.
+ */
+export function journeys(booking: Booking): { out: FlightLeg[]; home: FlightLeg[] } {
+  const all = legs(booking);
+  if (all.length < 2) return { out: all, home: [] };
+
+  const origin = all[0].depAirport;
+  if (!sameAirport(all[all.length - 1].arrAirport, origin)) return { out: all, home: [] };
+
+  // Never walk back past the first leg: a day trip out and back is still a
+  // journey out followed by a journey home, however short the gap between.
+  let start = all.length - 1;
+  while (start > 1) {
+    const prev = all[start - 1];
+    const here = all[start];
+    if (!sameAirport(prev.arrAirport, here.depAirport)) break;
+    if (ms(here.depTime) - landsAt(prev) > CONNECTION_MAX_HOURS * 3600_000) break;
+    start -= 1;
+  }
+
+  return { out: all.slice(0, start), home: all.slice(start) };
+}
+
+/** The first flight out — the one that starts the journey. */
+export function outboundFlight(booking: Booking): FlightLeg | null {
+  return journeys(booking).out[0] ?? null;
+}
+
+/**
+ * The flight home: the first leg of the journey back, not the last.
+ *
+ * The leg that matters is the one you have to get to an airport for.
+ */
+export function returnFlight(booking: Booking): FlightLeg | null {
+  return journeys(booking).home[0] ?? null;
+}
+
+/**
+ * Which flight, if any, the traveller has still to take around now.
+ *
+ * The next one that has not yet landed, so a connection rolls over to the
+ * onward leg the moment the first is down — standing in Abu Dhabi at nine in
+ * the morning, the flight that matters is the ten o'clock one.
+ *
+ * Once everything today has landed there is nothing left to catch, so it
+ * answers with nothing and the screen goes back to the trip itself.
  */
 export function flightOfTheDay(booking: Booking, now: number): FlightLeg | null {
-  const soon = (f: FlightLeg | null) => {
-    if (!f) return false;
-    const dep = ms(f.depTime);
-    if (!Number.isFinite(dep)) return false;
-    const lead = TRAVEL_DAY_LEAD_HOURS * 3600_000;
-    // The whole calendar day of departure, plus the hours leading into it.
-    if (localDay(dep) === localDay(now)) return true;
-    return now >= dep - lead && now <= ms(f.arrTime || f.depTime);
-  };
+  const lead = TRAVEL_DAY_LEAD_HOURS * 3600_000;
+  const today = localDay(now);
 
-  const out = outboundFlight(booking);
-  if (soon(out)) return out;
-  const back = returnFlight(booking);
-  if (soon(back)) return back;
+  for (const f of legs(booking)) {
+    if (now > landsAt(f)) continue;
+    const dep = ms(f.depTime);
+    // The whole calendar day of departure, plus the hours leading into it.
+    if (localDay(dep) === today || now >= dep - lead) return f;
+  }
   return null;
 }
 
@@ -88,21 +149,23 @@ export function flightOfTheDay(booking: Booking, now: number): FlightLeg | null 
  * The phase.
  *
  * Order matters. "After" is checked first because a finished trip is finished
- * whatever its flights say, and travel-day before in-trip because the day you
- * fly home is a travel day, not another day by the pool.
+ * whatever its flights say — but a trip is not finished while the traveller is
+ * still in the air, whatever the hotel checkout date says.
  */
 export function tripPhase(booking: Booking, now: number = Date.now()): TripPhase {
-  const end = ms(booking.tripEnd);
-  const start = ms(booking.tripStart);
-
-  if (Number.isFinite(end) && now > end) return 'after';
+  const all = legs(booking);
+  const ends = [ms(booking.tripEnd), all.length ? landsAt(all[all.length - 1]) : NaN].filter(
+    Number.isFinite,
+  );
+  if (ends.length && now > Math.max(...ends)) return 'after';
 
   const flight = flightOfTheDay(booking, now);
   if (flight) {
-    const back = returnFlight(booking);
-    return back && flight.id === back.id ? 'returning' : 'travel-day';
+    const { home } = journeys(booking);
+    return home.some((f) => f.id === flight.id) ? 'returning' : 'travel-day';
   }
 
+  const start = ms(booking.tripStart);
   if (Number.isFinite(start) && now >= start) return 'in-trip';
   return 'before';
 }

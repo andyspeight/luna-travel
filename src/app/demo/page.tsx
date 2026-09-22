@@ -99,14 +99,14 @@ export default function DemoPage() {
 /**
  * The first thing a desktop visitor reads.
  *
- * This is a phone app with no desktop layout — at 1440px the countdown digits
- * spread across the whole screen and the tab bar stretches edge to edge. It
- * reads as broken, and a prospect's first impression is not the place to
- * discover that.
+ * Desktop no longer breaks the app — a trip opened on a laptop is framed at
+ * phone size, so it looks like what it is. But framed is still not the same as
+ * held: a prospect who scans gets it on the device it was designed for, can
+ * add it to their home screen, and sees what their own traveller will see.
  *
- * So desktop is told, before anything else, to scan. Not hidden from the
- * links — somebody with no phone to hand should not be stuck — but told
- * plainly which way round to do it.
+ * So desktop is pointed at the QR codes first, for what it gains rather than
+ * for what it would otherwise lose. The links stay — somebody with no phone to
+ * hand should not be stuck.
  *
  * Hidden on phones, where it would be telling somebody to do what they are
  * already doing.
@@ -119,8 +119,8 @@ function ScanFirst() {
         <p className="text-[14px] leading-snug">
           <span className="font-semibold">Built for a phone.</span>{' '}
           <span className="text-white/80">
-            Scan one of the QR codes below with your camera — opening a trip in this browser will
-            look stretched, because there is no desktop layout.
+            Scan one of the QR codes below with your camera to see it on a phone, as your
+            traveller will. In this browser it opens framed at phone size.
           </span>
         </p>
       </div>
@@ -241,15 +241,15 @@ function TripCard({ trip, origin, qr }: { trip: DemoTrip; origin: string; qr?: s
             Open this trip
           </a>
 
-          {/* Desktop gets the honest version. Not a button, because a button
-              invites the click we are steering away from — but not removed
-              either, since somebody with no phone to hand should not be stuck.
-              Saying why is what stops it reading as a broken page later. */}
+          {/* Not a button, because a button invites the click we are steering
+              away from — but not removed either, since somebody with no phone
+              to hand should not be stuck. Saying what they will get is what
+              stops the phone frame reading as a broken page later. */}
           <a
             href={href}
             className="mt-3 hidden text-[12.5px] text-ink-3 underline underline-offset-2 hover:text-ink-2 md:inline-block"
           >
-            Open in this browser instead — it will look stretched
+            Open in this browser instead — shown at phone size
           </a>
 
           <p className="mt-2 font-mono text-[11px] text-ink-3">{trip.reference}</p>

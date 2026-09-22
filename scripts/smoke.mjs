@@ -331,13 +331,14 @@ async function main() {
   // trip it reads as chrome for an app they have not opened.
   check('the traveller tab bar is hidden', !/Itinerary/.test(demoBody) || !/Docs/.test(demoBody));
 
-  // The traveller app has no desktop layout — at this width the countdown
-  // spreads across the screen and the tab bar stretches edge to edge. So a
-  // desktop reader must be told to scan before anything else, and the
-  // browser link must not look like the way in.
+  // A desktop reader is pointed at the QR codes before anything else, and the
+  // browser link must not look like the way in. The page must also not go on
+  // claiming desktop looks broken now that a trip opened here is framed at
+  // phone size — an untrue warning on a sales page costs more than it saves.
   const scanNotice = dp.getByText('Built for a phone.', { exact: false }).first();
   check('desktop is told to scan first', await scanNotice.isVisible().catch(() => false));
-  check('and warned what opening it here looks like', /look stretched/i.test(demoBody));
+  check('and told what the browser gives instead', /framed at phone size/i.test(demoBody));
+  check('no stale warning that desktop looks broken', !/stretched/i.test(demoBody));
 
   const desktopButton = await dp.getByRole('link', { name: /^Open this trip$/ }).count();
   const visibleButton = desktopButton
@@ -459,6 +460,65 @@ async function main() {
   check('and a document opens from the phone', servedBytes > 1000, `${Math.round(servedBytes / 1024)} KB`);
   await offCtx.setOffline(false);
   await op.close();
+
+  // ── The travel day ──
+  //
+  // The whole point of the phase, and completely invisible in an ordinary run:
+  // the demo trip leaves in November, so without faking the clock every one of
+  // these screens looks identical and would regress in silence.
+  //
+  // The Maldives demo is four legs, two of them connections — the shape that
+  // broke the first version of this, and the shape most long-haul bookings
+  // actually have.
+  async function homeAt(iso) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    if (iso) await ctx.clock.setFixedTime(new Date(iso));
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => jsErrors.push(`travel-day: ${e.message}`));
+    await page.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+    const card = page.locator('section', { hasText: /Open travel documents/ }).first();
+    const out = {
+      headline: ((await page.textContent('h1').catch(() => '')) || '').trim(),
+      body: (await page.textContent('body')) || '',
+      card: (await card.count()) ? ((await card.textContent()) || '').replace(/\s+/g, ' ') : '',
+    };
+    await ctx.close();
+    return out;
+  }
+
+  // Six weeks out, the countdown and the cover photo still lead. A flight card
+  // on the sofa in September would be the same mistake in reverse.
+  const sofa = await homeAt(null);
+  check('an ordinary day still leads with the countdown', /until you fly/i.test(sofa.body));
+  check('and shows no flight card', sofa.card === '', sofa.card.slice(0, 40));
+
+  // The morning of the flight.
+  const dayOf = await homeAt('2026-11-27T09:00:00Z');
+  check('the day you fly leads with the flight', /Flying to Maldives today/.test(dayOf.headline), dayOf.headline);
+  check('the card carries the departure', /20:15/.test(dayOf.card) && /LGW/.test(dayOf.card));
+  check('and the terminal the airline filed', /Terminal ?South/i.test(dayOf.card));
+  // Rule 8, on the screen where getting it wrong sends somebody to the far end
+  // of an airport: the demo has no gate, so no gate may appear.
+  check('but never a gate nobody filed', !/\bGate\b/.test(dayOf.card));
+  check('the countdown is gone', !/until you fly/i.test(dayOf.body));
+  check('and the documents are one tap away', /Open travel documents/.test(dayOf.card));
+
+  // Connecting in Abu Dhabi at nine, onward flight at ten. This showed the
+  // ordinary home screen and no flight at all.
+  const connecting = await homeAt('2026-11-28T09:00:00Z');
+  check('a connection shows the onward leg, not the one just landed', /10:00/.test(connecting.card) && /MLE/.test(connecting.card), connecting.card.slice(0, 60));
+
+  // The worst one. Home from Malé at 14:30; the app used to show the 21:15
+  // connection out of Abu Dhabi, which is not a flight they can catch.
+  const homeward = await homeAt('2026-12-04T06:00:00Z');
+  check('flying home leads with the flight they must get to', /Flying home today/.test(homeward.headline), homeward.headline);
+  check('which is the leg out of Malé, not the connection after it', /14:30/.test(homeward.card) && /MLE/.test(homeward.card), homeward.card.slice(0, 60));
+
+  // tripEnd is the hotel checkout, hours before they leave. The trip is not
+  // over while they are still in the air.
+  const airborne = await homeAt('2026-12-04T15:00:00Z');
+  check('the trip is not declared over mid-flight', /Flying home today/.test(airborne.headline), airborne.headline);
 
   // ── Allergies ──
   //

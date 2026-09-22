@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { summarise, DOC_CACHE } from '@/lib/offline-docs';
+import { summarise, DOC_CACHE, cacheableDocUrl } from '@/lib/offline-docs';
 
 /**
  * The screen used to print "All saved on this device" whenever it had any
@@ -83,5 +83,31 @@ describe('the cache name', () => {
   // cache and reads another, and every document reads as unsaved for ever.
   it('is the one the service worker rule writes to', () => {
     expect(DOC_CACHE).toBe('traveller-documents');
+  });
+});
+
+describe('cacheableDocUrl', () => {
+  it('proxies a document on somebody else’s origin', () => {
+    expect(cacheableDocUrl({ id: 'd1', url: 'https://supplier.example/ticket.pdf' })).toBe(
+      '/api/traveller/document?src=booking&id=d1',
+    );
+  });
+
+  it('takes a same-origin path as it stands', () => {
+    // The demo booking's own files. Routing these through an endpoint that
+    // resolves against Control would turn a working link into a 404.
+    expect(cacheableDocUrl({ id: 'd2', url: '/documents/DEMO81297/atol.pdf' })).toBe(
+      '/documents/DEMO81297/atol.pdf',
+    );
+  });
+
+  it('refuses anything it cannot store, rather than inventing a URL', () => {
+    expect(cacheableDocUrl({ id: 'd3', url: '#' })).toBeNull();
+    expect(cacheableDocUrl({ id: 'd4', url: '' })).toBeNull();
+    expect(cacheableDocUrl({ id: 'd5' })).toBeNull();
+  });
+
+  it('escapes an id that would otherwise break the query string', () => {
+    expect(cacheableDocUrl({ id: 'a b&c', url: 'https://x.co/f.pdf' })).toContain('a%20b%26c');
   });
 });

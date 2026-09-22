@@ -43,6 +43,10 @@ import { CoverSplash, tripStartInstant } from '@/components/cover-splash';
 import { useCover } from '@/lib/cover-context';
 import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
 import { usePlace } from '@/lib/use-place';
+import { useFlightLive } from '@/lib/use-flight-live';
+import { tripPhase, flightOfTheDay } from '@/lib/trip-phase';
+import { TravelDayCard } from '@/components/travel-day';
+import { warmCache, summarise, cacheSupported, cacheableDocUrl } from '@/lib/offline-docs';
 
 export default function HomePage() {
   const { booking, onboarding, liveLoading, source } = useBooking();
@@ -110,6 +114,55 @@ export default function HomePage() {
     place?.slug,
   );
   const tripOver = Date.now() > new Date(booking.tripEnd).getTime();
+
+  // ── Travel day ──
+  //
+  // The screen used to look the same on the sofa six weeks out as it did in
+  // the departures hall. On the day of a flight it leads with that flight
+  // instead of a countdown reading "0 days".
+  const phase = tripPhase(booking);
+  const todaysFlight = flightOfTheDay(booking, Date.now());
+  const isTravelDay = phase === 'travel-day' || phase === 'returning';
+  const { getLive } = useFlightLive();
+
+  const [online, setOnline] = useState(true);
+  const [storedDocs, setStoredDocs] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const read = () => setOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
+    read();
+    window.addEventListener('online', read);
+    window.addEventListener('offline', read);
+    return () => {
+      window.removeEventListener('online', read);
+      window.removeEventListener('offline', read);
+    };
+  }, []);
+
+  // Warm the documents on a travel day even if the traveller never opens the
+  // documents screen. Today is the day they will need them without signal.
+  const docUrls = booking.documents
+    .map(cacheableDocUrl)
+    .filter((u): u is string => !!u);
+  const docKey = isTravelDay ? docUrls.join('|') : '';
+  useEffect(() => {
+    if (!docKey) return;
+    let cancelled = false;
+    void (async () => {
+      const have = await warmCache(docKey.split('|'));
+      if (!cancelled) setStoredDocs(have);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [docKey]);
+
+  const docSummary = summarise({
+    total: docUrls.length,
+    stored: docUrls.filter((u) => storedDocs.has(u)).length,
+    supported: cacheSupported(),
+    online,
+  });
 
   // Tiles describe the booking rather than a fixed template. The old five were
   // hardcoded, so a tickets-only trip got a permanently dead Hotel tile and a
@@ -202,22 +255,45 @@ export default function HomePage() {
         </BookingPicker>
       </header>
 
-      {/* Greeting */}
+      {/* Greeting.
+
+          On a travel day it says what today IS. The agency's welcome message
+          is written for somebody looking forward to a trip, and the top of the
+          screen in a departures hall is the most expensive space in the app —
+          it belongs to the flight. */}
       <div className="mt-2 mb-5">
-        <p className="text-xs uppercase tracking-wide text-ink-3 font-medium">
-          {t(greetingKey())}
-        </p>
-        <h1 className="font-serif text-[34px] leading-tight text-ink">
-          {t('home.hello')}{' '}
-          <em className="not-italic font-serif italic text-teal-dark dark:text-teal-light">
-            {lead.firstName}
-          </em>
-          .
-        </h1>
-        {booking.agency.welcomeMessage && (
-          <p className="text-sm text-ink-2 mt-2 leading-relaxed max-w-[340px]">
-            {booking.agency.welcomeMessage}
-          </p>
+        {isTravelDay && todaysFlight ? (
+          <>
+            <p className="text-xs uppercase tracking-wide text-ink-3 font-medium">
+              Today, {formatDayMonth(todaysFlight.depTime)}
+            </p>
+            <h1 className="font-serif text-[32px] leading-tight text-ink">
+              {phase === 'returning'
+                ? 'Flying home today'
+                : `Flying to ${booking.destinationLabel} today`}
+            </h1>
+            <p className="text-sm text-ink-2 mt-1.5 leading-relaxed max-w-[340px]">
+              Your next step, tickets and help, all here.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs uppercase tracking-wide text-ink-3 font-medium">
+              {t(greetingKey())}
+            </p>
+            <h1 className="font-serif text-[34px] leading-tight text-ink">
+              {t('home.hello')}{' '}
+              <em className="not-italic font-serif italic text-teal-dark dark:text-teal-light">
+                {lead.firstName}
+              </em>
+              .
+            </h1>
+            {booking.agency.welcomeMessage && (
+              <p className="text-sm text-ink-2 mt-2 leading-relaxed max-w-[340px]">
+                {booking.agency.welcomeMessage}
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -267,7 +343,21 @@ export default function HomePage() {
         </Link>
       )}
 
+      {/* On a travel day the flight takes the hero's place. */}
+      {isTravelDay && todaysFlight && (
+        <TravelDayCard
+          flight={todaysFlight}
+          live={getLive(todaysFlight.id)}
+          isReturn={phase === 'returning'}
+          destination={booking.destinationLabel}
+          docsLine={docUrls.length ? docSummary.text : null}
+          docsWarn={docSummary.warn}
+          online={online}
+        />
+      )}
+
       {/* Hero trip card */}
+      {!(isTravelDay && todaysFlight) && (
       <Link href="/itinerary" className="block">
         <article className="rounded-3xl overflow-hidden bg-surface shadow-md hover:shadow-lg transition-shadow">
           <div
@@ -355,6 +445,7 @@ export default function HomePage() {
           <div className="pb-4" />
         </article>
       </Link>
+      )}
 
       {/* Quick tiles */}
       <div className="grid grid-cols-5 gap-2 mt-4">

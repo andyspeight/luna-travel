@@ -169,3 +169,23 @@ export async function warmCache(urls: string[]): Promise<Set<string>> {
 
   return already;
 }
+
+/**
+ * The URL a booking document is cached under, or null if it cannot be.
+ *
+ * Shared so the home screen and the documents screen cannot disagree about
+ * what counts as saved — two different answers to "are my tickets on this
+ * phone" is worse than either answer on its own.
+ *
+ * Mirrors the documents screen: a remote file goes through the proxy, and the
+ * demo booking's own same-origin paths are already cacheable as they stand.
+ * Anything else (a bare "#", an empty url) is not storable and is never
+ * counted.
+ */
+export function cacheableDocUrl(doc: { id: string; url?: string | null }): string | null {
+  const url = (doc.url || '').trim();
+  if (/^https?:\/\//i.test(url)) {
+    return `/api/traveller/document?src=booking&id=${encodeURIComponent(doc.id)}`;
+  }
+  return url.startsWith('/') ? url : null;
+}

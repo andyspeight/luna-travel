@@ -119,7 +119,7 @@ export default function WelcomePage() {
             {error && (
               <div
                 role="alert"
-                className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-xl px-3 py-2.5 leading-relaxed"
+                className="text-xs text-danger-ink bg-danger/10 border border-danger/20 rounded-xl px-3 py-2.5 leading-relaxed"
               >
                 {error}
               </div>

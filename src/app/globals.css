@@ -21,17 +21,45 @@
   --border-light: #f1f5f9;
   --text: #0f172a;
   --text-2: #475569;
-  --text-3: #94a3b8;
+  /* Was #94a3b8, which measured 2.34:1 on a tinted card — well under the 4.5:1
+     that normal text needs, and this token carries the tab bar labels, every
+     document's size and date, and the countdown units. Solved to the nearest
+     shade that passes on every light surface the app uses (see lib/contrast). */
+  --text-3: #656f7d;
+
+  /* Semantic colours. NEVER agency-configurable: a warning has to look like a
+     warning whoever's brand the app is wearing.
+
+     Each has three roles, because one colour cannot do all three and stay
+     legible. The fill keeps its recognisable colour; -ink is the same meaning
+     as text on a light surface; -on is the text that goes ON the fill. White
+     on amber measures 2.15:1, which is how "Delayed" came to be the least
+     readable word on the flight screen. */
+  --success: #10b981;
+  --success-ink: #0b7e58;
+  --warning: #f59e0b;
+  --warning-ink: #986207;
+  --danger: #ef4444;
+  --danger-ink: #c93939;
+  /* Dark ink on all three fills: 7.04:1, 8.31:1 and 4.74:1 respectively. */
+  --semantic-on: #0f172a;
+
   /* White-label brand colours — space-separated RGB channels so Tailwind's
      `rgb(var(--x) / <alpha-value>)` tokens support opacity modifiers. These are
      the Luna Travel defaults; the active agency's colours override them at
      runtime (see src/lib/booking-context.tsx / src/lib/brand.ts). The `teal`
-     token maps to --brand-accent-*, `navy` to --brand-primary-*. */
+     token maps to --brand-accent-*, `navy` to --brand-primary-*.
+
+     -dark is the accent as TEXT on a light surface and -on is the text that
+     goes ON the accent; both are solved rather than nudged, because an agency
+     can pick any colour and white on a pale one is unreadable. */
   --brand-primary-rgb: 27 43 91; /* #1b2b5b navy */
   --brand-primary-light-rgb: 42 63 122; /* #2a3f7a */
+  --brand-primary-on-rgb: 255 255 255; /* white on navy: 13.61:1 */
   --brand-accent-rgb: 0 180 216; /* #00b4d8 teal */
   --brand-accent-light-rgb: 94 234 212; /* #5eead4 */
-  --brand-accent-dark-rgb: 0 150 183; /* #0096b7 */
+  --brand-accent-dark-rgb: 0 120 146; /* #007892 — was #0096b7 at 3.17:1 */
+  --brand-accent-on-rgb: 15 23 42; /* ink on teal: 7.24:1, white would be 2.46:1 */
   /* Safe-area insets for PWA on devices with notches */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -46,7 +74,13 @@
   --border-light: #1e293b;
   --text: #f8fafc;
   --text-2: #cbd5e1;
-  --text-3: #64748b;
+  /* Was #64748b, which measured 2.18:1 on the raised surface. */
+  --text-3: #a2acb9;
+  /* The fills stay as they are — they are read against dark ink either way —
+     but the ink variants have to come up to meet a dark background. */
+  --success-ink: #2dc190;
+  --warning-ink: #f59e0b;
+  --danger-ink: #f58f8f;
 }
 
 /* ────────────────────────────────────────────────────────────

@@ -23,6 +23,7 @@
  */
 import { chromium } from 'playwright-core';
 import { SignJWT } from 'jose';
+import { audit, describeFailures } from './accessibility.mjs';
 
 const BASE = process.env.SMOKE_BASE_URL || 'http://localhost:3000';
 const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -581,6 +582,41 @@ async function main() {
   );
   await fp.close();
   await freshCtx.close();
+
+  // ── Contrast and touch targets ──
+  //
+  // Measured, not reviewed. The first measurement found 151 pieces of text
+  // below the contrast threshold and 31 controls under 44px — including
+  // "Delayed" and "Cancelled" on the flight screen, which were the two words
+  // a traveller most needs and the least legible things on it.
+  //
+  // None of that shows up in a diff, so it is checked here every run. The
+  // backdrop comes from the page as drawn, because the app paints photographs
+  // in sibling layers and a stylesheet cannot say what colour those are where
+  // the text sits.
+  const a11y = await audit({ browser });
+  const a11yFails = describeFailures(a11y);
+  const contrastFails = a11yFails.filter((l) => l.startsWith('contrast')).length;
+  const targetFails = a11yFails.filter((l) => l.startsWith('target')).length;
+
+  check(
+    'every piece of text meets its contrast threshold',
+    contrastFails === 0,
+    contrastFails
+      ? `${contrastFails} of ${a11y.text.length}: ${a11yFails.filter((l) => l.startsWith('contrast')).slice(0, 2).join(' | ')}`
+      : `${a11y.text.length} measured`,
+  );
+  check(
+    'every control is at least 44x44',
+    targetFails === 0,
+    targetFails
+      ? `${targetFails} of ${a11y.targets.length}: ${a11yFails.filter((l) => l.startsWith('target')).slice(0, 2).join(' | ')}`
+      : `${a11y.targets.length} measured`,
+  );
+  // A screen that failed to render measures as passing, because there is
+  // nothing on it to fail. The count is the guard against that.
+  check('and the audit actually saw the app', a11y.text.length > 250, `${a11y.text.length} nodes`);
+  jsErrors.push(...a11y.jsErrors.map((e) => `a11y: ${e}`));
 
   // ── Allergies ──
   //

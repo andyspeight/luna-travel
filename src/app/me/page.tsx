@@ -224,14 +224,14 @@ function ListLink({
         className={[
           'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
           destructive
-            ? 'bg-danger/10 text-danger'
+            ? 'bg-danger/10 text-danger-ink'
             : 'bg-teal/10 text-teal-dark dark:text-teal-light',
         ].join(' ')}
       >
         {icon}
       </span>
       <div className="flex-1 min-w-0">
-        <div className={['text-sm font-medium', destructive ? 'text-danger' : 'text-ink'].join(' ')}>
+        <div className={['text-sm font-medium', destructive ? 'text-danger-ink' : 'text-ink'].join(' ')}>
           {title}
         </div>
         {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
@@ -263,13 +263,13 @@ function ListAction({
       <span
         className={[
           'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
-          destructive ? 'bg-danger/10 text-danger' : 'bg-teal/10 text-teal-dark dark:text-teal-light',
+          destructive ? 'bg-danger/10 text-danger-ink' : 'bg-teal/10 text-teal-dark dark:text-teal-light',
         ].join(' ')}
       >
         {icon}
       </span>
       <div className="flex-1 min-w-0">
-        <div className={['text-sm font-medium', destructive ? 'text-danger' : 'text-ink'].join(' ')}>
+        <div className={['text-sm font-medium', destructive ? 'text-danger-ink' : 'text-ink'].join(' ')}>
           {title}
         </div>
         {sub && <div className="text-xs text-ink-2 mt-0.5">{sub}</div>}
@@ -350,7 +350,7 @@ function ContactRow({
         className={[
           'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0',
           emphasised
-            ? 'bg-danger/10 text-danger'
+            ? 'bg-danger/10 text-danger-ink'
             : 'bg-teal/10 text-teal-dark dark:text-teal-light',
         ].join(' ')}
       >

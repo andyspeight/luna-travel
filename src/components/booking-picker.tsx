@@ -55,7 +55,7 @@ export function BookingPicker({ children }: { children: React.ReactNode }) {
           if (fired.current) e.preventDefault();
         }}
         aria-label="Open demo controls (long press)"
-        className="touch-manipulation focus:outline-none focus-visible:outline-2 focus-visible:outline-teal rounded-xl"
+        className="min-h-[44px] touch-manipulation focus:outline-none focus-visible:outline-2 focus-visible:outline-teal rounded-xl"
       >
         {children}
       </button>

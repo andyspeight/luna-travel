@@ -221,7 +221,7 @@ function DayScene({
 
         {/* Day chip + date */}
         <div className="relative flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
+          <span className="inline-flex items-center gap-1.5 bg-navy-dark/55 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
             {t('itin.day')} {dayNumber}
           </span>
           <span className="text-[11px] opacity-90 tracking-wide">

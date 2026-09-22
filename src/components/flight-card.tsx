@@ -15,18 +15,27 @@ import { FlightStatusLine } from '@/components/flight-status-line';
 import { formatDate, formatTime, formatDuration, formatCabin, formatTerminal } from '@/lib/format';
 import type { FlightLeg, FlightLiveStatus, FlightStatusCode } from '@/types/booking';
 
+/**
+ * Every one of these was white on its fill, which measured between 2.15:1 and
+ * 3.76:1 — so "Delayed" and "Cancelled", the two words on this screen a
+ * traveller most needs to read, were the least legible things on it.
+ *
+ * The fills keep their colour; the text on them is the one that passes. On
+ * teal that is decided at theme time, because teal is whatever the agency
+ * chose and white on a pale brand is unreadable.
+ */
 const STATUS_STYLES: Record<FlightStatusCode, { label: string; cls: string }> = {
   Scheduled: { label: 'Scheduled', cls: 'bg-white/15 text-white' },
-  CheckIn: { label: 'Check-in open', cls: 'bg-teal text-white' },
-  Boarding: { label: 'Boarding', cls: 'bg-teal text-white' },
-  GateClosed: { label: 'Gate closed', cls: 'bg-warning text-white' },
+  CheckIn: { label: 'Check-in open', cls: 'bg-teal text-teal-on' },
+  Boarding: { label: 'Boarding', cls: 'bg-teal text-teal-on' },
+  GateClosed: { label: 'Gate closed', cls: 'bg-warning text-semantic-on' },
   Departed: { label: 'Departed', cls: 'bg-teal-dark text-white' },
-  Delayed: { label: 'Delayed', cls: 'bg-warning text-white' },
+  Delayed: { label: 'Delayed', cls: 'bg-warning text-semantic-on' },
   Approaching: { label: 'Approaching', cls: 'bg-teal-dark text-white' },
-  Landed: { label: 'Landed', cls: 'bg-success text-white' },
-  Cancelled: { label: 'Cancelled', cls: 'bg-danger text-white' },
-  Diverted: { label: 'Diverted', cls: 'bg-danger text-white' },
-  CancelledUncertain: { label: 'Possible disruption', cls: 'bg-warning text-white' },
+  Landed: { label: 'Landed', cls: 'bg-success text-semantic-on' },
+  Cancelled: { label: 'Cancelled', cls: 'bg-danger text-semantic-on' },
+  Diverted: { label: 'Diverted', cls: 'bg-danger text-semantic-on' },
+  CancelledUncertain: { label: 'Possible disruption', cls: 'bg-warning text-semantic-on' },
   Unknown: { label: '', cls: 'hidden' },
 };
 
@@ -173,7 +182,7 @@ export function LiveNowPanel({ flight, live }: { flight: FlightLeg; live?: Fligh
           <Row label="Departure terminal">
             {formatTerminal(depTerminalLive)}
             {depTerminalChanged && (
-              <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-warning">Changed</span>
+              <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-warning-ink">Changed</span>
             )}
           </Row>
         )}
@@ -228,7 +237,7 @@ function Endpoint({
         {revised ? (
           <span className="inline-flex items-baseline gap-1.5">
             <span className="line-through opacity-50 text-[15px]">{time}</span>
-            <span className="text-warning">{revised}</span>
+            <span className="text-warning-ink">{revised}</span>
           </span>
         ) : (
           time

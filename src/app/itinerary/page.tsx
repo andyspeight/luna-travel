@@ -69,7 +69,7 @@ export default function ItineraryPage() {
           </div>
           <Link
             href="/map"
-            className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-xl bg-surface border border-line-light text-[13px] font-medium text-teal-dark dark:text-teal-light hover:shadow-sm transition-shadow tap"
+            className="ml-auto inline-flex items-center gap-1.5 h-11 px-3.5 rounded-xl bg-surface border border-line-light text-[13px] font-medium text-teal-dark dark:text-teal-light hover:shadow-sm transition-shadow tap"
           >
             <IconMap size={15} />
             <span>{t('itin.map')}</span>
@@ -109,7 +109,7 @@ function ViewTab({
       aria-selected={active}
       onClick={onClick}
       className={[
-        'inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-[13px] font-medium transition-colors',
+        'inline-flex items-center gap-1.5 px-3 h-11 rounded-lg text-[13px] font-medium transition-colors',
         active
           ? 'bg-surface text-ink shadow-sm'
           : 'text-ink-3 hover:text-ink-2',

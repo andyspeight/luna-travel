@@ -388,10 +388,13 @@ export default function HomePage() {
             <div
               aria-hidden
               className="absolute inset-0"
-              style={{ background: 'linear-gradient(to top, rgba(2,6,23,0.62) 0%, rgba(2,6,23,0.12) 42%, transparent 68%)' }}
+              style={{
+                background:
+                  'linear-gradient(to top, rgba(2,6,23,0.72) 0%, rgba(2,6,23,0.18) 46%, rgba(2,6,23,0.14) 58%, rgba(2,6,23,0.60) 100%)',
+              }}
             />
             <div className="relative flex justify-between items-start">
-              <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
+              <span className="inline-flex items-center gap-1.5 bg-navy-dark/55 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-light shadow-[0_0_0_3px_rgba(72,202,228,0.3)]" />
                 {booking.status === 'confirmed' ? t('home.upcoming') : booking.status}
               </span>
@@ -401,7 +404,7 @@ export default function HomePage() {
             </div>
             <div className="absolute bottom-5 left-5 right-5">
               {!tripOver && (
-                <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur px-3 py-1 rounded-full text-[12px] font-semibold mb-2.5 shadow-sm">
+                <span className="inline-flex items-center gap-1.5 bg-navy-dark/55 backdrop-blur px-3 py-1 rounded-full text-[12px] font-semibold mb-2.5 shadow-sm">
                   <IconPlane size={13} />
                   {countdownPill(parts, t, countdownKey(booking.tripStartEvent))}
                 </span>

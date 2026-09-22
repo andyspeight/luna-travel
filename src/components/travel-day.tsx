@@ -138,7 +138,7 @@ export function TravelDayCard({
           <IconChevR size={16} />
         </Link>
         {docsLine && (
-          <p className={`mt-2.5 text-[12.5px] ${docsWarn ? 'text-warning' : 'text-ink-2'}`}>
+          <p className={`mt-2.5 text-[12.5px] ${docsWarn ? 'text-warning-ink' : 'text-ink-2'}`}>
             {docsLine}
           </p>
         )}

@@ -195,7 +195,7 @@ export default function LunaPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-base font-semibold text-ink leading-tight">Luna</div>
-              <div className="text-[11px] text-success inline-flex items-center gap-1 mt-0.5">
+              <div className="text-[11px] text-success-ink inline-flex items-center gap-1 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-success" />
                 {booking.agency.name} concierge
               </div>
@@ -237,14 +237,14 @@ export default function LunaPage() {
             placeholder="Ask about your trip…"
             aria-label="Ask Luna"
             enterKeyHint="send"
-            className="flex-1 h-10 px-4 rounded-full bg-surface-3 text-sm text-ink placeholder:text-ink-3 outline-none focus:ring-2 focus:ring-teal/40"
+            className="flex-1 h-11 px-4 rounded-full bg-surface-3 text-sm text-ink placeholder:text-ink-3 outline-none focus:ring-2 focus:ring-teal/40"
           />
           <button
             type="button"
             aria-label="Send"
             onClick={() => send(draft)}
             disabled={!draft.trim() || typing}
-            className="w-10 h-10 rounded-full bg-navy text-white dark:bg-teal dark:text-navy-dark flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-opacity"
+            className="w-11 h-11 rounded-full bg-navy text-white dark:bg-teal dark:text-navy-dark flex items-center justify-center flex-shrink-0 disabled:opacity-40 transition-opacity"
           >
             <IconSend size={18} />
           </button>
@@ -281,7 +281,7 @@ function MessageBubble({
               key={p}
               type="button"
               onClick={() => onPill(p)}
-              className="text-xs font-medium px-3 py-1.5 rounded-full bg-surface border border-line text-ink hover:border-teal/40 hover:bg-teal/5 transition-colors"
+              className="inline-flex min-h-[44px] items-center text-xs font-medium px-3.5 rounded-full bg-surface border border-line text-ink hover:border-teal/40 hover:bg-teal/5 transition-colors"
             >
               {p}
             </button>

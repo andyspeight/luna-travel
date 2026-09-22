@@ -80,7 +80,7 @@ export function InspirationCard({
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(180deg, rgba(15,23,42,0.10) 0%, transparent 32%, rgba(15,23,42,0.78) 100%)',
+              'linear-gradient(180deg, rgba(15,23,42,0.34) 0%, rgba(15,23,42,0.18) 28%, rgba(15,23,42,0.62) 62%, rgba(15,23,42,0.88) 100%)',
           }}
         />
 
@@ -91,7 +91,7 @@ export function InspirationCard({
               {ins.tags.slice(0, 3).map((t) => (
                 <span
                   key={t}
-                  className="bg-white/20 backdrop-blur px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
+                  className="bg-navy-dark/55 backdrop-blur px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide"
                 >
                   {t}
                 </span>
@@ -100,7 +100,7 @@ export function InspirationCard({
           )}
 
           <div className="mt-auto">
-            <div className="text-[11px] uppercase tracking-wider opacity-90">{ins.country}</div>
+            <div className="text-[11px] uppercase tracking-wider">{ins.country}</div>
             <h3 className="font-serif text-2xl leading-none mt-0.5 drop-shadow-sm">
               <em>{ins.name}</em>
             </h3>

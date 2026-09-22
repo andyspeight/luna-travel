@@ -40,23 +40,33 @@ const config: Config = {
         // opacity modifiers (bg-teal/10, text-navy/50, …) working.
         // `navy.dark` stays a fixed near-black — it's used as strong text, not
         // as brand, so it must not shift with the agency colour.
+        // `.on` is the text colour that goes ON that fill, solved so it passes
+        // whatever colour the agency chose — white on a pale brand accent is
+        // the standard way a white-label app becomes unreadable.
         teal: {
           DEFAULT: 'rgb(var(--brand-accent-rgb) / <alpha-value>)',
           light:   'rgb(var(--brand-accent-light-rgb) / <alpha-value>)',
           dark:    'rgb(var(--brand-accent-dark-rgb) / <alpha-value>)',
+          on:      'rgb(var(--brand-accent-on-rgb) / <alpha-value>)',
         },
         navy: {
           DEFAULT: 'rgb(var(--brand-primary-rgb) / <alpha-value>)',
           light:   'rgb(var(--brand-primary-light-rgb) / <alpha-value>)',
           dark:    '#0f172a',
+          on:      'rgb(var(--brand-primary-on-rgb) / <alpha-value>)',
         },
 
-        // Semantic states — these may also exist in the preset but
-        // declaring them here gives the PWA a stable shorthand even
-        // if it later diverges from the admin chrome.
-        success: '#10b981',
-        warning: '#f59e0b',
-        danger:  '#ef4444',
+        // Semantic states. Never agency-configurable — a warning has to look
+        // like a warning whoever's brand the app is wearing. Three roles each:
+        // the fill, `-ink` for the same meaning as text on a light surface,
+        // and `.on` for text sitting on the fill.
+        success:     'var(--success)',
+        'success-ink': 'var(--success-ink)',
+        warning:     'var(--warning)',
+        'warning-ink': 'var(--warning-ink)',
+        danger:      'var(--danger)',
+        'danger-ink': 'var(--danger-ink)',
+        'semantic-on': 'var(--semantic-on)',
       },
 
       // Custom animations used by modals / sheets / page transitions.

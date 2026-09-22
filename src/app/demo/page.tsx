@@ -63,6 +63,7 @@ export default function DemoPage() {
 
   return (
     <main className="min-h-screen bg-surface text-ink">
+      <ScanFirst />
       <Hero />
 
       {/* ── The trips ── */}
@@ -73,7 +74,9 @@ export default function DemoPage() {
         <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-2">
           Each one opens the whole app — itinerary, flights, hotels, documents, the destination
           guide and Luna. Nothing is a mock-up and nothing is locked.{' '}
-          <span className="hidden md:inline">Scan with your phone camera, or open it here.</span>
+          <span className="hidden font-medium text-ink md:inline">
+            Point your phone camera at a code to open it there.
+          </span>
           <span className="md:hidden">Tap to open.</span>
         </p>
 
@@ -88,6 +91,58 @@ export default function DemoPage() {
       <Capabilities />
       <Close />
     </main>
+  );
+}
+
+/* ───────────────────────── Scan-first notice ───────────────────────── */
+
+/**
+ * The first thing a desktop visitor reads.
+ *
+ * This is a phone app with no desktop layout — at 1440px the countdown digits
+ * spread across the whole screen and the tab bar stretches edge to edge. It
+ * reads as broken, and a prospect's first impression is not the place to
+ * discover that.
+ *
+ * So desktop is told, before anything else, to scan. Not hidden from the
+ * links — somebody with no phone to hand should not be stuck — but told
+ * plainly which way round to do it.
+ *
+ * Hidden on phones, where it would be telling somebody to do what they are
+ * already doing.
+ */
+function ScanFirst() {
+  return (
+    <div className="hidden bg-navy-dark text-white md:block">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-3">
+        <PhoneGlyph />
+        <p className="text-[14px] leading-snug">
+          <span className="font-semibold">Built for a phone.</span>{' '}
+          <span className="text-white/80">
+            Scan one of the QR codes below with your camera — opening a trip in this browser will
+            look stretched, because there is no desktop layout.
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PhoneGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+      <path d="M10.75 5.5h2.5" />
+    </svg>
   );
 }
 
@@ -135,10 +190,14 @@ function Hero() {
             href="#trips"
             className="inline-flex h-12 items-center rounded-xl bg-white px-6 text-[15px] font-semibold text-navy-dark transition-transform hover:scale-[1.02] active:scale-[0.99]"
           >
-            See it on your phone
+            <span className="md:hidden">Open a trip</span>
+            <span className="hidden md:inline">Scan a trip below</span>
           </a>
           <span className="text-[13px] text-white/70">
-            Four live trips below &middot; no sign-in
+            <span className="md:hidden">Four live trips &middot; no sign-in</span>
+            <span className="hidden md:inline">
+              Four live trips &middot; no sign-in &middot; point your phone camera at a code
+            </span>
           </span>
         </div>
       </div>
@@ -174,17 +233,31 @@ function TripCard({ trip, origin, qr }: { trip: DemoTrip; origin: string; qr?: s
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] leading-relaxed text-ink-2">{trip.highlight}</p>
 
+          {/* Phones get the button, because they ARE the phone. */}
           <a
             href={href}
-            className="mt-3 inline-flex h-11 items-center rounded-xl bg-navy px-5 text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.99]"
+            className="mt-3 inline-flex h-11 items-center rounded-xl bg-navy px-5 text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.99] md:hidden"
           >
             Open this trip
+          </a>
+
+          {/* Desktop gets the honest version. Not a button, because a button
+              invites the click we are steering away from — but not removed
+              either, since somebody with no phone to hand should not be stuck.
+              Saying why is what stops it reading as a broken page later. */}
+          <a
+            href={href}
+            className="mt-3 hidden text-[12.5px] text-ink-3 underline underline-offset-2 hover:text-ink-2 md:inline-block"
+          >
+            Open in this browser instead — it will look stretched
           </a>
 
           <p className="mt-2 font-mono text-[11px] text-ink-3">{trip.reference}</p>
         </div>
 
-        {/* Desktop only: the phone is somewhere else, so bridge to it. */}
+        {/* Desktop only: the phone is somewhere else, so bridge to it. Larger
+            than it needs to be for scanning, because on this page it is the
+            call to action rather than a convenience. */}
         {qr && (
           <div className="hidden shrink-0 text-center md:block">
             {/* Not next/image: a data: URL has no loader and needs none. */}
@@ -192,9 +265,9 @@ function TripCard({ trip, origin, qr }: { trip: DemoTrip; origin: string; qr?: s
             <img
               src={qr}
               alt={`QR code opening the ${trip.destination} demo trip`}
-              className="h-[104px] w-[104px] rounded-lg border border-line-light bg-white p-1"
+              className="h-[128px] w-[128px] rounded-lg border border-line-light bg-white p-1.5"
             />
-            <p className="mt-1.5 text-[10px] uppercase tracking-wide text-ink-3">Scan</p>
+            <p className="mt-1.5 text-[11px] font-semibold text-ink-2">Scan to open</p>
           </div>
         )}
       </div>

@@ -331,16 +331,49 @@ async function main() {
   // trip it reads as chrome for an app they have not opened.
   check('the traveller tab bar is hidden', !/Itinerary/.test(demoBody) || !/Docs/.test(demoBody));
 
-  // THE check: the buttons must actually reach a working trip.
-  const firstTrip = dp.getByRole('link', { name: /Open this trip/ }).first();
-  const tripHref = await firstTrip.getAttribute('href');
+  // The traveller app has no desktop layout — at this width the countdown
+  // spreads across the screen and the tab bar stretches edge to edge. So a
+  // desktop reader must be told to scan before anything else, and the
+  // browser link must not look like the way in.
+  const scanNotice = dp.getByText('Built for a phone.', { exact: false }).first();
+  check('desktop is told to scan first', await scanNotice.isVisible().catch(() => false));
+  check('and warned what opening it here looks like', /look stretched/i.test(demoBody));
+
+  const desktopButton = await dp.getByRole('link', { name: /^Open this trip$/ }).count();
+  const visibleButton = desktopButton
+    ? await dp.getByRole('link', { name: /^Open this trip$/ }).first().isVisible()
+    : false;
+  check('the big Open button is not offered on desktop', !visibleButton);
+
+  // THE check: the links must actually reach a working trip, whichever the
+  // reader takes.
+  const escape = dp.getByRole('link', { name: /Open in this browser instead/ }).first();
+  const tripHref = await escape.getAttribute('href');
   check('a trip link points at a demo booking', /\?demo=DEMO\d+/.test(tripHref || ''), tripHref || 'none');
 
-  await firstTrip.click();
+  await escape.click();
   await dp.waitForTimeout(3000);
   const landed = (await dp.textContent('body')) || '';
   check('and opens the real app on that trip', /Maldives/.test(landed) && !/Pick one/.test(landed));
   await dp.close();
+
+  // On a phone the QR is a picture of a URL you cannot use, so the button
+  // leads there instead — the mirror image of the rule above.
+  const demoPhone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const mp = await demoPhone.newPage();
+  mp.on('pageerror', (e) => jsErrors.push(`demo-mobile: ${e.message}`));
+  await mp.goto(`${BASE}/demo`, { waitUntil: 'domcontentloaded' });
+  await mp.waitForTimeout(2500);
+
+  check(
+    'a phone gets the button, not a QR code',
+    await mp.getByRole('link', { name: /^Open this trip$/ }).first().isVisible(),
+  );
+  // Hidden with CSS rather than unmounted, so this has to ask about
+  // visibility — textContent happily returns text nobody can see.
+  const phoneNotice = mp.getByText('Built for a phone.', { exact: false }).first();
+  check('and is not told to scan', !(await phoneNotice.isVisible().catch(() => false)));
+  await mp.close();
 
   // ── Allergies ──
   //

@@ -8,6 +8,7 @@ import { TabBar } from '@/components/tab-bar';
 import { VersionCheck } from '@/components/version-check';
 import { EngagementPing } from '@/components/engagement-ping';
 import { MaintenanceBanner } from '@/components/maintenance-banner';
+import { PhoneCanvas } from '@/components/phone-canvas';
 import './globals.css';
 
 const inter = Inter({
@@ -62,14 +63,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <CoverProvider>
                 <VersionCheck />
                 <EngagementPing />
-                <MaintenanceBanner />
-                <div
-                  className="min-h-screen pb-[88px]"
-                  style={{ paddingTop: 'var(--safe-top)' }}
-                >
-                  {children}
-                </div>
-                <TabBar />
+                {/* The banner and the tab bar go INSIDE the canvas: both are
+                    fixed, so on a wide screen they belong to the phone rather
+                    than to the window. */}
+                <PhoneCanvas>
+                  <MaintenanceBanner />
+                  <div
+                    className="lt-app-shell min-h-screen pb-[88px]"
+                    style={{ paddingTop: 'var(--safe-top)' }}
+                  >
+                    {children}
+                  </div>
+                  <TabBar />
+                </PhoneCanvas>
               </CoverProvider>
             </BookingProvider>
           </LocaleProvider>

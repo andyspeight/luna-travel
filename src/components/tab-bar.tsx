@@ -27,9 +27,17 @@ export function TabBar() {
   const splashShowing = pathname === '/' && coverEnabled && !coverDismissed;
   if (splashShowing) return null;
 
-  // Booth-display, onboarding and the agency portal are standalone surfaces
-  // (no trip context) — hide the tab bar so they read as self-contained.
-  if (pathname === '/install' || pathname === '/welcome' || pathname.startsWith('/agency')) {
+  // Booth-display, onboarding, the agency portal and the demo landing page are
+  // standalone surfaces (no trip context) — hide the tab bar so they read as
+  // self-contained. /demo especially: it is sent to prospects who have no trip,
+  // so a traveller nav bar pinned to the bottom is chrome for an app they have
+  // not opened yet.
+  if (
+    pathname === '/install' ||
+    pathname === '/welcome' ||
+    pathname === '/demo' ||
+    pathname.startsWith('/agency')
+  ) {
     return null;
   }
 

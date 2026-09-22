@@ -301,6 +301,47 @@ async function main() {
   check('and the misleading expiry message with it', !/session has expired/.test(gateBody));
   await gp.close();
 
+  // ── The demo landing page ──
+  //
+  // This is the page a prospect opens first, so its failure mode is a
+  // beautiful page whose links go nowhere. Checked in a real browser because
+  // the QR codes are generated client-side and a unit test cannot see them.
+  const demoCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const dp = await demoCtx.newPage();
+  dp.on('pageerror', (e) => jsErrors.push(`demo: ${e.message}`));
+  const demoRes = await dp.goto(`${BASE}/demo`, { waitUntil: 'domcontentloaded' });
+  await dp.waitForTimeout(3000);
+
+  const demoBody = (await dp.textContent('body')) || '';
+  check('the demo page loads', demoRes.status() === 200, String(demoRes.status()));
+  check(
+    'all four trips are offered',
+    ['Maldives', 'Athens', 'Dubai', 'Mallorca'].every((d) => demoBody.includes(d)),
+  );
+
+  // Generated client-side from window.location.origin, so they only exist in
+  // a real browser.
+  const qrCount = await dp.$$eval('img[src^="data:image"]', (els) => els.length);
+  check('a QR code is generated for each trip', qrCount === 4, `${qrCount} of 4`);
+
+  const broken = await dp.$$eval('img', (els) => els.filter((e) => e.naturalWidth === 0).length);
+  check('every photograph and screenshot loads', broken === 0, `${broken} broken`);
+
+  // The traveller nav belongs to a trip. On a page sent to somebody with no
+  // trip it reads as chrome for an app they have not opened.
+  check('the traveller tab bar is hidden', !/Itinerary/.test(demoBody) || !/Docs/.test(demoBody));
+
+  // THE check: the buttons must actually reach a working trip.
+  const firstTrip = dp.getByRole('link', { name: /Open this trip/ }).first();
+  const tripHref = await firstTrip.getAttribute('href');
+  check('a trip link points at a demo booking', /\?demo=DEMO\d+/.test(tripHref || ''), tripHref || 'none');
+
+  await firstTrip.click();
+  await dp.waitForTimeout(3000);
+  const landed = (await dp.textContent('body')) || '';
+  check('and opens the real app on that trip', /Maldives/.test(landed) && !/Pick one/.test(landed));
+  await dp.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

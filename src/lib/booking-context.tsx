@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import type { Booking } from '@/types/booking';
 import { BOOKINGS, getDefaultBooking } from '@/data/mock-bookings';
 import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
@@ -56,6 +56,12 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   // Distinguishes "show the demo trip" from "first-run onboarding".
   const [demoSelected, setDemoSelected] = useState(false);
 
+  // Set when THIS page view arrived on a /?demo= link, as opposed to restoring
+  // a saved selection. A ref rather than state because refreshLive resolves
+  // before a state update would be visible to it — and it is read, never
+  // rendered, so it needs no re-render of its own.
+  const deepLinkedDemo = useRef(false);
+
   // 1. Restore mock selection on mount. A /?demo=<ref> deep-link (used by the
   //    admin Demo launchpad QRs) selects a sample trip directly and takes
   //    precedence over the saved selection; otherwise behaviour is unchanged.
@@ -66,6 +72,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       if (demoRef) {
         const dm = BOOKINGS.find((b) => b.reference.toUpperCase() === demoRef.toUpperCase());
         if (dm) {
+          deepLinkedDemo.current = true;
           setBooking(dm);
           setDemoSelected(true);
           try { window.localStorage.setItem(STORAGE_KEY, dm.reference); } catch { /* ignore */ }
@@ -103,6 +110,18 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       if (res.status === 200) {
         const data = await res.json();
         if (data?.booking) {
+          // An explicit /?demo= link wins over the live booking for this view.
+          //
+          // The rule below exists so a real traveller never FALLS BACK to a
+          // demo — not to overrule someone who asked for one by name. Without
+          // this guard, anyone who has ever redeemed a booking finds every
+          // demo link silently showing them their own trip instead, which is
+          // every agent who tries the product before demonstrating it.
+          //
+          // Their own trip is one tap away at / , and a later visit without
+          // the parameter restores it as before.
+          if (deepLinkedDemo.current) return;
+
           setBooking(data.booking as Booking);
           setSource('live');
           setDemoSelected(false);

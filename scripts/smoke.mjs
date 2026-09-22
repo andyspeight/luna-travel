@@ -375,6 +375,32 @@ async function main() {
   check('and is not told to scan', !(await phoneNotice.isVisible().catch(() => false)));
   await mp.close();
 
+  // ── A demo link must win over a live booking ──
+  //
+  // The provider replaces a demo trip with the traveller's real booking on
+  // every load, so that a real traveller never falls back to a demo. The rule
+  // was too broad: anyone who had ever redeemed a booking found every demo
+  // link silently showing them their own trip instead — which is every agent
+  // who tries the product before demonstrating it, and is how this was found.
+  const liveCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await liveCtx.route('**/api/traveller/booking*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ booking: { reference: 'LIVE-0001', destinationLabel: 'Cyprus' } }),
+    });
+  });
+  const lp = await liveCtx.newPage();
+  await lp.goto(`${BASE}/?demo=DEMO52188`, { waitUntil: 'domcontentloaded' });
+  await lp.waitForTimeout(4000);
+  const withLive = (await lp.textContent('body')) || '';
+
+  check(
+    'an explicit demo link is not overridden by a live booking',
+    /DEMO52188/.test(withLive) && !/LIVE-0001/.test(withLive),
+  );
+  await lp.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

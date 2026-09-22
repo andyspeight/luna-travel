@@ -81,6 +81,13 @@ const TRAVELLER_PAGES = [
   ['/destination', ''],
   ['/luna', ''],
   ['/me', ''],
+  // The detail screens, which this used to skip. Every one of them shows a
+  // weekday, and a weekday rendered one way on the server and another in the
+  // browser made React throw the whole tree away and re-render it — an
+  // uncaught error on every visit that nothing here was open to see.
+  ['/flight/f1', ''],
+  ['/hotel/h1', ''],
+  ['/extra/x1', ''],
 ];
 
 async function main() {
@@ -519,6 +526,61 @@ async function main() {
   // over while they are still in the air.
   const airborne = await homeAt('2026-12-04T15:00:00Z');
   check('the trip is not declared over mid-flight', /Flying home today/.test(airborne.headline), airborne.headline);
+
+  // ── How current the flight information is ──
+  //
+  // The review's fourth point. The flight screen used to print a bare
+  // "Updated 09:12" when it happened to have a timestamp and say nothing at
+  // all otherwise, so a traveller could not tell working tracking from broken
+  // tracking — and the home screen worded the same thing differently.
+  //
+  // The demo has no live feed, which is the case worth checking: the honest
+  // answer is to say so, not to go quiet.
+  const freshCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const fp = await freshCtx.newPage();
+  fp.on('pageerror', (e) => jsErrors.push(`freshness: ${e.message}`));
+  await fp.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await fp.waitForTimeout(2500);
+  const flightTile = fp.getByRole('link', { name: /Flights/ }).first();
+  if (await flightTile.count()) {
+    await flightTile.click();
+    await fp.waitForTimeout(2500);
+  }
+  const flightBody = (await fp.textContent('body')) || '';
+  check(
+    'the flight screen never leaves the age of its information unsaid',
+    /Updated \d{2}:\d{2}|Live updates not available|Waiting for the first update|Offline/.test(
+      flightBody,
+    ),
+    (flightBody.match(/Updated \d{2}:\d{2}|Live updates not available|Waiting for the first update/) || ['none'])[0],
+  );
+  // Both screens are fed by one decision now, so they must say the same thing.
+  check(
+    'and says it the same way the home screen does',
+    /Live updates not available for this flight/.test(flightBody),
+  );
+  // It used to promise this while fetching exactly once per mount.
+  check('no claim to be checking when nothing is', !/checking again/i.test(flightBody));
+
+  // The back bar floats over the hero and used to print straight across the
+  // airline's name. Geometry, because it reads fine in the text.
+  const overlap = await fp.evaluate(() => {
+    const bar = document.querySelector('.absolute.top-0');
+    const name = [...document.querySelectorAll('div')].find(
+      (d) => d.className.includes('text-sm') && /Airways|Air|Etihad/.test(d.textContent || ''),
+    );
+    if (!bar || !name) return null;
+    const a = bar.getBoundingClientRect();
+    const b = name.getBoundingClientRect();
+    return Math.round(Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  });
+  check(
+    'the back bar does not print over the airline name',
+    overlap !== null && overlap <= 0,
+    overlap === null ? 'could not measure' : `${overlap}px overlap`,
+  );
+  await fp.close();
+  await freshCtx.close();
 
   // ── Allergies ──
   //

@@ -11,6 +11,7 @@
  */
 
 import { IconPlane } from '@/components/icons';
+import { FlightStatusLine } from '@/components/flight-status-line';
 import { formatDate, formatTime, formatDuration, formatCabin, formatTerminal } from '@/lib/format';
 import type { FlightLeg, FlightLiveStatus, FlightStatusCode } from '@/types/booking';
 
@@ -56,14 +57,40 @@ export function StatusPill({ status }: { status: FlightStatusCode }) {
   );
 }
 
-export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightLiveStatus }) {
+export interface FreshnessControls {
+  online: boolean;
+  refreshing: boolean;
+  failed: boolean;
+  onRefresh: () => void;
+}
+
+
+export function FlightHero({
+  flight,
+  live,
+  freshness,
+  navOverlay = false,
+}: {
+  flight: FlightLeg;
+  live?: FlightLiveStatus;
+  /**
+   * True where the page floats its back bar over this hero, which the flight
+   * screen does and the admin rig does not. Without the clearance the bar
+   * printed straight across the airline's name — "Trip" over "Etihad
+   * Airways" — on every visit.
+   */
+  navOverlay?: boolean;
+  /** Omitted by the admin test rig: it simulates its payload, so it shows
+   *  the same sentence a traveller sees but has nothing real to refetch. */
+  freshness?: FreshnessControls;
+}) {
   const liveStatus = live?.statusCode;
   const depRevised = differsFromScheduled(live?.estDepTime ?? live?.actualDepTime, flight.depTime);
   const arrRevised = differsFromScheduled(live?.estArrTime ?? live?.actualArrTime, flight.arrTime);
 
   return (
     <section
-      className="relative pt-2 px-5 pb-6 text-white"
+      className={`relative px-5 pb-6 text-white ${navOverlay ? 'pt-16' : 'pt-2'}`}
       style={{ background: 'linear-gradient(135deg, #0B1D3E 0%, #1B2B5B 50%, #2A3F7A 100%)' }}
     >
       <div
@@ -84,14 +111,14 @@ export function FlightHero({ flight, live }: { flight: FlightLeg; live?: FlightL
           </div>
         </div>
 
-        {liveStatus && liveStatus !== 'Unknown' && (
-          <div className="flex items-center gap-2 mb-4">
-            <StatusPill status={liveStatus} />
-            {live?.lastUpdated && (
-              <span className="text-[10px] opacity-60">Updated {formatTime(live.lastUpdated)}</span>
-            )}
-          </div>
-        )}
+        {/* The status and its age travel together, always. A word like
+            "Departed" with no age looks current whatever time it was taken,
+            and the age line appears even with no status at all — silence
+            leaves the traveller unable to tell working from broken. */}
+        <div className="mb-4 space-y-1.5">
+          {liveStatus && liveStatus !== 'Unknown' && <StatusPill status={liveStatus} />}
+          <FlightStatusLine live={live} variant="dark" {...freshness} />
+        </div>
 
         <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-start mb-5">
           <Endpoint

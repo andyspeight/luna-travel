@@ -44,6 +44,7 @@ import { useCover } from '@/lib/cover-context';
 import { useAgentMessages, type AgentLatest } from '@/lib/use-agent-messages';
 import { usePlace } from '@/lib/use-place';
 import { useFlightLive } from '@/lib/use-flight-live';
+import { useOnline } from '@/lib/use-online';
 import { tripPhase, flightOfTheDay } from '@/lib/trip-phase';
 import { TravelDayCard } from '@/components/travel-day';
 import { warmCache, summarise, cacheSupported, cacheableDocUrl } from '@/lib/offline-docs';
@@ -123,21 +124,10 @@ export default function HomePage() {
   const phase = tripPhase(booking);
   const todaysFlight = flightOfTheDay(booking, Date.now());
   const isTravelDay = phase === 'travel-day' || phase === 'returning';
-  const { getLive } = useFlightLive();
+  const { getLive, refresh, refreshing, failed } = useFlightLive();
 
-  const [online, setOnline] = useState(true);
+  const online = useOnline();
   const [storedDocs, setStoredDocs] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    const read = () => setOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
-    read();
-    window.addEventListener('online', read);
-    window.addEventListener('offline', read);
-    return () => {
-      window.removeEventListener('online', read);
-      window.removeEventListener('offline', read);
-    };
-  }, []);
 
   // Warm the documents on a travel day even if the traveller never opens the
   // documents screen. Today is the day they will need them without signal.
@@ -353,6 +343,9 @@ export default function HomePage() {
           docsLine={docUrls.length ? docSummary.text : null}
           docsWarn={docSummary.warn}
           online={online}
+          refreshing={refreshing}
+          failed={failed}
+          onRefresh={() => void refresh()}
         />
       )}
 

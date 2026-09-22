@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/booking-context';
 import { useFlightLive } from '@/lib/use-flight-live';
+import { useOnline } from '@/lib/use-online';
 import { NavBar } from '@/components/nav-bar';
 import { ActionButton } from '@/components/action-button';
 import { PageEnter } from '@/components/page-enter';
@@ -46,7 +47,8 @@ export default function FlightDetailPage() {
   const router = useRouter();
   const { booking } = useBooking();
   const flight = findFlight(booking, params.id);
-  const { getLive } = useFlightLive();
+  const { getLive, refresh, refreshing, failed } = useFlightLive();
+  const online = useOnline();
   const live = flight ? getLive(flight.id) : undefined;
   const [showMap, setShowMap] = useState(false);
 
@@ -85,7 +87,12 @@ export default function FlightDetailPage() {
           >
             <NavBar title={flight.flightNumber} backLabel="Trip" variant="dark" />
           </div>
-          <FlightHero flight={flight} live={live} />
+          <FlightHero
+            flight={flight}
+            live={live}
+            navOverlay
+            freshness={{ online, refreshing, failed, onRefresh: () => void refresh() }}
+          />
         </div>
 
         <div className="px-5 pt-4 space-y-3">

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plane, RefreshCw, MapPin } from 'lucide-react';
 import { AgencyShell, Callout, P, SERIF, card } from '../portal-chrome';
+import { formatDate } from '@/lib/format';
 
 interface Flight {
   bookingRef: string | null;
@@ -169,7 +170,9 @@ function Detail({ label, value }: { label: string; value: string | null }) {
 
 function fmtDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    // Via formatDate, not Intl directly: a short weekday renders with a comma
+    // on one engine and without on the other, which is a hydration mismatch.
+    return formatDate(iso, { weekday: 'short', day: 'numeric', month: 'short' });
   } catch {
     return '';
   }

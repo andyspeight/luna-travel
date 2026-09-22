@@ -24,8 +24,8 @@
 import Link from 'next/link';
 import type { FlightLeg, FlightLiveStatus } from '@/types/booking';
 import { formatTime, formatDayMonth } from '@/lib/format';
-import { freshness } from '@/lib/trip-phase';
 import { StatusPill } from '@/components/flight-card';
+import { FlightStatusLine } from '@/components/flight-status-line';
 import { IconDoc, IconChevR, IconPlane } from '@/components/icons';
 
 /** A live value wins over the booked one, but only when it exists. */
@@ -42,6 +42,9 @@ export function TravelDayCard({
   docsLine,
   docsWarn,
   online,
+  refreshing,
+  failed,
+  onRefresh,
   now = Date.now(),
 }: {
   flight: FlightLeg;
@@ -52,6 +55,9 @@ export function TravelDayCard({
   docsLine: string | null;
   docsWarn: boolean;
   online: boolean;
+  refreshing: boolean;
+  failed: boolean;
+  onRefresh: () => void;
   now?: number;
 }) {
   const depTime = live?.estDepTime || live?.actualDepTime || flight.depTime;
@@ -60,9 +66,6 @@ export function TravelDayCard({
   const terminal = pick(live?.depTerminalLive, flight.depTerminal);
   const gate = pick(live?.depGate, undefined);
   const boarding = live?.boardingAt ? formatTime(live.boardingAt) : null;
-
-  const state = freshness(live?.lastUpdated, now);
-  const updated = live?.lastUpdated ? formatTime(live.lastUpdated) : null;
 
   return (
     <section className="mb-5 rounded-3xl overflow-hidden border border-line-light bg-surface-2 shadow-sm">
@@ -108,20 +111,20 @@ export function TravelDayCard({
           Times local to each airport
         </p>
 
-        {/* How old this is, and why — never a bare status. */}
-        <p className="mt-1 text-[12px] leading-snug">
-          {!online ? (
-            <span className="text-amber-300">
-              Offline{updated ? ` · last updated ${updated}` : ' · not updated yet'}
-            </span>
-          ) : state === 'live' && updated ? (
-            <span className="text-white/60">Updated {updated}</span>
-          ) : state === 'stale' && updated ? (
-            <span className="text-amber-300">Last updated {updated} · checking again</span>
-          ) : (
-            <span className="text-white/60">Live updates not available for this flight</span>
-          )}
-        </p>
+        {/* How old this is, and why — never a bare status. Shared with the
+            flight screen so the two cannot word it differently, and so the
+            refresh is a button rather than the prose claim this used to make
+            about checking again while nothing was checking. */}
+        <FlightStatusLine
+          live={live}
+          online={online}
+          refreshing={refreshing}
+          failed={failed}
+          onRefresh={onRefresh}
+          variant="dark"
+          className="mt-1"
+          now={now}
+        />
       </div>
 
       {/* ── The documents ── */}

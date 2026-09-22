@@ -77,11 +77,15 @@ function relativeTime(iso: string): string {
 }
 
 function fullTime(iso: string): string {
+  // The weekday is composed separately: asked for one alongside a date, Node
+  // and Chromium disagree about the comma, and this page is server-rendered.
   const d = new Date(iso);
-  return d.toLocaleString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  const day = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  const rest = d.toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
+  return `${day} ${rest}`;
 }
 
 // ────────────────────────────────────────────────────────────────────

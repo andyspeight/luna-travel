@@ -56,11 +56,33 @@ export function formatMoney(amount: number, currency: string = 'GBP'): string {
   }
 }
 
+/**
+ * A date, the same on every engine.
+ *
+ * The weekday is composed separately rather than left to Intl. Asked for a
+ * short weekday alongside a date, Node renders "Fri 27 Nov" and Chromium
+ * renders "Fri, 27 Nov" — the same locale, the same options, a different
+ * comma. Every screen that shows a weekday is server-rendered and then
+ * hydrated, so React found the two texts disagreeing and threw the whole tree
+ * away to re-render it on the client: the flight, hotel, experience, extra and
+ * itinerary screens, on every visit.
+ *
+ * Composing it keeps the UK-conventional form Node was already producing and
+ * makes the string independent of whose ICU is asked.
+ */
 export function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-GB', opts ?? { day: 'numeric', month: 'short', year: 'numeric' });
+
+  if (!opts?.weekday) {
+    return d.toLocaleDateString('en-GB', opts ?? { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  const { weekday, ...rest } = opts;
+  const name = d.toLocaleDateString('en-GB', { weekday });
+  if (!Object.keys(rest).length) return name;
+  return `${name} ${d.toLocaleDateString('en-GB', rest)}`;
 }
 
 export function formatDayMonth(iso: string): string {

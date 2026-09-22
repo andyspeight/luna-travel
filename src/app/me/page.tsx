@@ -30,6 +30,8 @@ import { initials } from '@/lib/format';
 import { APP_VERSION, getLatestVersion, forceAppUpdate } from '@/lib/app-update';
 import { AddToHomeRow } from '@/components/add-to-home';
 import { NotificationsOptIn } from '@/components/notifications-optin';
+import { supportState, supportLabel } from '@/lib/support-hours';
+import type { Agency } from '@/types/booking';
 
 export default function MePage() {
   const { booking } = useBooking();
@@ -109,6 +111,11 @@ export default function MePage() {
               </div>
             </div>
           </div>
+          {/* Whether anybody is there. A phone number with no hours leaves a
+              traveller unable to judge whether to wait or to use the
+              out-of-hours line. Absent when the agency has not said. */}
+          <SupportStatus agency={booking.agency} />
+
           <div className="divide-y divide-line-light">
             <ContactRow
               href={`tel:${booking.agency.phone.replace(/\s/g, '')}`}
@@ -168,7 +175,7 @@ export default function MePage() {
             <NotificationsOptIn />
           </div>
           <ListLink
-            href="/luna"
+            href="/help"
             icon={<IconHelp size={18} />}
             title={t('me.help')}
             sub={t('me.helpSub')}
@@ -417,5 +424,31 @@ function UpdateRow() {
         <div className="text-xs text-ink-2 mt-0.5">{sub}</div>
       </div>
     </button>
+  );
+}
+
+/**
+ * Open or closed, in the agency's own timezone.
+ *
+ * Renders nothing at all when the agency has not stated its hours — an
+ * invented opening time is worse than none, because a traveller plans around
+ * it.
+ */
+function SupportStatus({ agency }: { agency: Agency }) {
+  const label = supportLabel(supportState(agency.supportHours));
+  if (!label && !agency.replyWithin) return null;
+  const open = supportState(agency.supportHours).kind === 'open';
+  return (
+    <div className="border-t border-line-light px-4 py-2.5">
+      {label && (
+        <p className="flex items-center gap-1.5 text-[12.5px]">
+          <span aria-hidden className={`h-2 w-2 rounded-full ${open ? 'bg-success' : 'bg-ink-3'}`} />
+          <span className={open ? 'font-medium text-success-ink' : 'text-ink-2'}>{label}</span>
+        </p>
+      )}
+      {agency.replyWithin && (
+        <p className="mt-0.5 text-[12.5px] text-ink-2">Messages answered {agency.replyWithin}.</p>
+      )}
+    </div>
   );
 }

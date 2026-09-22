@@ -34,7 +34,8 @@ export const AA_LARGE = 3;
  * a chip is exactly where small coloured labels live.
  */
 export const LIGHTEST_SURFACE = '#ffffff';
-export const DARKEST_LIGHT_SURFACE = '#e5f7fb';
+/** The green wash behind a success badge — the darkest light surface in use. */
+export const DARKEST_LIGHT_SURFACE = '#e0f3ef';
 
 export function parseHex(hex?: string | null): RGB | null {
   if (typeof hex !== 'string') return null;

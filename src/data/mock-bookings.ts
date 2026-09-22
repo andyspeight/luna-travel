@@ -24,6 +24,21 @@ const DEMO_AGENCY = {
   atolNumber: 'ATOL 12345',
   welcomeMessage:
     "We're delighted to have you travelling with us. Anything you need before or during your trip, your Travelaire team is one tap away.",
+  // A real agency's hours, so the demo shows the open/closed state working
+  // rather than the empty version. Saturday morning included: it is the case
+  // that makes "opens Monday" wrong and is easy to get away with in testing.
+  supportHours: {
+    timezone: 'Europe/London',
+    days: [
+      { day: 1, open: '09:00', close: '17:30' },
+      { day: 2, open: '09:00', close: '17:30' },
+      { day: 3, open: '09:00', close: '17:30' },
+      { day: 4, open: '09:00', close: '17:30' },
+      { day: 5, open: '09:00', close: '17:30' },
+      { day: 6, open: '10:00', close: '14:00' },
+    ],
+  },
+  replyWithin: 'within one working day',
   // No brand colours set — this agency uses the default Luna Travel palette,
   // which also exercises the "revert to defaults" path when switching bookings.
 };

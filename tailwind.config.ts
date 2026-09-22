@@ -60,11 +60,14 @@ const config: Config = {
         // like a warning whoever's brand the app is wearing. Three roles each:
         // the fill, `-ink` for the same meaning as text on a light surface,
         // and `.on` for text sitting on the fill.
-        success:     'var(--success)',
+        // Channel form, because these carry opacity modifiers: bg-danger/10,
+        // bg-warning/20 and so on. A plain var() makes Tailwind drop the rule
+        // silently, which is how the urgent-contact row lost its amber tint.
+        success:     'rgb(var(--success-rgb) / <alpha-value>)',
         'success-ink': 'var(--success-ink)',
-        warning:     'var(--warning)',
+        warning:     'rgb(var(--warning-rgb) / <alpha-value>)',
         'warning-ink': 'var(--warning-ink)',
-        danger:      'var(--danger)',
+        danger:      'rgb(var(--danger-rgb) / <alpha-value>)',
         'danger-ink': 'var(--danger-ink)',
         'semantic-on': 'var(--semantic-on)',
       },

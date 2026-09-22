@@ -36,6 +36,7 @@ import { getStoredBooking } from '@/lib/stored-booking';
 import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-branding';
 import { isAgencyId, isLunaAgency } from '@/lib/agency-id';
 import type { Booking } from '@/types/booking';
+import { getAgencySettings } from '@/lib/agency-settings';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -126,12 +127,23 @@ export async function GET(req: NextRequest) {
   // Luna override ?? Control ?? defaults.
   const brandingOverride = await getBrandingOverride(recordId);
 
+  // The agency's own statement about when it is open and how quickly it
+  // replies. Not on the Control record — set by the agency in the portal —
+  // so it is layered on the same way branding is. Absent means they have not
+  // said, and the app then claims nothing about timing.
+  const support = await getAgencySettings(recordId);
+  const applySupport = (agency: { supportHours?: unknown; replyWithin?: string }) => {
+    if (support.supportHours) agency.supportHours = support.supportHours;
+    if (support.replyWithin) agency.replyWithin = support.replyWithin;
+  };
+
   // 1b. Off-platform booking? Return the stored payload directly — there is no
   //     Travelify order to fetch. Still kicks off flight auto-subscribe so live
   //     flight tracking works for manually-added bookings too.
   const stored = await getStoredBooking(recordId, orderRef);
   if (stored?.payload) {
     applyBrandingOverride(stored.payload.agency, brandingOverride);
+    applySupport(stored.payload.agency);
     triggerAutoSubscribe(stored.payload, recordId, orderRef);
     return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
   }
@@ -187,6 +199,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
   applyBrandingOverride(booking.agency, brandingOverride);
+  applySupport(booking.agency);
 
   // 4. Fire-and-forget Flight Hub auto-subscribe (deduped server-side).
   triggerAutoSubscribe(booking, recordId, orderRef);

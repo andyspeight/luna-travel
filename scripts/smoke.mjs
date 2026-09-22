@@ -401,6 +401,65 @@ async function main() {
   );
   await lp.close();
 
+  // ── Documents, with the network off ──
+  //
+  // The promise the whole app leans on for a travel day. It used to be a
+  // claim and nothing more: the screen printed "All saved on this device"
+  // with nothing checking, and the service worker had no rule for a PDF or
+  // for the proxy that serves one — so a traveller landing with no signal
+  // found an empty screen, having been told the opposite.
+  //
+  // Driven with the network genuinely cut rather than stubbed, because every
+  // part of this (service worker, cache, navigation fallback) only exists in
+  // a real browser.
+  const offCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const op = await offCtx.newPage();
+  op.on('pageerror', (e) => jsErrors.push(`offline: ${e.message}`));
+  await op.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await op.waitForTimeout(2500);
+  await op.goto(`${BASE}/documents`, { waitUntil: 'domcontentloaded' });
+  // The service worker has to install and the documents have to be fetched.
+  await op.waitForTimeout(9000);
+
+  const cachedCount = await op.evaluate(async () => {
+    try {
+      return (await (await caches.open('traveller-documents')).keys()).length;
+    } catch {
+      return -1;
+    }
+  });
+  check('documents are actually stored on the device', cachedCount > 0, `${cachedCount} cached`);
+
+  const onlineHeader = (await op.textContent('body')) || '';
+  check('and the screen says so only because they are', /saved on this phone/i.test(onlineHeader));
+
+  // Now the part that matters.
+  await offCtx.setOffline(true);
+  await op.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+  await op.waitForTimeout(5000);
+  const offlineBody = (await op.textContent('body').catch(() => '')) || '';
+
+  check('the app opens with no network at all', offlineBody.length > 100);
+  check(
+    'the documents are still listed',
+    /booking pack|ATOL|insurance|voucher|ticket/i.test(offlineBody),
+  );
+
+  const servedBytes = await op.evaluate(async () => {
+    try {
+      const c = await caches.open('traveller-documents');
+      const keys = await c.keys();
+      if (!keys.length) return 0;
+      const r = await c.match(keys[0]);
+      return r ? (await r.arrayBuffer()).byteLength : 0;
+    } catch {
+      return 0;
+    }
+  });
+  check('and a document opens from the phone', servedBytes > 1000, `${Math.round(servedBytes / 1024)} KB`);
+  await offCtx.setOffline(false);
+  await op.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

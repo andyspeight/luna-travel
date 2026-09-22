@@ -48,13 +48,6 @@ export function InspirationCard({
   const blurb =
     ins.blurb || (shared.length > 0 ? t('next.alsoGoodFor', { tags: shared.join(', ') }) : '');
 
-  const priceChip =
-    typeof ins.fromPrice === 'number'
-      ? `${t('next.from')} ${formatMoneyShort(ins.fromPrice, ins.currency)}${ins.nights ? ` · ${ins.nights} ${t('next.nights')}` : ''}`
-      : ins.nights
-        ? `${ins.nights} ${t('next.nights')}`
-        : '';
-
   return (
     <>
       <button
@@ -80,7 +73,7 @@ export function InspirationCard({
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(180deg, rgba(15,23,42,0.34) 0%, rgba(15,23,42,0.18) 28%, rgba(15,23,42,0.62) 62%, rgba(15,23,42,0.88) 100%)',
+              'linear-gradient(180deg, rgba(15,23,42,0.34) 0%, rgba(15,23,42,0.22) 24%, rgba(15,23,42,0.68) 44%, rgba(15,23,42,0.88) 66%, rgba(15,23,42,0.94) 100%)',
           }}
         />
 
@@ -99,8 +92,21 @@ export function InspirationCard({
             </div>
           )}
 
-          <div className="mt-auto">
-            <div className="text-[11px] uppercase tracking-wider">{ins.country}</div>
+          {/* The text block carries its own backing rather than relying on the
+              card-wide scrim. Where the block starts depends on how much copy
+              a suggestion has, so on a card with three tags and a long blurb
+              the top line drifted up into the bright part of the photograph
+              and measured 4.06:1. A gradient anchored to the block itself
+              cannot drift, whatever the card holds. */}
+          <div className="mt-auto -mx-4 -mb-4 px-4 pt-6 pb-4 bg-gradient-to-t from-[rgba(15,23,42,0.94)] via-[rgba(15,23,42,0.86)] to-transparent">
+            {/* The label rides on the eyebrow that was already here rather than
+                arriving as another pill. A tile this size already carries tags,
+                a country, a name, a tagline and a blurb; adding a sixth element
+                made it a jumble. This costs no space and still says it plainly. */}
+            <div className="truncate text-[11px] uppercase tracking-wider">
+              <span className="font-bold">{t('next.notBooked')}</span>
+              <span className="opacity-75"> · {ins.country}</span>
+            </div>
             <h3 className="font-serif text-2xl leading-none mt-0.5 drop-shadow-sm">
               <em>{ins.name}</em>
             </h3>
@@ -124,14 +130,11 @@ export function InspirationCard({
               <p className="text-xs opacity-80 mt-1.5 line-clamp-2">{blurb}</p>
             )}
 
-            <div className="mt-2.5 flex items-center justify-between">
-              {priceChip ? (
-                <span className="text-[11px] font-semibold bg-white/15 backdrop-blur px-2.5 py-1 rounded-full">
-                  {priceChip}
-                </span>
-              ) : (
-                <span />
-              )}
+            {/* No price. The "from £1,149" that used to sit here was a number
+                typed into a source file — no agency set it, nothing verified
+                it, and a traveller reading it on their own booking app would
+                reasonably take it as a quote from their agent. */}
+            <div className="mt-2.5 flex items-center justify-end">
               <span className="inline-flex items-center gap-1 text-[12px] font-semibold">
                 {t('next.enquire')}
                 <IconChevR size={15} />
@@ -151,19 +154,6 @@ export function InspirationCard({
       )}
     </>
   );
-}
-
-function formatMoneyShort(amount: number, currency = 'GBP'): string {
-  // Whole-pound "from" price — no pence on promotional copy.
-  try {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return formatMoney(amount, currency);
-  }
 }
 
 function EnquirySheet({
@@ -221,8 +211,9 @@ function EnquirySheet({
             <IconSparkle size={20} />
           </span>
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] uppercase tracking-wider text-ink-3 font-semibold">
-              {ins.country}
+            <div className="truncate text-[11px] uppercase tracking-wider text-ink-3">
+              <span className="font-bold text-ink-2">{t('next.notBooked')}</span>
+              <span> · {ins.country}</span>
             </div>
             <div className="text-[16px] font-semibold text-ink leading-snug">{ins.name}</div>
             <div className="text-xs text-ink-2 mt-0.5">

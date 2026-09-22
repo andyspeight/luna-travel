@@ -71,7 +71,17 @@ export function SuggestionRail({ reason, variant = 'compact', intro }: Props) {
       ) : (
         <h2 className="px-1 pb-1 font-serif text-[24px] leading-tight text-ink">{title}</h2>
       )}
-      {sub && <p className="px-1 pb-2.5 text-[13px] text-ink-2 leading-snug">{sub}</p>}
+      {sub && <p className="px-1 pb-1 text-[13px] text-ink-2 leading-snug">{sub}</p>}
+      {/* Said once here and again on every card. These rails sit below the
+          traveller's confirmed itinerary, and "Where next?" alone does not
+          make it obvious that a priced card is an idea rather than a booking.
+          The short form where an intro has already named the agency, so the
+          two lines do not say it twice. */}
+      <p className="px-1 pb-2.5 text-[11.5px] text-ink-3">
+        {sub
+          ? t('next.ideaNoteShort')
+          : t('next.ideaNote', { agency: booking.agency.name })}
+      </p>
 
       {compact ? (
         <div className="-mx-5 px-5 overflow-x-auto scrollbar-none">

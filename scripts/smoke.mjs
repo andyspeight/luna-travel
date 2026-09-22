@@ -679,6 +679,71 @@ async function main() {
   await hp.close();
   await helpCtx.close();
 
+  // ── Booked versus suggested ──
+  //
+  // The review's third point. Suggestion tiles scroll past directly below
+  // "Up next", which is the traveller's confirmed itinerary, and a tile
+  // showing a photograph and "from £1,149" is the one thing on the home
+  // screen that could be taken for something they have paid for.
+  const bookedCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const bp = await bookedCtx.newPage();
+  bp.on('pageerror', (e) => jsErrors.push(`booked: ${e.message}`));
+  await bp.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await bp.waitForTimeout(2500);
+  await scrollThrough(bp);
+
+  // Measured by geometry, not by textContent: a label squeezed to zero width
+  // is invisible to a traveller and still reads as present in textContent.
+  const cards = await bp.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('button[aria-label^="Enquire about"]')) {
+      const marked = [...el.querySelectorAll('span')].some(
+        (x) => /^\s*Not booked\s*$/i.test(x.textContent || '') &&
+          x.getBoundingClientRect().width > 8,
+      );
+      out.push({
+        label: el.getAttribute('aria-label') || '',
+        marked,
+        money: ((el.textContent || '').match(/[£$€]\s?[\d,]+/g) || [])[0] || null,
+      });
+    }
+    return out;
+  });
+  check('the home screen offers suggestions at all', cards.length > 0, `${cards.length} cards`);
+  check(
+    'every suggestion says it is not booked',
+    cards.length > 0 && cards.every((c) => c.marked),
+    `${cards.filter((c) => c.marked).length}/${cards.length}`,
+  );
+
+  // These cards used to print "from £1,149" — a number typed into a source
+  // file, with no agency behind it, shown beside a traveller's real booking.
+  // Nothing in the app can verify a price for a place nobody has quoted, so
+  // no price may appear on one of these at all.
+  const invented = cards.filter((c) => c.money);
+  check(
+    'and none of them quotes a price nobody can stand behind',
+    invented.length === 0,
+    invented.length ? invented.map((c) => `${c.label}: ${c.money}`).join(' | ') : 'no prices',
+  );
+
+  const homeText = (await bp.textContent('body')) || '';
+  check(
+    'and the section says so once as well',
+    /nothing here is part of your booking/i.test(homeText),
+  );
+
+  // The counterpart: the screen that IS the booking says so.
+  await bp.goto(`${BASE}/itinerary`, { waitUntil: 'domcontentloaded' });
+  await bp.waitForTimeout(2200);
+  const itinText = (await bp.textContent('body')) || '';
+  check('the itinerary states that it is confirmed', /booked and confirmed/i.test(itinText));
+  // And carries no suggestion, which is what made the reviewer worry.
+  check('and mixes no suggestion into it', !/Not booked/i.test(itinText));
+
+  await bp.close();
+  await bookedCtx.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

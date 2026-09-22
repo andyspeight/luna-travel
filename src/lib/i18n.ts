@@ -137,8 +137,13 @@ const S: Record<string, Dict> = {
     it: 'Già sogni il prossimo? Qualche idea di {agency} per quando torni.',
   },
   'next.enquire': { en: 'Enquire', ro: 'Cere ofertă', fr: 'Demander', de: 'Anfragen', es: 'Consultar', it: 'Richiedi' },
-  'next.from': { en: 'from', ro: 'de la', fr: 'dès', de: 'ab', es: 'desde', it: 'da' },
-  'next.nights': { en: 'nts', ro: 'nopți', fr: 'nuits', de: 'Nächte', es: 'noches', it: 'notti' },
+  // The label that stops a priced suggestion reading like something the
+  // traveller has paid for. Short on purpose: it sits on the card itself,
+  // beside the price, rather than as a footnote somebody scrolls past.
+  'next.notBooked': { en: 'Not booked', ro: 'Nerezervat', fr: 'Non réservé', de: 'Nicht gebucht', es: 'No reservado', it: 'Non prenotato' },
+  'next.ideaNote': { en: 'Ideas from {agency} — nothing here is part of your booking', ro: 'Idei de la {agency} — nimic de aici nu face parte din rezervare', fr: 'Idées de {agency} — rien ici ne fait partie de votre réservation', de: 'Ideen von {agency} — nichts davon gehört zu Ihrer Buchung', es: 'Ideas de {agency}: nada de esto forma parte de tu reserva', it: 'Idee da {agency} — nulla di questo fa parte della prenotazione' },
+  'next.ideaNoteShort': { en: 'Nothing here is part of your booking', ro: 'Nimic de aici nu face parte din rezervare', fr: 'Rien ici ne fait partie de votre réservation', de: 'Nichts davon gehört zu Ihrer Buchung', es: 'Nada de esto forma parte de tu reserva', it: 'Nulla di questo fa parte della prenotazione' },
+  'itin.allConfirmed': { en: 'Everything here is booked and confirmed.', ro: 'Totul de aici este rezervat și confirmat.', fr: 'Tout ce qui suit est réservé et confirmé.', de: 'Alles hier ist gebucht und bestätigt.', es: 'Todo lo que aparece aquí está reservado y confirmado.', it: 'Tutto quello che vedi qui è prenotato e confermato.' },
   'next.noObligation': {
     en: 'Enquire with {agency} — no obligation.',
     ro: 'Cere o ofertă de la {agency} — fără obligații.',

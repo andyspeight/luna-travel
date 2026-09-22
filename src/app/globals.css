@@ -169,3 +169,67 @@ header {
 @media (prefers-reduced-motion: reduce) {
   .portal-float { animation: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Phone canvas — the traveller app on a desktop screen.
+   See src/components/phone-canvas.tsx for why this exists.
+
+   Below the breakpoint nothing applies at all: the phone IS the window, and
+   wrapping it would only add a containing block nobody needs.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@media (min-width: 1024px) {
+  .lt-canvas-backdrop {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background:
+      radial-gradient(90% 70% at 50% 0%, rgb(var(--brand-primary-rgb) / 0.22), transparent 60%),
+      linear-gradient(170deg, #f1f5f9 0%, #e2e8f0 55%, #cbd5e1 100%);
+  }
+
+  .lt-canvas {
+    position: relative;
+    width: 420px;
+    height: min(900px, calc(100vh - 48px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-radius: 30px;
+    background: var(--surface);
+
+    /* THE line that makes this work. A transform makes this element the
+       containing block for `position: fixed` descendants, so the tab bar,
+       every bottom sheet and the cover splash land inside the phone instead
+       of spanning the window. Nothing else here depends on the value. */
+    transform: translateZ(0);
+
+    box-shadow:
+      0 0 0 1px rgb(15 23 42 / 0.06),
+      0 2px 6px rgb(15 23 42 / 0.06),
+      0 30px 60px -20px rgb(15 23 42 / 0.35);
+  }
+
+  /* The shell asks for min-height:100vh, which is taller than the canvas —
+     so every screen would scroll a little even when it has nothing to scroll.
+     Inside the frame, a full screen means a full canvas. */
+  .lt-canvas .lt-app-shell { min-height: 100%; }
+
+  /* The app's own scrollbar inside a frame reads as a browser, not a phone. */
+  .lt-canvas { scrollbar-width: none; }
+  .lt-canvas::-webkit-scrollbar { display: none; }
+}
+
+@media (min-width: 1024px) and (prefers-color-scheme: dark) {
+  .lt-canvas-backdrop {
+    background:
+      radial-gradient(90% 70% at 50% 0%, rgb(var(--brand-primary-rgb) / 0.30), transparent 60%),
+      linear-gradient(170deg, #0b1220 0%, #0f172a 60%, #020617 100%);
+  }
+  .lt-canvas {
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.07),
+      0 30px 70px -20px rgb(0 0 0 / 0.75);
+  }
+}

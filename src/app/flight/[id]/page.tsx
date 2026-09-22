@@ -141,7 +141,7 @@ export default function FlightDetailPage() {
             <ul className="divide-y divide-line-light text-sm">
               <li className="py-2.5 flex justify-between">
                 <span className="text-ink-2">Online check-in</span>
-                <span className={checkInOpen ? 'text-success font-semibold' : 'text-ink font-medium'}>
+                <span className={checkInOpen ? 'text-success-ink font-semibold' : 'text-ink font-medium'}>
                   {checkInOpen
                     ? `Open · closes ${formatTime(flight.depTime)}`
                     : `Opens 24h before · ${formatDate(flight.depTime, { day: 'numeric', month: 'short' })}`}

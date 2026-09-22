@@ -297,7 +297,7 @@ export default function DocumentsPage() {
           <h1 className="text-[28px] font-bold tracking-tight text-ink leading-none">
             Documents
           </h1>
-          <p className={`text-sm mt-1.5 ${offline.warn && !loading ? 'text-warning' : 'text-ink-2'}`}>
+          <p className={`text-sm mt-1.5 ${offline.warn && !loading ? 'text-warning-ink' : 'text-ink-2'}`}>
             {loading ? 'Loading your documents…' : offline.text}
           </p>
         </header>
@@ -306,7 +306,7 @@ export default function DocumentsPage() {
             used to appear whenever there were documents at all, which is a
             promise somebody relies on in a terminal. */}
         {!loading && offline.badge && (
-          <div className="mt-2 mb-4 inline-flex items-center gap-1.5 bg-success/10 text-success px-2.5 py-1 rounded-full text-[11px] font-semibold">
+          <div className="mt-2 mb-4 inline-flex items-center gap-1.5 bg-success/10 text-success-ink px-2.5 py-1 rounded-full text-[11px] font-semibold">
             <IconCheck size={12} />
             Saved on this phone
           </div>
@@ -551,7 +551,7 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
         </div>
 
         {shareToast && (
-          <div className="mt-2 text-center text-[11px] text-success font-medium">
+          <div className="mt-2 text-center text-[11px] text-success-ink font-medium">
             {shareToast}
           </div>
         )}

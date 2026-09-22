@@ -127,7 +127,7 @@ export default function ReviewPage() {
               </ActionButton>
 
               {error && (
-                <p className="text-[12px] text-danger text-center mt-3 leading-relaxed max-w-[280px] mx-auto">
+                <p className="text-[12px] text-danger-ink text-center mt-3 leading-relaxed max-w-[280px] mx-auto">
                   {error}
                 </p>
               )}
@@ -138,7 +138,7 @@ export default function ReviewPage() {
             </>
           ) : (
             <div className="text-center my-8 p-6 rounded-2xl bg-success/5 border border-success/20">
-              <span className="inline-flex w-12 h-12 rounded-full bg-success text-white items-center justify-center mb-3">
+              <span className="inline-flex w-12 h-12 rounded-full bg-success text-semantic-on items-center justify-center mb-3">
                 <IconCheck size={22} />
               </span>
               <h2 className="text-base font-semibold text-ink">Thanks — that&rsquo;s sent.</h2>

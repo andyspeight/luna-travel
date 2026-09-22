@@ -154,7 +154,7 @@ function InstallSheet({ onClose, children }: { onClose: () => void; children: Re
         <button
           type="button"
           onClick={onClose}
-          className="mt-6 w-full h-12 rounded-2xl bg-teal text-white font-semibold text-[15px] hover:bg-teal-dark transition-colors"
+          className="mt-6 w-full h-12 rounded-2xl bg-teal text-teal-on font-semibold text-[15px] hover:bg-teal-dark transition-colors"
         >
           Got it
         </button>
@@ -336,14 +336,14 @@ export function AddToHomeBanner() {
                 if (canPrompt) void promptInstall();
                 else setSheet(isIOS ? 'ios' : 'menu');
               }}
-              className="h-9 px-4 rounded-xl bg-white text-navy text-[13px] font-bold active:scale-[0.98] transition-transform"
+              className="h-11 px-4 rounded-xl bg-white text-navy text-[13px] font-bold active:scale-[0.98] transition-transform"
             >
               Add to home screen
             </button>
             <button
               type="button"
               onClick={dismiss}
-              className="h-9 px-3 rounded-xl text-[13px] font-medium text-white/70"
+              className="h-11 px-3 rounded-xl text-[13px] font-medium text-white/90"
             >
               Not now
             </button>

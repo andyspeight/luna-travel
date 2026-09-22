@@ -83,7 +83,7 @@ export function NotificationsOptIn({ tone = 'card' }: { tone?: 'card' | 'onDark'
           using the <span className="inline-flex items-center gap-1 font-semibold text-white"><ShareGlyph size={13} />Share</span> button,
           then come back here to switch them on.
         </p>
-        <p className="text-[12.5px] text-white/65 leading-relaxed">
+        <p className="text-[12.5px] text-white/90 leading-relaxed">
           Without them you won&rsquo;t hear about a gate change or a delay until you next open
           the app.
         </p>
@@ -118,7 +118,7 @@ export function NotificationsOptIn({ tone = 'card' }: { tone?: 'card' | 'onDark'
       >
         {busy ? 'Just a moment…' : 'Turn on trip alerts'}
       </button>
-      <p className="mt-2.5 text-[12px] text-white/65 text-center leading-relaxed">
+      <p className="mt-2.5 text-[12px] text-white/90 text-center leading-relaxed">
         Your phone will ask you to confirm. If you say no, we can&rsquo;t ask again — you&rsquo;d
         have to switch them on in your browser settings.
       </p>

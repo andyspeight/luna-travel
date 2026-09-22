@@ -307,7 +307,7 @@ function AllergyCard({ set, allergens }: { set: PhraseSet; allergens: AllergenPh
                 type="button"
                 onClick={() => setChosen(on ? null : a.en)}
                 aria-pressed={on}
-                className={`px-3 py-2 rounded-lg text-[13px] font-medium border transition-colors ${
+                className={`inline-flex min-h-[44px] items-center px-3 rounded-lg text-[13px] font-medium border transition-colors ${
                   on
                     ? 'bg-teal-dark text-white border-teal-dark dark:bg-teal-light dark:text-ink dark:border-teal-light'
                     : 'bg-surface-3 text-ink-2 border-line-light'
@@ -481,7 +481,7 @@ function PackingList({ groups }: { groups: PackingGroup[] }) {
                     type="button"
                     onClick={() => toggle(item.label)}
                     aria-pressed={done}
-                    className="w-full py-2.5 flex items-start gap-3 text-left"
+                    className="w-full min-h-[44px] py-2.5 flex items-start gap-3 text-left"
                   >
                     <span
                       className={[
@@ -626,7 +626,7 @@ export default function EssentialsPage() {
                         <a
                           key={n.dial}
                           href={`tel:${n.dial}`}
-                          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-3 text-[17px] font-semibold text-teal-dark dark:text-teal-light"
+                          className="inline-flex min-h-[44px] items-center gap-2 px-3 rounded-lg bg-surface-3 text-[17px] font-semibold text-teal-dark dark:text-teal-light"
                         >
                           <IconPhone size={16} />
                           {n.display}

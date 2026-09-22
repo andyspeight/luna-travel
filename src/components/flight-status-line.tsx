@@ -40,7 +40,7 @@ export function FlightStatusLine({
   const dark = variant === 'dark';
 
   const text = line.tone === 'warn'
-    ? dark ? 'text-amber-300' : 'text-warning'
+    ? dark ? 'text-amber-300' : 'text-warning-ink'
     : dark ? 'text-white/60' : 'text-ink-2';
 
   return (

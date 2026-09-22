@@ -11,24 +11,43 @@
  * strings here, with light/dark shades derived so the whole token family shifts
  * coherently. When an agency has no colour set, no variables are written and the
  * globals.css defaults (Luna Travel teal/navy) apply.
+ *
+ * Two of those shades are SOLVED rather than nudged.
+ *
+ * The readable shade used to be the accent mixed 22% toward black, which
+ * guarantees nothing: a pale yellow stays pale and the traveller gets cream
+ * text on a white card, while a near-black accent is darkened for no gain. It
+ * is now darkened only as far as it takes to clear 4.5:1 on the lightest
+ * surface the app puts it on, so the brand still looks like the brand.
+ *
+ * The text that sits ON the accent — a filled button, a status pill — is
+ * chosen between white and ink by measuring both. White on a pale brand colour
+ * is the standard way a white-label app becomes unreadable, and it is not a
+ * decision any individual component should be making.
  */
+
+import {
+  parseHex as parseColour,
+  readableOn,
+  textOn,
+  mix as mixColour,
+  DARKEST_LIGHT_SURFACE,
+  type RGB as Colour,
+} from '@/lib/contrast';
 
 type RGB = [number, number, number];
 
 function parseHex(hex?: string | null): RGB | null {
-  if (typeof hex !== 'string') return null;
-  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex.trim());
-  if (!m) return null;
-  let h = m[1].toLowerCase();
-  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  const c = parseColour(hex);
+  return c ? [c.r, c.g, c.b] : null;
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+const tuple = (c: Colour): RGB => [c.r, c.g, c.b];
+const colour = ([r, g, b]: RGB): Colour => ({ r, g, b });
 
 /** Mix `rgb` toward `target` (0=black, 255=white) by `amt` (0..1). */
-function mix([r, g, b]: RGB, target: number, amt: number): RGB {
-  return [r + (target - r) * amt, g + (target - g) * amt, b + (target - b) * amt].map(clamp) as RGB;
+function mix(rgb: RGB, target: number, amt: number): RGB {
+  return tuple(mixColour(colour(rgb), target, amt));
 }
 
 const channels = (rgb: RGB) => `${rgb[0]} ${rgb[1]} ${rgb[2]}`;
@@ -37,9 +56,11 @@ const channels = (rgb: RGB) => `${rgb[0]} ${rgb[1]} ${rgb[2]}`;
 export const BRAND_VAR_KEYS = [
   '--brand-primary-rgb',
   '--brand-primary-light-rgb',
+  '--brand-primary-on-rgb',
   '--brand-accent-rgb',
   '--brand-accent-light-rgb',
   '--brand-accent-dark-rgb',
+  '--brand-accent-on-rgb',
 ] as const;
 
 /**
@@ -50,18 +71,22 @@ export const BRAND_VAR_KEYS = [
 export function brandVars(primaryHex?: string, accentHex?: string): Record<string, string> {
   const out: Record<string, string> = {};
 
+  const surface = parseColour(DARKEST_LIGHT_SURFACE)!;
+
   const p = parseHex(primaryHex);
   if (p) {
     out['--brand-primary-rgb'] = channels(p);
     out['--brand-primary-light-rgb'] = channels(mix(p, 255, 0.18));
+    out['--brand-primary-on-rgb'] = channels(tuple(textOn(colour(p))));
   }
 
   const a = parseHex(accentHex);
   if (a) {
     out['--brand-accent-rgb'] = channels(a);
     out['--brand-accent-light-rgb'] = channels(mix(a, 255, 0.42));
-    // Darkened enough to stay legible as text (text-teal-dark) on light surfaces.
-    out['--brand-accent-dark-rgb'] = channels(mix(a, 0, 0.22));
+    // Solved, not nudged: as close to the agency's accent as 4.5:1 allows.
+    out['--brand-accent-dark-rgb'] = channels(tuple(readableOn(colour(a), surface)));
+    out['--brand-accent-on-rgb'] = channels(tuple(textOn(colour(a))));
   }
 
   return out;

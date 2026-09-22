@@ -364,10 +364,10 @@ export default function DestinationGuidePage() {
           />
           <div
             aria-hidden
-            className="absolute inset-x-0 bottom-0 h-32"
+            className="absolute inset-x-0 bottom-0 h-56"
             style={{
               background:
-                'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.6) 100%)',
+                'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.30) 42%, rgba(0,0,0,0.74) 100%)',
             }}
           />
           <div className="relative">
@@ -375,7 +375,7 @@ export default function DestinationGuidePage() {
           </div>
           <div className="absolute bottom-5 left-5 right-5 z-10">
             {guide.region && (
-              <div className="text-[11px] uppercase tracking-[0.18em] text-white/85 inline-flex items-center gap-1.5 mb-2">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-white inline-flex items-center gap-1.5 mb-2">
                 <IconPin size={12} />
                 {guide.region}
               </div>
@@ -386,7 +386,7 @@ export default function DestinationGuidePage() {
               </h1>
             )}
             {(guide.tagline || guide.weatherSummary) && (
-              <p className="text-sm text-white/85 mt-1.5 line-clamp-2">
+              <p className="text-sm text-white mt-1.5 line-clamp-2">
                 {guide.tagline || guide.weatherSummary}
               </p>
             )}
@@ -402,7 +402,7 @@ export default function DestinationGuidePage() {
                 type="button"
                 onClick={() => setTab(d.id)}
                 className={[
-                  'px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors',
+                  'inline-flex min-h-[44px] items-center px-3.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors',
                   activeTab === d.id
                     ? 'bg-navy text-white dark:bg-teal dark:text-navy-dark'
                     : 'bg-surface-3 text-ink-2 hover:text-ink',
@@ -580,7 +580,7 @@ export default function DestinationGuidePage() {
                     In case of emergency
                   </h2>
                   <div className="p-4 rounded-2xl bg-danger/5 border border-danger/15">
-                    <div className="text-[11px] uppercase tracking-wider font-semibold text-danger mb-1">
+                    <div className="text-[11px] uppercase tracking-wider font-semibold text-danger-ink mb-1">
                       Emergency number
                     </div>
                     {/* One link over the whole field stripped

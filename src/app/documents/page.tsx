@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { warmCache, summarise, cacheSupported } from '@/lib/offline-docs';
 import { IMAGE_EXTS, extOf } from '@/lib/document-type';
 import { PageEnter } from '@/components/page-enter';
 import { ActionButton } from '@/components/action-button';
@@ -244,6 +245,51 @@ export default function DocumentsPage() {
   // docs, or the demo placeholders on the mock path).
   const docs: DisplayDoc[] = realDocs.length > 0 ? realDocs : fallbackDocs;
 
+  // ── Offline ──
+  //
+  // Only same-origin proxy URLs can be stored. A supplier link on somebody
+  // else's domain is opaque to us and is never counted as saved.
+  const cacheable = docs
+    .map((d) => d.previewUrl)
+    .filter((u) => !!u && u !== '#' && u.startsWith('/'));
+
+  const [stored, setStored] = useState<Set<string>>(new Set());
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const read = () => setOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
+    read();
+    window.addEventListener('online', read);
+    window.addEventListener('offline', read);
+    return () => {
+      window.removeEventListener('online', read);
+      window.removeEventListener('offline', read);
+    };
+  }, []);
+
+  // Fetch them deliberately rather than waiting for a tap. The service worker
+  // rule only ever catches what was asked for, and the documents a traveller
+  // needs in a terminal are exactly the ones they never opened at home.
+  const cacheKey = cacheable.join('|');
+  useEffect(() => {
+    if (loading || !cacheKey) return;
+    let cancelled = false;
+    void (async () => {
+      const have = await warmCache(cacheKey.split('|'));
+      if (!cancelled) setStored(have);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, cacheKey]);
+
+  const offline = summarise({
+    total: cacheable.length,
+    stored: cacheable.filter((u) => stored.has(u)).length,
+    supported: cacheSupported(),
+    online,
+  });
+
   return (
     <PageEnter>
       <main className="px-5 pt-2 pb-6">
@@ -251,20 +297,18 @@ export default function DocumentsPage() {
           <h1 className="text-[28px] font-bold tracking-tight text-ink leading-none">
             Documents
           </h1>
-          <p className="text-sm text-ink-2 mt-1.5">
-            {loading
-              ? 'Loading your documents…'
-              : docs.length === 0
-                ? 'Nothing here yet'
-                : `Available offline · ${docs.length} item${docs.length === 1 ? '' : 's'}`}
+          <p className={`text-sm mt-1.5 ${offline.warn && !loading ? 'text-warning' : 'text-ink-2'}`}>
+            {loading ? 'Loading your documents…' : offline.text}
           </p>
         </header>
 
-        {/* Offline-ready badge — only once we actually have documents */}
-        {!loading && docs.length > 0 && (
+        {/* Shown only when the cache actually holds every one of them. This
+            used to appear whenever there were documents at all, which is a
+            promise somebody relies on in a terminal. */}
+        {!loading && offline.badge && (
           <div className="mt-2 mb-4 inline-flex items-center gap-1.5 bg-success/10 text-success px-2.5 py-1 rounded-full text-[11px] font-semibold">
             <IconCheck size={12} />
-            All saved on this device
+            Saved on this phone
           </div>
         )}
 

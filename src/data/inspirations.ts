@@ -10,9 +10,19 @@
  * destination photo is picked up automatically; until then the per-item
  * gradient gives each card a distinct, on-brand look.
  *
- * `fromPrice` is promotional "from" copy the agency sets for marketing — it is
- * NOT booking/supplier data and is always optional (a missing price simply
- * hides the chip). It is never derived from a real booking.
+ * NO PRICES ANYWHERE, INCLUDING IN THE PROSE. A blurb reading "a food scene
+ * from £6 karak" is the same problem in a smaller font: a figure nobody
+ * verified, on a screen the traveller trusts because the rest of it is their
+ * real booking. The smoke suite fails on any currency figure that appears on
+ * one of these cards.
+ *
+ * NO "FROM" PRICES, AND NO NIGHT COUNTS. There used to be both, described in this
+ * comment as copy "the agency sets for marketing" — but nothing has ever let
+ * an agency set them. They were six numbers typed into this file, rendered on
+ * a traveller's own booking app beside their real trip, where "from £1,149"
+ * reads as a quote from the agent who sold them their holiday. Nobody could
+ * stand behind them, so they are gone; the card carries an enquiry instead,
+ * and the agent quotes a real price when the traveller asks.
  *
  * This list is now the OFFLINE FLOOR. Live suggestions come from the place
  * content chain (PlaceView.suggestions) via inspirationFromSuggestion(); when
@@ -30,9 +40,6 @@ export interface Inspiration {
   country: string; // e.g. "Greece"
   tagline: string; // short hook
   blurb: string; // one or two sentences
-  nights?: number;
-  fromPrice?: number; // promotional, agency-set, optional
-  currency?: string; // default GBP
   tags?: string[];
   /** Distinct card gradient so cards look good before any photo is uploaded. */
   gradient: string;
@@ -68,8 +75,6 @@ const INSPIRATIONS: Inspiration[] = [
     tagline: 'Caldera sunsets & whitewashed villages',
     blurb:
       'Cliff-top suites over a flooded volcano, blue-domed churches and the most photographed sunset in the Aegean. Pair it with a few days in Athens.',
-    nights: 7,
-    fromPrice: 1149,
     tags: ['Couples', 'Island', 'Iconic'],
     gradient: 'linear-gradient(135deg, #0EA5E9 0%, #0369A1 55%, #1E3A8A 100%)',
   },
@@ -81,8 +86,6 @@ const INSPIRATIONS: Inspiration[] = [
     tagline: 'Overwater villas & house reefs',
     blurb:
       'The reset everyone means when they say they need a holiday. Glass-clear lagoons, barefoot luxury and snorkelling straight off the deck.',
-    nights: 7,
-    fromPrice: 1899,
     tags: ['Luxury', 'Beach', 'Honeymoon'],
     gradient: 'linear-gradient(135deg, #48CAE4 0%, #00B4D8 35%, #0077B6 70%, #023E8A 100%)',
   },
@@ -93,9 +96,7 @@ const INSPIRATIONS: Inspiration[] = [
     country: 'United Arab Emirates',
     tagline: 'Sun, souks & sky-high dining',
     blurb:
-      'Winter sun that always delivers — beach mornings, desert evenings and a food scene from £6 karak to two Michelin stars. A brilliant family stopover.',
-    nights: 5,
-    fromPrice: 899,
+      'Winter sun that always delivers — beach mornings, desert evenings and a food scene running from street-corner karak to two Michelin stars. A brilliant family stopover.',
     tags: ['City', 'Family', 'Winter sun'],
     gradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 35%, #7C2D12 75%, #1E293B 100%)',
   },
@@ -107,8 +108,6 @@ const INSPIRATIONS: Inspiration[] = [
     tagline: 'Platinum coast & rum shacks',
     blurb:
       'Calm west-coast beaches, lively Friday fish fries at Oistins and some of the warmest welcomes in the Caribbean. Long-haul, worth every hour.',
-    nights: 10,
-    fromPrice: 1549,
     tags: ['Beach', 'Couples', 'Long-haul'],
     gradient: 'linear-gradient(135deg, #2DD4BF 0%, #0EA5E9 50%, #0369A1 100%)',
   },
@@ -120,8 +119,6 @@ const INSPIRATIONS: Inspiration[] = [
     tagline: 'Lemon groves & cliffside towns',
     blurb:
       'Positano stacked above the sea, long lunches, boat trips to Capri. The Mediterranean at its most romantic — and the food needs no introduction.',
-    nights: 7,
-    fromPrice: 1295,
     tags: ['Couples', 'Food', 'Coast'],
     gradient: 'linear-gradient(135deg, #FB923C 0%, #F43F5E 50%, #7C2D12 100%)',
   },
@@ -133,8 +130,6 @@ const INSPIRATIONS: Inspiration[] = [
     tagline: 'Northern lights & geothermal spas',
     blurb:
       'Waterfalls, volcanoes and the aurora overhead, then a long soak in a geothermal lagoon. A short-haul trip that feels like another planet.',
-    nights: 4,
-    fromPrice: 749,
     tags: ['Adventure', 'Short break', 'Nature'],
     gradient: 'linear-gradient(135deg, #6366F1 0%, #0EA5E9 45%, #0F172A 100%)',
   },
@@ -164,10 +159,6 @@ function gradientFor(seed: string): string {
 
 /**
  * A live suggestion as an Inspiration card.
- *
- * Deliberately sets no `nights` and no `fromPrice`: those are agency-set
- * promotional copy (see the header) and there is nothing in the content base
- * that may stand in for them.
  *
  * `blurb` is left EMPTY on purpose. The only sentence we can honestly write
  * about a live suggestion is "also good for <shared tags>", and that sentence

@@ -47,6 +47,12 @@ export default function ItineraryPage() {
           </p>
         </header>
 
+        {/* The counterpart to "Not booked" on a suggestion. Said once, at the
+            top, rather than stamped on all twenty rows: this screen is built
+            only from confirmed booking data, so repeating it per row would be
+            noise and would dilute the label where it actually matters. */}
+        <p className="px-1 pb-1 text-[12.5px] text-ink-2">{t('itin.allConfirmed')}</p>
+
         {/* View controls: Timeline ⇄ Storyboard, plus Map */}
         <div className="flex items-center gap-2 mt-1 mb-2">
           <div

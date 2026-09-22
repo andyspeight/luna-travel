@@ -18,6 +18,7 @@ import { LayoutGrid, Palette, Send, LogOut, Lightbulb, Luggage, FileText, Users,
 import { installActAsFetch } from '@/lib/act-as-client';
 import { ActAsBanner, ActAsEndedNotice, ActAsPicker } from './act-as';
 import { AgencyTour } from './tour';
+import type { SupportHours } from '@/lib/support-hours';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 export const P = {
@@ -133,6 +134,10 @@ export interface AgencyMe {
   settings?: {
     /** Where traveller replies are emailed. Absent means "work it out". */
     replyNotifyEmail?: string;
+    /** When this agency is open. Absent means the app says nothing about timing. */
+    supportHours?: SupportHours;
+    /** What the agency promises, in its own words. */
+    replyWithin?: string;
   };
   /** Present only while a Travelgenix staff member is acting as this agency. */
   actingAs?: { agencyName: string; staffEmail: string } | null;

@@ -23,9 +23,13 @@
   --text-2: #475569;
   /* Was #94a3b8, which measured 2.34:1 on a tinted card — well under the 4.5:1
      that normal text needs, and this token carries the tab bar labels, every
-     document's size and date, and the countdown units. Solved to the nearest
-     shade that passes on every light surface the app uses (see lib/contrast). */
-  --text-3: #656f7d;
+     document's size and date, and the countdown units.
+
+     These are not values anybody picked by eye. Each is the nearest shade that
+     clears 4.5:1 on every light surface the app actually puts it on, INCLUDING
+     the semantic tints: a green badge sits on a green wash, which is darker
+     than white and is where a shade solved against white alone fails. */
+  --text-3: #636d7b;
 
   /* Semantic colours. NEVER agency-configurable: a warning has to look like a
      warning whoever's brand the app is wearing.
@@ -35,12 +39,12 @@
      as text on a light surface; -on is the text that goes ON the fill. White
      on amber measures 2.15:1, which is how "Delayed" came to be the least
      readable word on the flight screen. */
-  --success: #10b981;
-  --success-ink: #0b7e58;
-  --warning: #f59e0b;
-  --warning-ink: #986207;
-  --danger: #ef4444;
-  --danger-ink: #c93939;
+  --success-rgb: 16 185 129; /* #10b981 */
+  --success-ink: #0b7b56;
+  --warning-rgb: 245 158 11; /* #f59e0b */
+  --warning-ink: #956007;
+  --danger-rgb: 239 68 68; /* #ef4444 */
+  --danger-ink: #c53838;
   /* Dark ink on all three fills: 7.04:1, 8.31:1 and 4.74:1 respectively. */
   --semantic-on: #0f172a;
 
@@ -58,7 +62,7 @@
   --brand-primary-on-rgb: 255 255 255; /* white on navy: 13.61:1 */
   --brand-accent-rgb: 0 180 216; /* #00b4d8 teal */
   --brand-accent-light-rgb: 94 234 212; /* #5eead4 */
-  --brand-accent-dark-rgb: 0 120 146; /* #007892 — was #0096b7 at 3.17:1 */
+  --brand-accent-dark-rgb: 0 118 143; /* #00768f — was #0096b7 at 3.17:1 */
   --brand-accent-on-rgb: 15 23 42; /* ink on teal: 7.24:1, white would be 2.46:1 */
   /* Safe-area insets for PWA on devices with notches */
   --safe-top: env(safe-area-inset-top, 0px);

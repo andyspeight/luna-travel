@@ -89,6 +89,7 @@ const TRAVELLER_PAGES = [
   ['/flight/f1', ''],
   ['/hotel/h1', ''],
   ['/extra/x1', ''],
+  ['/help', ''],
 ];
 
 async function main() {
@@ -617,6 +618,66 @@ async function main() {
   // nothing on it to fail. The count is the guard against that.
   check('and the audit actually saw the app', a11y.text.length > 250, `${a11y.text.length} nodes`);
   jsErrors.push(...a11y.jsErrors.map((e) => `a11y: ${e}`));
+
+  // ── Getting hold of a human ──
+  //
+  // The review's sixth point. Support was reachable only if you knew to look
+  // under "Me", and a phone number with no hours leaves somebody in an airport
+  // unable to judge whether to wait or to use the out-of-hours line.
+  //
+  // The rule worth protecting is the one about not inventing a promise: an
+  // agency that has stated no hours must produce a screen that says nothing
+  // about timing, rather than a plausible "9 to 5".
+  const helpCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const hp = await helpCtx.newPage();
+  hp.on('pageerror', (e) => jsErrors.push(`help: ${e.message}`));
+  await hp.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await hp.waitForTimeout(2500);
+
+  const homeBody = (await hp.textContent('body')) || '';
+  check(
+    'help is reachable from the screen the app opens on',
+    /Help from Travelaire Holidays/.test(homeBody),
+  );
+
+  await hp.goto(`${BASE}/help`, { waitUntil: 'domcontentloaded' });
+  await hp.waitForTimeout(2500);
+  const helpBody = (await hp.textContent('body')) || '';
+
+  // Either state is correct — which one depends on when the suite runs — but
+  // it must say one of them rather than showing a bare phone number.
+  check(
+    'it says whether anybody is there right now',
+    /Open now · until \d{2}:\d{2}|Closed · opens/.test(helpBody),
+    (helpBody.match(/Open now · until \d{2}:\d{2}|Closed · opens[^.]{0,28}/) || ['none'])[0],
+  );
+  // A traveller in the Maldives reading "opens at 09:00" would assume theirs.
+  // No trailing word boundary: textContent runs this straight into the next
+  // element, so the body reads "…17:30 BSTMessages answered…".
+  check(
+    'and whose clock that is on',
+    /\d{2}:\d{2} (GMT|BST|UTC|GMT[+-]\d)/.test(helpBody),
+    (helpBody.match(/\d{2}:\d{2} (?:GMT|BST|UTC|GMT[+-]\d)/) || ['none'])[0],
+  );
+  check('it states the reply promise', /answered within one working day/i.test(helpBody));
+  check(
+    'the out-of-hours number is on the screen, not buried',
+    /Urgent, any time of day/.test(helpBody),
+  );
+
+  const emergency = hp.locator('a[href^="tel:"]').filter({ hasText: /Urgent/ }).first();
+  check(
+    'and it dials the emergency line rather than the office',
+    ((await emergency.getAttribute('href').catch(() => '')) || '').includes('7700900900'),
+  );
+
+  // The rule about not inventing a promise for an agency that has stated
+  // nothing is covered where it can actually be exercised — lib/__tests__/
+  // support-hours, which drives the unset, empty and unparseable cases. It
+  // cannot be reached from here, because the demo agency has hours.
+
+  await hp.close();
+  await helpCtx.close();
 
   // ── Allergies ──
   //

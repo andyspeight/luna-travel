@@ -46,6 +46,7 @@ import { usePlace } from '@/lib/use-place';
 import { useFlightLive } from '@/lib/use-flight-live';
 import { useOnline } from '@/lib/use-online';
 import { tripPhase, flightOfTheDay } from '@/lib/trip-phase';
+import { SupportCard } from '@/components/support-card';
 import { TravelDayCard } from '@/components/travel-day';
 import { warmCache, summarise, cacheSupported, cacheableDocUrl } from '@/lib/offline-docs';
 
@@ -448,6 +449,12 @@ export default function HomePage() {
         {tiles.slice(0, 5).map((tile) => (
           <QuickTile key={tile.href} href={tile.href} icon={tile.icon} label={tile.label} />
         ))}
+      </div>
+
+      {/* Getting hold of a human, from the screen the app opens on. It used to
+          take knowing that "Me" was where the phone number lived. */}
+      <div className="mt-4">
+        <SupportCard agency={booking.agency} compact />
       </div>
 
       {/* Up next */}

@@ -11,6 +11,8 @@
  *   - Room name reads from units[].name (real supplier text).
  */
 
+import type { SupportHours } from '@/lib/support-hours';
+
 export type BoardBasis =
   | 'RoomOnly'
   | 'SelfCatering'
@@ -168,6 +170,16 @@ export interface Agency {
   brandPrimaryColour?: string; // sanitised #RRGGBB
   brandAccentColour?: string; // sanitised #RRGGBB
   welcomeMessage?: string;
+  /**
+   * When the agency is open, and what they promise. Set by the agency in the
+   * portal, not held on the Control record.
+   *
+   * Both absent means they have not said, and the app then makes no claim
+   * about when anybody will answer — an invented opening time is worse than
+   * none, because a traveller in an airport plans around it.
+   */
+  supportHours?: SupportHours;
+  replyWithin?: string;
 }
 
 export interface Booking {

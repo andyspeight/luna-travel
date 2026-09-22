@@ -716,7 +716,9 @@ export function orderToBooking(
     brandAccentColour: hexColour(agency?.brandAccentColour),
     welcomeMessage: agency?.welcomeMessage?.trim() || undefined,
     // emergencyPhone and atolNumber are not held on the Control Clients record
-    // yet, so they are intentionally omitted (UI hides them).
+    // yet, so they are intentionally omitted (UI hides them). supportHours and
+    // replyWithin are the agency's own statement, set in the portal, and are
+    // layered on by the booking route the same way branding is.
   };
 
   const booking: Booking = {

@@ -24,6 +24,8 @@ export interface BrandingFields {
   welcomeMessage?: string;
   /** What the in-app assistant is called. Absent means "Luna". */
   assistantName?: string;
+  /** Uploaded home-screen icon. Absent means one is drawn from the app name. */
+  iconUrl?: string;
 }
 
 /** Accept only a plain hex colour (#RGB / #RRGGBB); normalise to #rrggbb. */
@@ -47,6 +49,7 @@ type BrandingRow = {
   brand_accent_colour: string | null;
   welcome_message: string | null;
   assistant_name?: string | null;
+  icon_url?: string | null;
 };
 
 function rowToFields(row: Partial<BrandingRow> | null | undefined): BrandingFields {
@@ -58,6 +61,7 @@ function rowToFields(row: Partial<BrandingRow> | null | undefined): BrandingFiel
     brandAccentColour: sanitizeHex(row.brand_accent_colour),
     welcomeMessage: clean(row.welcome_message),
     assistantName: clean(row.assistant_name),
+    iconUrl: clean(row.icon_url),
   };
 }
 
@@ -101,6 +105,7 @@ export function mergeBranding(base: BrandingFields, override: BrandingFields): B
     brandAccentColour: override.brandAccentColour ?? base.brandAccentColour,
     welcomeMessage: override.welcomeMessage ?? base.welcomeMessage,
     assistantName: override.assistantName ?? base.assistantName,
+    iconUrl: override.iconUrl ?? base.iconUrl,
   };
 }
 
@@ -116,16 +121,17 @@ export function applyBrandingOverride(agency: Agency, override: BrandingFields):
   if (override.brandAccentColour !== undefined) agency.brandAccentColour = override.brandAccentColour;
   if (override.welcomeMessage !== undefined) agency.welcomeMessage = override.welcomeMessage;
   if (override.assistantName !== undefined) agency.assistantName = override.assistantName;
+  if (override.iconUrl !== undefined) agency.iconUrl = override.iconUrl;
 }
 
 /**
  * The row to upsert for an agency's override. A field passed as undefined or
  * empty is stored as NULL — "inherit from Control" for that field.
  *
- * The assistant name is written only when the caller passes the key at all.
- * The admin White-label tab saves the original five fields and knows nothing of
- * it, and a save there must not quietly rename the agency's assistant back to
- * Luna.
+ * The assistant name and the icon are written only when the caller passes the
+ * key at all. The admin White-label tab saves the original five fields and
+ * knows nothing of them, and a save there must not quietly rename the agency's
+ * assistant back to Luna or take its icon off travellers' home screens.
  */
 export function brandingRow(agencyId: string, fields: BrandingFields, now = new Date()): Record<string, string | null> {
   const row: Record<string, string | null> = {
@@ -138,6 +144,7 @@ export function brandingRow(agencyId: string, fields: BrandingFields, now = new 
     updated_at: now.toISOString(),
   };
   if ('assistantName' in fields) row.assistant_name = clean(fields.assistantName) ?? null;
+  if ('iconUrl' in fields) row.icon_url = clean(fields.iconUrl) ?? null;
   return row;
 }
 

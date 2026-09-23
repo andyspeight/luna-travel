@@ -27,7 +27,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleUpload } from '@vercel/blob/client';
 import { requireAgency } from '@/lib/agency-session';
-import { isOwnBrandPath, BRAND_IMAGE_TYPES, BRAND_IMAGE_MAX_BYTES } from '@/lib/brand-upload';
+import { isOwnBrandPath, BRAND_FOLDERS, BRAND_IMAGE_TYPES, BRAND_IMAGE_MAX_BYTES } from '@/lib/brand-upload';
+import { ICON_IMAGE_TYPES } from '@/lib/app-icon';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -61,7 +62,8 @@ export async function POST(req: NextRequest) {
       onBeforeGenerateToken: async (pathname: string) => {
         if (!isOwnBrandPath(pathname, agencyId)) throw new Error('Invalid upload path');
         return {
-          allowedContentTypes: BRAND_IMAGE_TYPES,
+          // The icon renderer reads PNG and JPEG only.
+          allowedContentTypes: pathname.startsWith(`${BRAND_FOLDERS.icon}/`) ? ICON_IMAGE_TYPES : BRAND_IMAGE_TYPES,
           maximumSizeInBytes: BRAND_IMAGE_MAX_BYTES,
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({ agencyId }),

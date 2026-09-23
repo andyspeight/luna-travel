@@ -5,7 +5,7 @@
  *
  *   GET  — the agency's current branding override.
  *   POST — save it. Body: { appName?, assistantName?, brandPrimaryColour?,
- *          brandAccentColour?, welcomeMessage?, logoUrl? }.
+ *          brandAccentColour?, welcomeMessage?, logoUrl?, iconUrl? }.
  *
  * Luna-native agencies have no Control record, so there is nothing to sync to
  * Control (unlike the admin branding route) — the Luna override IS the source.
@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
 import { isAssistantName } from '@/lib/app-name';
+import { isOwnIconUrl } from '@/lib/app-icon';
 import {
   getBrandingOverride,
   setBrandingOverride,
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
   const assistantName = str(body.assistantName);
   const welcomeMessage = str(body.welcomeMessage);
   const logoUrl = str(body.logoUrl);
+  const iconUrl = str(body.iconUrl);
 
   if (appName && appName.length > MAX.appName) {
     return NextResponse.json({ error: 'appName_too_long' }, { status: 400 });
@@ -78,11 +80,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_logo_url' }, { status: 400 });
   }
 
+  // The icon is drawn by our own icon route, which will only read from this
+  // agency's folder in our Blob store; anything else is refused here first.
+  if (iconUrl && !isOwnIconUrl(iconUrl, claims.agencyId)) {
+    return NextResponse.json({ error: 'invalid_icon_url' }, { status: 400 });
+  }
+
   const fields: BrandingFields = {
     appName,
     assistantName,
     welcomeMessage,
     logoUrl,
+    iconUrl,
     brandPrimaryColour: sanitizeHex(body.brandPrimaryColour as string | undefined),
     brandAccentColour: sanitizeHex(body.brandAccentColour as string | undefined),
   };

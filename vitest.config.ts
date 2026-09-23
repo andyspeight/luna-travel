@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 // No jsdom: every tested module is pure. The '@' alias mirrors tsconfig paths so
 // the test files import exactly what the app imports.
 export default defineConfig({
+  // The same JSX transform Next uses, for the one route that draws an image.
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

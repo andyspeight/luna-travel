@@ -17,6 +17,13 @@ const TOKENS: Record<string, Array<keyof typeof VARS>> = {
   'pay.nextDue': ['amount', 'date'],
   'pay.dueBy': ['date'],
   'pay.ask': ['agency'],
+  'pay.payNow': ['amount'],
+  'pay.opening': [],
+  'pay.securely': ['agency'],
+  'pay.demo': ['agency'],
+  'pay.failed': ['agency'],
+  'pay.changed': [],
+  'pay.settled': [],
 };
 
 describe('the payment labels', () => {

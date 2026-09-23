@@ -176,6 +176,29 @@ export async function getDestination(cc: string): Promise<BrainDestination | nul
   };
 }
 
+const SEARCH_FIELDS = ['Search Index', 'Question', 'Alt Phrasings', 'Related To'];
+
+/**
+ * The Airtable filter for Q&A about these places, matching WHOLE WORDS.
+ *
+ * It was FIND, which matches anywhere inside a word, and "promenade" contains
+ * "rome". A Rome trip was offered the top things to do in the Côte d'Azur,
+ * India, Las Vegas and Hong Kong, because every one of those lists a promenade
+ * (23 Sep 2026). A word boundary here is anything that is not a letter or a
+ * digit, which is also what lit() leaves a token made of, so a token cannot
+ * carry anything that means something to the regex or the formula.
+ */
+export function knowledgeFormula(tokens: string[]): string {
+  const matches = tokens
+    .map(lit)
+    .filter((t) => t.length >= 3)
+    .flatMap((t) =>
+      SEARCH_FIELDS.map((f) => `REGEX_MATCH(LOWER({${f}}),'(^|[^a-z0-9])${t}([^a-z0-9]|$)')`),
+    )
+    .join(',');
+  return `AND(NOT({Audience}='Agent'),OR(${matches}))`;
+}
+
 export async function getKnowledge(tokens: string[]): Promise<BrainAnswer[]> {
   const clean = Array.from(
     new Set(tokens.map(lit).filter((t) => t.length >= 3)),
@@ -188,12 +211,8 @@ export async function getKnowledge(tokens: string[]): Promise<BrainAnswer[]> {
   // a holiday cost?"), which is noise in a destination guide. Precise now;
   // recall grows automatically as Luna Brain's Search Index is populated.
   // Consumer-facing only (drop Agent-only rows).
-  const SEARCH_FIELDS = ['Search Index', 'Question', 'Alt Phrasings', 'Related To'];
-  const finds = clean
-    .flatMap((t) => SEARCH_FIELDS.map((f) => `FIND('${t}',LOWER({${f}}))`))
-    .join(',');
   const recs = await brainGet(T_KNOWLEDGE, {
-    filterByFormula: `AND(NOT({Audience}='Agent'),OR(${finds}))`,
+    filterByFormula: knowledgeFormula(clean),
     maxRecords: '60',
     'fields[]': [
       'Question', 'Consumer Answer', 'Category', 'Confidence', 'Seasonal',

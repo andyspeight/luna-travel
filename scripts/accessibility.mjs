@@ -141,6 +141,122 @@ const SAMPLE = async ({ png, items }) => {
   });
 };
 
+/**
+ * Measure whatever the page is showing now: every control's size and every
+ * piece of text against the pixels actually behind it.
+ *
+ * Split out of audit() so a screen that is only reachable through a flow (the
+ * trip reveal after an invite is redeemed) can be measured in the state a
+ * traveller sees, not just the screens a URL can open. It leaves the page's
+ * text transparent, so measure last.
+ */
+export async function measurePage(page, name) {
+  const text = [];
+  const targets = [];
+  await page.evaluate(async () => {
+    for (let y = 0; y < document.body.scrollHeight; y += 600) {
+      window.scrollTo(0, y);
+      await new Promise((r) => setTimeout(r, 110));
+    }
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(700);
+
+  for (const t of await page.evaluate(COLLECT_TARGETS)) {
+    targets.push({ ...t, page: name, ok: t.w >= 44 && t.h >= 44 });
+  }
+
+  const items = await page.evaluate(COLLECT_TEXT);
+
+  // Strip everything that is not backdrop, then photograph it.
+  await page.addStyleTag({
+    content: `*, *::before, *::after { color: transparent !important; text-shadow: none !important; }
+              svg { visibility: hidden !important; }`,
+  });
+  await page.waitForTimeout(350);
+  const png = 'data:image/png;base64,' + (await page.screenshot({ fullPage: true })).toString('base64');
+
+  for (const s of await page.evaluate(SAMPLE, { png, items })) {
+    if (!s.bg) continue;
+    const fg = parse(s.colour);
+    if (!fg) continue;
+    const a = fg.a * s.alpha;
+    const composited = {
+      r: fg.r * a + s.bg.r * (1 - a),
+      g: fg.g * a + s.bg.g * (1 - a),
+      b: fg.b * a + s.bg.b * (1 - a),
+    };
+    const large = s.size >= 24 || (s.size >= 18.66 && s.weight >= 700);
+    const need = large ? 3 : 4.5;
+    const got = ratio(composited, s.bg);
+    text.push({
+      page: name,
+      text: s.text,
+      size: s.size,
+      weight: s.weight,
+      colour: s.colour,
+      bg: `rgb(${s.bg.r}, ${s.bg.g}, ${s.bg.b})`,
+      ratio: Math.round(got * 100) / 100,
+      need,
+      pass: got >= need,
+    });
+  }
+  return { text, targets };
+}
+
+/**
+ * Stand-in photographs for the trip reveal, which puts white text straight on
+ * the destination's photo. The real ones live in Supabase storage; these are
+ * the cases the text has to survive. "white" is the worst case the cover
+ * splash is held to; "sky" is roughly the Rome shot a real traveller saw on
+ * 23 Sep 2026, bright blue over pale stone, when this screen was unreadable.
+ */
+export const REVEAL_PHOTOS = {
+  white: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="2000"><rect width="900" height="2000" fill="#ffffff"/></svg>',
+  sky:
+    '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="2000"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0" stop-color="#7fb2de"/><stop offset="0.45" stop-color="#b9d6ee"/><stop offset="0.7" stop-color="#e8cfa8"/>' +
+    '<stop offset="1" stop-color="#b98a5e"/></linearGradient></defs><rect width="900" height="2000" fill="url(#g)"/></svg>',
+};
+
+/**
+ * Open the trip reveal — the screen a traveller sees the moment an invite is
+ * redeemed — without a real invite. The two invite calls are answered here, so
+ * nothing is written, and the destination photo is replaced by `photo`.
+ */
+export async function openReveal(page, { photo = 'white' } = {}) {
+  await page.route('**/api/invites/reveal-audit', (r) =>
+    r.fulfill({ json: { status: 'pending', prefill: { bookingRef: 'WCS96420' } } }),
+  );
+  await page.route('**/api/invites/reveal-audit/redeem', (r) =>
+    r.fulfill({
+      json: {
+        ok: true,
+        trip: {
+          destination: 'Rome',
+          departureDate: '2027-02-12',
+          returnDate: '2027-02-15',
+          leadName: 'Paul Thompson',
+          countryCode: 'IT',
+          locationSlug: 'rome',
+        },
+      },
+    }),
+  );
+  await page.route('**/storage/v1/object/public/**', (r) =>
+    r.fulfill({ contentType: 'image/svg+xml', body: REVEAL_PHOTOS[photo] }),
+  );
+  await page.goto(`${BASE}/install?invite=reveal-audit`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('input[type="email"]');
+  await page.fill('input[type="text"]', 'WCS96420');
+  await page.fill('input[type="email"]', 'paul@example.com');
+  await page.fill('input[type="date"]', '2027-02-12');
+  await page.locator('button[type="button"]').filter({ hasText: /./ }).last().click();
+  await page.waitForSelector('text=Open my trip');
+  await page.waitForTimeout(1200); // the reveal fades in over 700ms
+  return page;
+}
+
 /** Walk the app and measure it. */
 export async function audit({ screens = SCREENS, browser: given } = {}) {
   const browser =
@@ -163,55 +279,9 @@ export async function audit({ screens = SCREENS, browser: given } = {}) {
   for (const [path, name] of screens) {
     await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2400);
-
-    await page.evaluate(async () => {
-      for (let y = 0; y < document.body.scrollHeight; y += 600) {
-        window.scrollTo(0, y);
-        await new Promise((r) => setTimeout(r, 110));
-      }
-      window.scrollTo(0, 0);
-    });
-    await page.waitForTimeout(700);
-
-    for (const t of await page.evaluate(COLLECT_TARGETS)) {
-      targets.push({ ...t, page: name, ok: t.w >= 44 && t.h >= 44 });
-    }
-
-    const items = await page.evaluate(COLLECT_TEXT);
-
-    // Strip everything that is not backdrop, then photograph it.
-    await page.addStyleTag({
-      content: `*, *::before, *::after { color: transparent !important; text-shadow: none !important; }
-                svg { visibility: hidden !important; }`,
-    });
-    await page.waitForTimeout(350);
-    const png = 'data:image/png;base64,' + (await page.screenshot({ fullPage: true })).toString('base64');
-
-    for (const s of await page.evaluate(SAMPLE, { png, items })) {
-      if (!s.bg) continue;
-      const fg = parse(s.colour);
-      if (!fg) continue;
-      const a = fg.a * s.alpha;
-      const composited = {
-        r: fg.r * a + s.bg.r * (1 - a),
-        g: fg.g * a + s.bg.g * (1 - a),
-        b: fg.b * a + s.bg.b * (1 - a),
-      };
-      const large = s.size >= 24 || (s.size >= 18.66 && s.weight >= 700);
-      const need = large ? 3 : 4.5;
-      const got = ratio(composited, s.bg);
-      text.push({
-        page: name,
-        text: s.text,
-        size: s.size,
-        weight: s.weight,
-        colour: s.colour,
-        bg: `rgb(${s.bg.r}, ${s.bg.g}, ${s.bg.b})`,
-        ratio: Math.round(got * 100) / 100,
-        need,
-        pass: got >= need,
-      });
-    }
+    const m = await measurePage(page, name);
+    text.push(...m.text);
+    targets.push(...m.targets);
   }
 
   await ctx.close();

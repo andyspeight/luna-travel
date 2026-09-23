@@ -41,7 +41,7 @@ export function NotificationsOptIn({ tone = 'card' }: { tone?: 'card' | 'onDark'
 
   if (subscribed && permission === 'granted') {
     return (
-      <div className={`flex items-center gap-2 text-[13px] ${tone === 'onDark' ? 'text-white/75' : 'text-ink-2'}`}>
+      <div className={`flex items-center gap-2 text-[13px] ${tone === 'onDark' ? 'text-white/90' : 'text-ink-2'}`}>
         <IconCheck size={15} />
         Trip alerts are on — we&rsquo;ll tell you the moment anything changes.
       </div>

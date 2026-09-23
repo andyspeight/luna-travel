@@ -23,7 +23,7 @@
  */
 import { chromium } from 'playwright-core';
 import { SignJWT } from 'jose';
-import { audit, describeFailures } from './accessibility.mjs';
+import { audit, describeFailures, measurePage, openReveal } from './accessibility.mjs';
 
 const BASE = process.env.SMOKE_BASE_URL || 'http://localhost:3000';
 const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -618,6 +618,27 @@ async function main() {
   // nothing on it to fail. The count is the guard against that.
   check('and the audit actually saw the app', a11y.text.length > 250, `${a11y.text.length} nodes`);
   jsErrors.push(...a11y.jsErrors.map((e) => `a11y: ${e}`));
+
+  // ── The trip reveal, on the worst photo there is ──
+  //
+  // The screen a traveller sees the moment their invite is redeemed: every
+  // line of it is white text straight on the destination photo. It is only
+  // reachable through the invite flow, so the walk above never saw it, and a
+  // real Rome booking on 23 Sep 2026 opened on it at 1.3:1. Measured here on a
+  // pure white photo, the case the scrim is built for, at a height where the
+  // whole screen is on view.
+  const revealCtx = await browser.newContext({ viewport: { width: 390, height: 1500 } });
+  const revealPage = await revealCtx.newPage();
+  revealPage.on('pageerror', (e) => jsErrors.push(`reveal: ${e.message}`));
+  await openReveal(revealPage, { photo: 'white' });
+  const reveal = await measurePage(revealPage, 'Trip reveal (white photo)');
+  const revealFails = describeFailures({ text: reveal.text, targets: [] });
+  check(
+    'the trip reveal is legible on a pure white photo',
+    revealFails.length === 0 && reveal.text.length > 15,
+    revealFails.length ? revealFails.slice(0, 2).join(' | ') : `${reveal.text.length} measured`,
+  );
+  await revealCtx.close();
 
   // ── Getting hold of a human ──
   //

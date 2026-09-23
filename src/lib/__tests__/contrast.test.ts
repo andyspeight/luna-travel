@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  PHOTO_SCRIM,
+  PHOTO_SCRIM_FLOOR,
   parseHex,
   toHex,
   contrast,
@@ -169,3 +171,34 @@ function hslHex(h: number, s: number, l: number): string {
   const to = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
   return `#${to(f(0))}${to(f(8))}${to(f(4))}`;
 }
+
+// The trip reveal puts white text straight on a destination photo. These pin
+// the arithmetic its scrim and its text colours were chosen by, so a later
+// "lighten the scrim a touch" cannot quietly undo them.
+describe('the photo scrim floor', () => {
+  const floor = parseHex(PHOTO_SCRIM_FLOOR)!;
+  const over = (alpha: number) => ({
+    r: 255 * alpha + floor.r * (1 - alpha),
+    g: 255 * alpha + floor.g * (1 - alpha),
+    b: 255 * alpha + floor.b * (1 - alpha),
+  });
+
+  it('is what the scrim leaves over a pure white photo', () => {
+    expect(PHOTO_SCRIM.alpha).toBeGreaterThanOrEqual(0.6);
+    expect(PHOTO_SCRIM_FLOOR).toBe('#62656f');
+  });
+
+  it('carries small white text at 90%, the lightest the reveal uses', () => {
+    expect(contrast(over(0.9), floor)).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  // The measurement that set the rule: 75% white is not enough, which is what
+  // the dates and the install hint used to be.
+  it('does not carry 75% white', () => {
+    expect(contrast(over(0.75), floor)).toBeLessThan(AA_NORMAL);
+  });
+
+  it('carries the default light accent as large type', () => {
+    expect(contrast(parseHex('#5eead4')!, floor)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+});

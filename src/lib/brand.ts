@@ -32,6 +32,8 @@ import {
   textOn,
   mix as mixColour,
   DARKEST_LIGHT_SURFACE,
+  PHOTO_SCRIM_FLOOR,
+  AA_LARGE,
   type RGB as Colour,
 } from '@/lib/contrast';
 
@@ -72,6 +74,7 @@ export function brandVars(primaryHex?: string, accentHex?: string): Record<strin
   const out: Record<string, string> = {};
 
   const surface = parseColour(DARKEST_LIGHT_SURFACE)!;
+  const photoFloor = parseColour(PHOTO_SCRIM_FLOOR)!;
 
   const p = parseHex(primaryHex);
   if (p) {
@@ -83,7 +86,14 @@ export function brandVars(primaryHex?: string, accentHex?: string): Record<strin
   const a = parseHex(accentHex);
   if (a) {
     out['--brand-accent-rgb'] = channels(a);
-    out['--brand-accent-light-rgb'] = channels(mix(a, 255, 0.42));
+    // The light shade is what sits on dark: dark mode, and the destination
+    // photo on the trip reveal. It used to be a fixed 42% toward white, so a
+    // deep brand colour came out as a mid grey-blue that vanished on both.
+    // Now lightened only as far as 3:1 on the photo's worst case needs, which
+    // is also comfortably past 4.5:1 on every dark surface.
+    out['--brand-accent-light-rgb'] = channels(
+      tuple(readableOn(colour(mix(a, 255, 0.42)), photoFloor, AA_LARGE)),
+    );
     // Solved, not nudged: as close to the agency's accent as 4.5:1 allows.
     out['--brand-accent-dark-rgb'] = channels(tuple(readableOn(colour(a), surface)));
     out['--brand-accent-on-rgb'] = channels(tuple(textOn(colour(a))));

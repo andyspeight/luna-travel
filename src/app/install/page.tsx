@@ -7,6 +7,7 @@ import { IconShare, IconSparkle } from '@/components/icons';
 import { useBooking } from '@/lib/booking-context';
 import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
 import { cinematicCover } from '@/lib/hero';
+import { PHOTO_SCRIM } from '@/lib/contrast';
 import { NotificationsOptIn } from '@/components/notifications-optin';
 
 /**
@@ -67,7 +68,7 @@ function TradeShowView() {
     >
       <header className="px-8 pt-10 text-center">
         <div className="inline-flex items-center gap-3 mb-2">
-          <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center shadow-md">
+          <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-navy to-teal-dark text-white font-bold text-sm flex items-center justify-center shadow-md">
             L
           </span>
           <span className="text-base font-semibold tracking-tight">Luna Travel</span>
@@ -116,7 +117,7 @@ function TradeShowView() {
           <Step n={2} label="Tap the link that appears" />
           <Step n={3} label="Add to home screen" icon={<IconShare size={14} />} />
         </div>
-        <p className="text-center text-[10px] text-white/40 mt-5 tracking-[0.06em]">
+        <p className="text-center text-[11px] text-white/85 mt-5 tracking-[0.06em]">
           travelgenix.io · The post-booking trip experience for SME travel agents
         </p>
       </footer>
@@ -188,7 +189,7 @@ function AgencyMark({ branding, size = 'md' }: { branding?: Branding; size?: 'sm
         <img src={logo} alt="" className={`${box} object-cover bg-white/10 shadow-md flex-shrink-0`} />
       ) : (
         <span
-          className={`${box} bg-gradient-to-br from-navy to-teal text-white font-bold flex items-center justify-center shadow-md flex-shrink-0`}
+          className={`${box} bg-gradient-to-br from-navy to-teal-dark text-white font-bold flex items-center justify-center shadow-md flex-shrink-0`}
           style={branding?.brandPrimaryColour ? { background: branding.brandPrimaryColour } : undefined}
         >
           {name.charAt(0).toUpperCase()}
@@ -441,7 +442,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
       </div>
 
       <footer className="px-6 pb-8 pt-4 text-center">
-        <p className="text-[10px] text-white/40 tracking-[0.06em]">
+        <p className="text-[11px] text-white/85 tracking-[0.06em]">
           travelgenix.io · The post-booking trip experience for SME travel agents
         </p>
       </footer>
@@ -467,7 +468,7 @@ function InstallAffordance() {
   // Silently rendering nothing here looked like a missing button.
   if (isStandalone) {
     return (
-      <div className="mt-5 inline-flex items-center gap-2 text-[13px] text-white/60">
+      <div className="mt-5 inline-flex items-center gap-2 text-[13px] text-white/90">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M20 6 9 17l-5-5" />
         </svg>
@@ -489,7 +490,7 @@ function InstallAffordance() {
         <ShareGlyph size={18} />
         Add to home screen
       </button>
-      <p className="mt-2.5 text-[12.5px] text-white/70 text-center max-w-[300px]">
+      <p className="mt-2.5 text-[12.5px] text-white/90 text-center max-w-[300px]">
         One tap and your trip sits on your home screen like an app — no app store, no password.
       </p>
 
@@ -498,6 +499,28 @@ function InstallAffordance() {
     </>
   );
 }
+
+/**
+ * The darkening over the destination photo on the reveal.
+ *
+ * Every line of this screen is white text straight on a photograph, from the
+ * agency name at the top to the footer, so it cannot rely on the photo being
+ * dark where the words are. cinematicCover only darkens the top fifth and the
+ * bottom half — enough for the splash, which draws its own heavier scrim, and
+ * nothing like enough here: a real Rome booking opened on 23 Sep 2026 put
+ * "days until you fly" at 1.3:1 on a bright sky.
+ *
+ * So this holds a floor everywhere text can land (lib/contrast PHOTO_SCRIM),
+ * a little heavier at the ends. Over a pure white photo the floor leaves
+ * PHOTO_SCRIM_FLOOR, which is what the text colours below are checked
+ * against: white/90 clears 4.5:1 on it, and the accent is solved to clear
+ * 3:1 for the large type.
+ */
+const REVEAL_SCRIM = (() => {
+  const { r, g, b, alpha } = PHOTO_SCRIM;
+  const at = (a: number) => `rgba(${r},${g},${b},${a})`;
+  return `linear-gradient(180deg, ${at(alpha + 0.06)} 0%, ${at(alpha)} 30%, ${at(alpha)} 62%, ${at(alpha + 0.18)} 100%)`;
+})();
 
 function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Branding; onOpen: () => void }) {
   const [shown, setShown] = useState(false);
@@ -557,7 +580,7 @@ function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Brandin
   return (
     <main
       className="fixed inset-0 flex flex-col text-white overflow-y-auto"
-      style={{ background: cover ? cover.background : OCEAN_BG }}
+      style={{ background: cover ? `${REVEAL_SCRIM}, ${cover.background}` : OCEAN_BG }}
     >
       <div
         className="flex-1 flex flex-col items-center justify-center px-6 py-10 transition-all duration-700 ease-out"
@@ -582,16 +605,16 @@ function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Brandin
           <div className="font-serif text-[76px] leading-none text-teal-light tracking-tight">
             {cdNum ?? <IconSparkle size={60} className="mx-auto" />}
           </div>
-          <div className="mt-2 text-[12px] uppercase tracking-[0.16em] text-white/55 font-semibold">
+          <div className="mt-2 text-[12px] uppercase tracking-[0.16em] text-white/90 font-semibold">
             {cdLabel}
           </div>
         </div>
 
         {/* At a glance */}
         {(range || nights) && (
-          <div className="flex items-center gap-3 text-sm text-white/75 mb-9">
+          <div className="flex items-center gap-3 text-sm text-white/90 mb-9">
             {range && <span>{range}</span>}
-            {range && nights && <span className="text-white/30">·</span>}
+            {range && nights && <span aria-hidden className="text-white/90">·</span>}
             {nights && <span>{nights} {nights === 1 ? 'night' : 'nights'}</span>}
           </div>
         )}
@@ -637,7 +660,7 @@ function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Brandin
       </div>
 
       <footer className="px-6 pb-8 pt-2 text-center">
-        <p className="text-[10px] text-white/40 tracking-[0.06em]">
+        <p className="text-[11px] text-white/85 tracking-[0.06em]">
           travelgenix.io · The post-booking trip experience for SME travel agents
         </p>
       </footer>
@@ -653,7 +676,7 @@ function InsideRow({ icon, label }: { icon: React.ReactNode; label: string }) {
           {icon}
         </svg>
       </span>
-      <span className="text-[14px] text-white/85">{label}</span>
+      <span className="text-[14px] text-white/90">{label}</span>
     </div>
   );
 }

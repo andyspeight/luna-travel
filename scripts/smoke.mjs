@@ -744,6 +744,68 @@ async function main() {
   await bp.close();
   await bookedCtx.close();
 
+  // ── After the trip ──
+  //
+  // The review's eighth point, and invisible in an ordinary run: every demo
+  // trip is in the future, so without a faked clock this screen never renders.
+  //
+  // Before this, a trip that had ended four days earlier was still badged
+  // "Upcoming" with a countdown frozen at 00:00:00:00, and nothing anywhere
+  // sent a traveller to the review screen — no link, no push, no job.
+  const postCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await postCtx.clock.setFixedTime(new Date('2026-12-09T10:00:00Z'));
+  const pt = await postCtx.newPage();
+  pt.on('pageerror', (e) => jsErrors.push(`post-trip: ${e.message}`));
+  await pt.goto(`${BASE}/?demo=DEMO81297`, { waitUntil: 'domcontentloaded' });
+  await pt.waitForTimeout(3000);
+  const ptBody = (await pt.textContent('body')) || '';
+
+  check('a finished trip says so', /Trip complete/i.test(ptBody));
+  check('and is not still called upcoming', !/\bUpcoming\b/i.test(ptBody));
+  check('and has no spent countdown', !/until you fly/i.test(ptBody));
+  check('the feedback request is actually shown', /How was your Maldives trip\?/.test(ptBody));
+  check('and says where it goes', /It goes to them only/.test(ptBody));
+  check(
+    'the next idea names a place and asks the agent',
+    /Ask Travelgenix about [A-Z]/.test(ptBody),
+    (ptBody.match(/Ask Travelgenix about [A-Za-z ]+?(?=Trip|$)/) || ['none'])[0],
+  );
+  // The review's point: the next trip must not crowd out what is still needed.
+  check('help is still on the home screen', /Help from Travelgenix/.test(ptBody));
+  // By the link, not the word: textContent runs "Docs" into its neighbour
+  // ("MapDocs"), so a word-boundary match never fires.
+  const docLinks = await pt.locator('a[href="/documents"]').evaluateAll(
+    (els) => els.filter((e) => e.getBoundingClientRect().width > 0).length,
+  );
+  check('and so are the documents', docLinks > 0, `${docLinks} visible link(s)`);
+
+  await pt.getByRole('button', { name: 'Not now' }).first().click();
+  await pt.waitForTimeout(400);
+  await pt.reload({ waitUntil: 'domcontentloaded' });
+  await pt.waitForTimeout(2500);
+  check(
+    '"Not now" means not again',
+    !/How was your Maldives trip\?/.test((await pt.textContent('body')) || ''),
+  );
+
+  // The review screen used to say "with your permission" and offer no way to
+  // give it, so every review went in with consent false.
+  await pt.goto(`${BASE}/review`, { waitUntil: 'domcontentloaded' });
+  await pt.waitForTimeout(2500);
+  const rvBody = (await pt.textContent('body')) || '';
+  const consent = pt.locator('input[type="checkbox"]').first();
+  check('the review screen offers a real choice about sharing', (await consent.count()) === 1);
+  check('and it starts private', (await consent.count()) === 1 && !(await consent.isChecked()));
+  check('it says who sees it', /This goes to Travelgenix only/.test(rvBody));
+  // The card this replaced spoke for the agency with claims nobody checked.
+  check(
+    'and makes no availability claims on the agency\'s behalf',
+    !/Birmingham|dates available|Promotion Engine/i.test(rvBody),
+  );
+
+  await pt.close();
+  await postCtx.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

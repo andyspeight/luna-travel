@@ -28,7 +28,7 @@ export function LanguageSetting() {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-ink">{t('me.language')}</div>
           <div className="text-xs text-ink-2 mt-0.5">
-            {current.flag} {current.label}
+            {current.label}
           </div>
         </div>
         <IconChevR size={18} className="text-ink-3 flex-shrink-0" />
@@ -61,8 +61,15 @@ export function LanguageSetting() {
                       aria-current={active ? 'true' : undefined}
                       className="w-full flex items-center gap-3 p-3.5 hover:bg-surface-2 transition-colors text-left"
                     >
-                      <span className="text-xl leading-none" aria-hidden>
-                        {l.flag}
+                      {/* A code rather than a flag: a language is not a
+                          country (English is not only British, Spanish not
+                          only Spain's), and Windows draws flag emoji as two
+                          bare letters anyway. */}
+                      <span
+                        className="flex h-8 w-9 flex-none items-center justify-center rounded-lg bg-surface-3 text-[11px] font-bold uppercase tracking-wide text-ink-2"
+                        aria-hidden
+                      >
+                        {l.code}
                       </span>
                       <span className="flex-1 text-sm font-medium text-ink">{l.label}</span>
                       {active && <IconCheck size={18} className="text-teal-dark dark:text-teal-light" />}

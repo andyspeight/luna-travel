@@ -70,6 +70,8 @@ const config: Config = {
         danger:      'rgb(var(--danger-rgb) / <alpha-value>)',
         'danger-ink': 'var(--danger-ink)',
         'semantic-on': 'var(--semantic-on)',
+        gold:          'rgb(var(--gold-rgb) / <alpha-value>)',
+        'star-off':    'var(--star-off)',
       },
 
       // Custom animations used by modals / sheets / page transitions.

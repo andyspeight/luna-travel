@@ -47,6 +47,7 @@ import { useFlightLive } from '@/lib/use-flight-live';
 import { useOnline } from '@/lib/use-online';
 import { tripPhase, flightOfTheDay } from '@/lib/trip-phase';
 import { SupportCard } from '@/components/support-card';
+import { FeedbackCard, NextIdeaCard } from '@/components/post-trip';
 import { TravelDayCard } from '@/components/travel-day';
 import { warmCache, summarise, cacheSupported, cacheableDocUrl } from '@/lib/offline-docs';
 
@@ -277,7 +278,7 @@ export default function HomePage() {
         ) : (
           <>
             <p className="text-xs uppercase tracking-wide text-ink-3 font-medium">
-              {t(greetingKey())}
+              {tripOver ? t('next.welcomeHome') : t(greetingKey())}
             </p>
             <h1 className="font-serif text-[34px] leading-tight text-ink">
               {t('home.hello')}{' '}
@@ -286,10 +287,19 @@ export default function HomePage() {
               </em>
               .
             </h1>
-            {booking.agency.welcomeMessage && (
+            {/* The agency's welcome is written for somebody looking forward to
+                a trip ("anything you need before or during your trip"), so
+                once it is over the screen says what is still here instead. */}
+            {tripOver ? (
               <p className="text-sm text-ink-2 mt-2 leading-relaxed max-w-[340px]">
-                {booking.agency.welcomeMessage}
+                {t('post.stillHere', { agency: booking.agency.name || 'travel' })}
               </p>
+            ) : (
+              booking.agency.welcomeMessage && (
+                <p className="text-sm text-ink-2 mt-2 leading-relaxed max-w-[340px]">
+                  {booking.agency.welcomeMessage}
+                </p>
+              )
             )}
           </>
         )}
@@ -300,45 +310,18 @@ export default function HomePage() {
         <AgentMessageBanner message={latest} agency={booking.agency.name} onRead={markRead} />
       )}
 
-      {/* Post-trip: lead with rebooking. Once the trip is over, the countdown
-          is spent — turn the top of the home screen into "where next?". */}
+      {/* After the trip: ask how it went, then offer ONE specific next idea.
+          This replaced a generic "Where next?" banner; the review asked for a
+          specific action ("Ask your agent about Crete") and for the feedback
+          request to say where it goes and be dismissible. The documents and
+          help both stay below, because a problem does not end when the holiday
+          does — an insurance claim needs the policy, a complaint needs the
+          agent. */}
       {tripOver && (
-        <Link href="/inspiration" className="block mb-4">
-          <article className="relative rounded-3xl overflow-hidden shadow-md p-5 text-white min-h-[132px] flex flex-col justify-end">
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{ background: 'linear-gradient(135deg, #1B2B5B 0%, #0096B7 60%, #00B4D8 100%)' }}
-            />
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{
-                background:
-                  'radial-gradient(ellipse at 80% 10%, rgba(255,255,255,0.22), transparent 55%)',
-              }}
-            />
-            <div className="relative flex items-center gap-3">
-              <span className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center flex-shrink-0">
-                <IconCompass size={22} />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-wider opacity-90">
-                  {t('next.welcomeHome')}
-                </div>
-                <h2 className="font-serif text-2xl leading-tight">
-                  <em>{t('next.whereNext')}</em>
-                </h2>
-                <p className="text-xs opacity-90 mt-0.5">
-                  {booking.destinationLabel
-                    ? t('next.lovedX', { dest: booking.destinationLabel, agency: booking.agency.name })
-                    : t('next.lovedIt', { agency: booking.agency.name })}
-                </p>
-              </div>
-              <IconChevR size={20} className="ml-auto flex-shrink-0 opacity-90" />
-            </div>
-          </article>
-        </Link>
+        <>
+          <FeedbackCard />
+          <NextIdeaCard booking={booking} />
+        </>
       )}
 
       {/* On a travel day the flight takes the hero's place. */}
@@ -404,7 +387,7 @@ export default function HomePage() {
             <div className="relative flex justify-between items-start">
               <span className="inline-flex items-center gap-1.5 bg-navy-dark/55 backdrop-blur px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wide">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-light shadow-[0_0_0_3px_rgba(72,202,228,0.3)]" />
-                {booking.status === 'confirmed' ? t('home.upcoming') : booking.status}
+                {tripOver ? t('post.tripComplete') : booking.status === 'confirmed' ? t('home.upcoming') : booking.status}
               </span>
               <span className="text-[11px] opacity-80 tabular tracking-wide">
                 REF · {booking.reference}
@@ -428,7 +411,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Countdown strip */}
+          {/* Countdown strip. Not after the trip: it sat at 00:00:00:00 on a
+              holiday that ended days ago. */}
+          {!tripOver && (
           <div className="grid grid-cols-4 p-5 pb-3 divide-x divide-line-light">
             {[
               { v: parts.days, l: t('cd.days') },
@@ -446,6 +431,7 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+          )}
           <div className="pb-4" />
         </article>
       </Link>
@@ -496,7 +482,9 @@ export default function HomePage() {
           booking of attraction tickets has no hotel city and no arrival
           airport, so it has no country, and the card rendered as a blank
           title over an empty gradient. */}
-      {hasGuide && (
+      {/* "Get to know it" is preparation — visa, weather, currency — for a
+          trip that is now over. The guide is still one tap away on its tab. */}
+      {hasGuide && !tripOver && (
       <section className="mt-6">
         <SectionHeading title={t('home.getToKnow')} />
         <Link
@@ -564,7 +552,9 @@ export default function HomePage() {
       <SuggestionRail reason="similar" variant="compact" />
 
       {/* Airport extras */}
-      {booking.airportExtras.length > 0 && (
+      {/* Listed as if still to come. They remain on the itinerary, and their
+          vouchers in Documents. */}
+      {booking.airportExtras.length > 0 && !tripOver && (
         <section className="mt-6">
           <SectionHeading title={t('home.airportExtras')} />
           <ul className="space-y-2">

@@ -6,7 +6,6 @@ import type { Agency } from '@/types/booking';
 import type { Inspiration } from '@/data/inspirations';
 import { heroImageUrl } from '@/lib/hero';
 import { useI18n } from '@/lib/locale-context';
-import { formatMoney } from '@/lib/format';
 import {
   IconChevR,
   IconMail,
@@ -156,7 +155,13 @@ export function InspirationCard({
   );
 }
 
-function EnquirySheet({
+/**
+ * The enquiry, as a sheet. Exported so the post-trip "Ask {agency} about
+ * {place}" action opens exactly this rather than a second way to write the
+ * same email — the wording here has been corrected once already for putting
+ * words in the traveller's mouth, and a copy would not get that fix.
+ */
+export function EnquirySheet({
   ins,
   agency,
   becauseOf,

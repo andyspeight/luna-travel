@@ -37,7 +37,7 @@ describe('the not-booked labels', () => {
   it('say something in every language the app ships', () => {
     for (const key of LABELS) {
       for (const locale of CODES) {
-        const value = translate(locale, key, { agency: 'Travelaire' });
+        const value = translate(locale, key, { agency: 'Travelgenix' });
         expect(value.trim().length, `${key} is empty in ${locale}`).toBeGreaterThan(0);
         expect(value, `${key} falls through to its key in ${locale}`).not.toBe(key);
       }
@@ -55,8 +55,8 @@ describe('the not-booked labels', () => {
 
   it('names the agency in every language rather than leaving a gap', () => {
     for (const locale of CODES) {
-      const line = translate(locale, 'next.ideaNote', { agency: 'Travelaire' });
-      expect(line, locale).toContain('Travelaire');
+      const line = translate(locale, 'next.ideaNote', { agency: 'Travelgenix' });
+      expect(line, locale).toContain('Travelgenix');
       // A locale that lost the token would render the brace literally.
       expect(line, locale).not.toContain('{agency}');
     }
@@ -68,7 +68,7 @@ describe('the not-booked labels', () => {
     for (const locale of CODES) {
       expect(translate(locale, 'next.ideaNoteShort').trim().length, locale).toBeGreaterThan(0);
     }
-    expect(translate('en', 'next.ideaNote', { agency: 'Travelaire' })).toMatch(
+    expect(translate('en', 'next.ideaNote', { agency: 'Travelgenix' })).toMatch(
       /nothing here is part of your booking/i,
     );
   });

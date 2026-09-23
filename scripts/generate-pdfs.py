@@ -1084,12 +1084,12 @@ def build_insurance(booking: dict) -> str:
 
     intro = block_greeting(
         f"{lead['title']} {lead['lastName']}",
-        f"this is a summary of your Travelaire Worldwide Plus policy for your trip "
+        f"this is a summary of your Travelgenix Worldwide Plus policy for your trip "
         f"to {booking['destinationLabel']}. The full policy wording is supplied separately by the insurer."
     )
 
     policy_rows = [
-        ("Policy number", f'<span class="num">TA-WW-{booking["reference"][-5:]}</span>'),
+        ("Policy number", f'<span class="num">TG-WW-{booking["reference"][-5:]}</span>'),
         ("Policy holder", f"{escape_html(lead['title'])} {escape_html(lead['firstName'])} {escape_html(lead['lastName'])}"),
         ("Travellers covered", escape_html(", ".join(f"{t['firstName']} {t['lastName']}" for t in booking["travellers"]))),
         ("Trip", f'{escape_html(booking["destinationLabel"])} &nbsp;·&nbsp; <span class="num">{escape_html(fmt_date_short(booking["tripStart"]))} → {escape_html(fmt_date_short(booking["tripEnd"]))}</span>'),
@@ -1118,7 +1118,7 @@ def build_insurance(booking: dict) -> str:
     body_html = f"""
 <div class="page">
 {block_header(DEMO_AGENCY['name'], 'Travel Insurance Summary')}
-{block_hero(country_code=cc, eyebrow='Travelaire Worldwide Plus', name='Travel insurance', stars=0)}
+{block_hero(country_code=cc, eyebrow='Travelgenix Worldwide Plus', name='Travel insurance', stars=0)}
 <div class="pdf-body">
 {intro}
 {block_ref_bar(booking['reference'])}
@@ -1152,7 +1152,10 @@ def render_pdfs():
     os.makedirs(out_root, exist_ok=True)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        # CHROMIUM_PATH lets a machine point at a browser it already has —
+        # the same convention scripts/smoke.mjs uses. Unset, Playwright picks
+        # its own, which is what a normal developer machine wants.
+        browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM_PATH") or None)
         context = browser.new_context()
         page = context.new_page()
 

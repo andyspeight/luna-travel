@@ -637,7 +637,7 @@ async function main() {
   const homeBody = (await hp.textContent('body')) || '';
   check(
     'help is reachable from the screen the app opens on',
-    /Help from Travelaire Holidays/.test(homeBody),
+    /Help from Travelgenix/.test(homeBody),
   );
 
   await hp.goto(`${BASE}/help`, { waitUntil: 'domcontentloaded' });

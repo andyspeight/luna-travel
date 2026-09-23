@@ -152,8 +152,18 @@ export interface PaymentBreakdown {
   currency: string;
   total: number;
   deposit?: number;
+  /** Received so far, gift-voucher credit included. */
+  paid?: number;
+  /**
+   * What is still owed. UNDEFINED MEANS NOT KNOWN, and must never be read as
+   * zero: that is how every real traveller came to be told they had nothing
+   * left to pay. See lib/order-money.
+   */
   balance?: number;
+  /** When the next payment is due, YYYY-MM-DD. On or before today: due now. */
   balanceDueDate?: string;
+  /** The next instalment, when the balance is being paid in parts. */
+  nextPayment?: number;
 }
 
 export interface Agency {

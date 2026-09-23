@@ -117,6 +117,14 @@ const S: Record<string, Dict> = {
   // The review's own example. An enquiry to a person, not a claim about a
   // place: no price, no availability, no dates — the agent supplies those.
   'post.askAbout': { en: 'Ask {agency} about {place}', ro: 'Întreabă {agency} despre {place}', fr: 'Demander à {agency} pour {place}', de: '{agency} nach {place} fragen', es: 'Preguntar a {agency} por {place}', it: 'Chiedi a {agency} di {place}' },
+
+  // Money still owed (components/balance-card). Only drawn when there is some.
+  'pay.leftToPay': { en: '{amount} left to pay', ro: '{amount} rămas de plată', fr: 'Reste à payer : {amount}', de: 'Noch zu zahlen: {amount}', es: 'Pendiente de pago: {amount}', it: 'Da pagare: {amount}' },
+  'pay.dueNow': { en: 'Due now', ro: 'Scadent acum', fr: 'À régler maintenant', de: 'Jetzt fällig', es: 'Vence ahora', it: 'Da saldare ora' },
+  'pay.nextDue': { en: 'Next payment {amount} due {date}', ro: 'Următoarea plată, {amount}, scadentă pe {date}', fr: 'Prochain paiement de {amount} le {date}', de: 'Nächste Zahlung von {amount} fällig am {date}', es: 'Próximo pago de {amount} el {date}', it: 'Prossimo pagamento di {amount} entro il {date}' },
+  'pay.dueBy': { en: 'Due by {date}', ro: 'Scadent până pe {date}', fr: 'À régler avant le {date}', de: 'Fällig bis {date}', es: 'Vence el {date}', it: 'Da saldare entro il {date}' },
+  'pay.ask': { en: 'Ask {agency} how to pay', ro: 'Întreabă {agency} cum poți plăti', fr: 'Demandez à {agency} comment payer', de: 'Fragen Sie {agency}, wie Sie zahlen können', es: 'Pregunta a {agency} cómo pagar', it: 'Chiedi a {agency} come pagare' },
+
   'next.welcomeHome': { en: 'Welcome home', ro: 'Bun venit acasă', fr: 'Bon retour', de: 'Willkommen zurück', es: 'Bienvenido a casa', it: 'Bentornato' },
   // Used when the booking has no destination to name — "Loved ?" is worse than
   // dropping the place entirely.

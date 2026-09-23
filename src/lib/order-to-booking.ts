@@ -32,6 +32,7 @@ import type {
   TripStartEvent,
 } from '@/types/booking';
 import { matchLocationSlug } from '@/lib/location-match';
+import { paymentFromOrder, type RawMoney } from '@/lib/order-money';
 import { HERO_DESTINATIONS } from '@/data/hero-destinations';
 
 // ───────── Loosely-typed view of the trimmed Control/Travelify order ─────────
@@ -138,6 +139,8 @@ export interface TrimmedOrder {
   items?: RawItem[];
   summary?: RawSummary;
   documents?: RawDocument[];
+  /** What the booking still owes, as Control calculated it. */
+  money?: RawMoney | null;
 }
 export interface ControlAgency {
   name?: string;
@@ -695,11 +698,9 @@ export function orderToBooking(
   const locationSlug = matchLocationSlug(primaryCountryCode, [...hotelCities, destinationLabel]);
 
   // ----- Payment -----
-  let payment: PaymentBreakdown | undefined;
+  // Control's own calculation, copied rather than redone. See lib/order-money.
   const currency = order.currency || items.find((i) => i.currency)?.currency || '';
-  if (typeof summary.totalPrice === 'number' && summary.totalPrice > 0 && currency) {
-    payment = { currency, total: summary.totalPrice };
-  }
+  const payment: PaymentBreakdown | undefined = paymentFromOrder(order.money, summary.totalPrice, currency);
 
   // ----- Agency branding (white-label) -----
   const ag: Agency = {

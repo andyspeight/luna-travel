@@ -48,6 +48,7 @@ import { useOnline } from '@/lib/use-online';
 import { tripPhase, flightOfTheDay } from '@/lib/trip-phase';
 import { SupportCard } from '@/components/support-card';
 import { FeedbackCard, NextIdeaCard } from '@/components/post-trip';
+import { BalanceCard } from '@/components/balance-card';
 import { TravelDayCard } from '@/components/travel-day';
 import { warmCache, summarise, cacheSupported, cacheableDocUrl } from '@/lib/offline-docs';
 
@@ -436,6 +437,10 @@ export default function HomePage() {
         </article>
       </Link>
       )}
+
+      {/* Money still owed. Draws nothing for a booking that is paid, or whose
+          balance the app cannot see — see components/balance-card. */}
+      {!tripOver && <BalanceCard booking={booking} />}
 
       {/* Quick tiles */}
       <div className="grid grid-cols-5 gap-2 mt-4">

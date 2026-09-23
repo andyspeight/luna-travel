@@ -806,6 +806,31 @@ async function main() {
   await pt.close();
   await postCtx.close();
 
+  // ── Money still owed ──
+  //
+  // Every real booking used to arrive with no balance, and Ask Luna read that
+  // as "nothing left to pay". DEMO74002 carries a balance due on 8 June, so the
+  // clock is set before it and then after it. The main demo is paid, and must
+  // show nothing — most travellers are, and a card for them is clutter.
+  const balCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const bal = await balCtx.newPage();
+  bal.on('pageerror', (e) => jsErrors.push(`balance: ${e.message}`));
+  const balanceCard = async (demo, iso) => {
+    await balCtx.clock.setFixedTime(new Date(iso));
+    await bal.goto(`${BASE}/?demo=${demo}`, { waitUntil: 'domcontentloaded' });
+    await bal.waitForTimeout(2500);
+    const card = bal.getByTestId('balance-card');
+    return (await card.count()) ? ((await card.textContent()) || '').trim() : null;
+  };
+  const before = await balanceCard('DEMO74002', '2026-06-01T10:00:00Z');
+  check('a balance still owed is shown', !!before && /£3,344\.00 left to pay/.test(before), before || 'no card');
+  check('with the date it is due', !!before && /Due by 8 Jun 2026/.test(before), before || 'no card');
+  const after = await balanceCard('DEMO74002', '2026-06-10T10:00:00Z');
+  check('and says due now once the date has passed', !!after && /Due now/.test(after), after || 'no card');
+  const paidUp = await balanceCard('DEMO81297', '2026-09-23T10:00:00Z');
+  check('a booking that is paid shows no balance card', paidUp === null, paidUp || 'none');
+  await balCtx.close();
+
   // ── Allergies ──
   //
   // The Maldives demo has no phrase set (Dhivehi is not one of the twelve), so

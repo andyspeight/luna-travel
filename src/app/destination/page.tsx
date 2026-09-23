@@ -45,6 +45,7 @@ import type {
   PlaceView,
 } from '@/types/destination-content';
 import type { ExperienceKind } from '@/types/booking';
+import { HeroPhoto } from '@/components/hero-photo';
 
 // ───────── Live conditions shapes (mirror weather.ts / holidays.ts) ─────────
 
@@ -326,27 +327,8 @@ export default function DestinationGuidePage() {
           className="relative h-72 text-white"
           style={{ background: hero.gradient }}
         >
-          {hero.image && (
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{ background: `center/cover no-repeat url("${hero.image}")` }}
-            />
-          )}
-          {hero.imageLocation && (
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
-            />
-          )}
-          {hero.imagePlace && (
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{ background: `center/cover no-repeat url("${hero.imagePlace}")` }}
-            />
-          )}
+          {/* The most specific photo that exists, and never a wrong one first. */}
+          <HeroPhoto candidates={[hero.imagePlace, hero.imageLocation, hero.image]} />
           {/* The place's own photograph is the most specific image we have, so
               it sits above the bucket layers — which stay as the fallback when
               it fails to load. */}

@@ -49,6 +49,7 @@ import { tripPhase, flightOfTheDay } from '@/lib/trip-phase';
 import { SupportCard } from '@/components/support-card';
 import { FeedbackCard, NextIdeaCard } from '@/components/post-trip';
 import { BalanceCard } from '@/components/balance-card';
+import { HeroPhoto } from '@/components/hero-photo';
 import { TravelDayCard } from '@/components/travel-day';
 import { warmCache, summarise, cacheSupported, cacheableDocUrl } from '@/lib/offline-docs';
 
@@ -349,27 +350,8 @@ export default function HomePage() {
             className="relative h-56 p-4 text-white"
             style={{ background: hero.gradient }}
           >
-            {hero.image && (
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{ background: `center/cover no-repeat url("${hero.image}")` }}
-              />
-            )}
-            {hero.imageLocation && (
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
-              />
-            )}
-            {hero.imagePlace && (
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{ background: `center/cover no-repeat url("${hero.imagePlace}")` }}
-              />
-            )}
+            {/* The most specific photo that exists, and never a wrong one first. */}
+            <HeroPhoto candidates={[hero.imagePlace, hero.imageLocation, hero.image]} />
             <div
               aria-hidden
               className="absolute inset-0"
@@ -501,27 +483,8 @@ export default function HomePage() {
               className="w-24 flex-shrink-0 relative"
               style={{ background: hero.gradient }}
             >
-              {hero.image && (
-                <div
-                  aria-hidden
-                  className="absolute inset-0"
-                  style={{ background: `center/cover no-repeat url("${hero.image}")` }}
-                />
-              )}
-              {hero.imageLocation && (
-                <div
-                  aria-hidden
-                  className="absolute inset-0"
-                  style={{ background: `center/cover no-repeat url("${hero.imageLocation}")` }}
-                />
-              )}
-              {hero.imagePlace && (
-                <div
-                  aria-hidden
-                  className="absolute inset-0"
-                  style={{ background: `center/cover no-repeat url("${hero.imagePlace}")` }}
-                />
-              )}
+              {/* The most specific photo that exists, and never a wrong one first. */}
+              <HeroPhoto candidates={[hero.imagePlace, hero.imageLocation, hero.image]} />
               <div
                 aria-hidden
                 className="absolute inset-0"

@@ -143,6 +143,13 @@ export const IconCoin = (p: IconProps) => (
     <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
   </Icon>
 );
+/** A payment card. For money owed — a currency sign would be wrong for somebody's. */
+export const IconCard = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <path d="M2 10h20M6 15h4" />
+  </Icon>
+);
 export const IconStar = (p: IconProps) => (
   <Icon {...p}>
     <polygon

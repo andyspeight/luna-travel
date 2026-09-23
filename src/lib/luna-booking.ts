@@ -31,6 +31,7 @@ import {
   formatTime,
   formatDuration,
 } from '@/lib/format';
+import { paymentState } from '@/lib/order-money';
 
 export interface BookingReply {
   text: string;
@@ -285,21 +286,35 @@ export function bookingAnswer(question: string, booking: Booking): BookingReply 
   }
 
   // ── Money ──
+  // Read through paymentState, so this and the home screen cannot disagree.
+  // A balance the booking does not carry is UNKNOWN: this used to say "nothing
+  // left to pay" to every real traveller, because no real booking carried one.
   if (/\b(balance|owe|owing|pay|paid|payment|deposit|cost|price|how much did)\b/.test(q)) {
     const p = booking.payment;
     if (!p) return null;
-    const bits = [`Your trip total is ${formatMoney(p.total, p.currency)}`];
-    if (p.deposit) bits.push(`deposit ${formatMoney(p.deposit, p.currency)} paid`);
-    if (p.balance && p.balance > 0) {
-      bits.push(
-        p.balanceDueDate
-          ? `balance of ${formatMoney(p.balance, p.currency)} due by ${formatDate(p.balanceDueDate)}`
-          : `balance of ${formatMoney(p.balance, p.currency)} outstanding`,
-      );
-    } else {
-      bits.push('nothing left to pay');
+    const total = `Your trip total is ${formatMoney(p.total, p.currency)}`;
+    const state = paymentState(p);
+    const agency = booking.agency.name || 'your travel agent';
+    if (state.kind === 'unknown') {
+      return {
+        text: `${total}. I can't see what has been paid so far — ${agency} can tell you.`,
+        pills: agentPills(booking),
+      };
     }
-    return { text: `${bits.join(', ')}.`, pills: agentPills(booking) };
+    if (state.kind === 'settled') {
+      return { text: `${total}, and it is paid in full — nothing left to pay.`, pills: agentPills(booking) };
+    }
+    const owed = formatMoney(state.balance, state.currency);
+    const next = state.nextPayment ? formatMoney(state.nextPayment, state.currency) : null;
+    let when = '';
+    if (state.dueNow) when = next ? `, with ${next} due now` : ', due now';
+    else if (state.dueDate) {
+      when = next ? `, with the next payment of ${next} due by ${formatDate(state.dueDate)}` : `, due by ${formatDate(state.dueDate)}`;
+    }
+    return {
+      text: `${total}. There is ${owed} left to pay${when}. ${agency} can take a payment or answer any questions.`,
+      pills: agentPills(booking),
+    };
   }
 
   // ── Reaching the agency ──

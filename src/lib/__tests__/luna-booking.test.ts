@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { bookingAnswer, signpostAnswer } from '@/lib/luna-booking';
 import type { Booking } from '@/types/booking';
 
@@ -192,10 +192,44 @@ describe('extras', () => {
 });
 
 describe('money', () => {
+  // Whether a date is "due now" depends on today, so today is fixed.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-20T12:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('gives the balance and when it is due', () => {
     const r = ask('how much do I still owe?');
     expect(r?.text).toMatch(/5,600/);
     expect(r?.text).toMatch(/27 Sep/);
+  });
+
+  it('says it is due now once the date has come', () => {
+    vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
+    const r = ask('how much do I still owe?');
+    expect(r?.text).toMatch(/5,600.*due now/);
+    expect(r?.text).not.toMatch(/27 Sep/);
+  });
+
+  it('names the next instalment when the balance is paid in parts', () => {
+    const parts: Booking = { ...BASE, payment: { ...BASE.payment!, nextPayment: 2800 } };
+    expect(ask('what do I owe?', parts)?.text).toMatch(/£5,600\.00 left to pay, with the next payment of £2,800\.00 due by/);
+  });
+
+  it('says paid in full only when the booking says so', () => {
+    const paid: Booking = { ...BASE, payment: { currency: 'GBP', total: 6400, balance: 0 } };
+    expect(ask('is there anything left to pay?', paid)?.text).toMatch(/paid in full/);
+  });
+
+  // Every real booking used to arrive with no balance at all, and this
+  // answered "nothing left to pay" to every one of them.
+  it('does not claim paid in full when it cannot see the balance', () => {
+    const unknown: Booking = { ...BASE, payment: { currency: 'GBP', total: 6400 } };
+    const r = ask('is there anything left to pay?', unknown);
+    expect(r?.text).not.toMatch(/nothing left|paid in full/i);
+    expect(r?.text).toMatch(/can't see what has been paid/);
+    expect(r?.pills?.length).toBeGreaterThan(0);
   });
 });
 

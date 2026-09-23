@@ -85,7 +85,7 @@ export interface Hotel {
   boardBasis?: BoardBasis;
   hotelReference?: string;
   specialRequests?: string;
-  photos?: string[]; // public image URLs (off-platform bookings)
+  photos?: string[]; // public image URLs: Travelify's own for the hotel, or an off-platform booking's
 }
 
 export interface AirportExtra {

@@ -67,7 +67,7 @@ interface RawPoint {
   latitude?: number | null;
   longitude?: number | null;
 }
-interface RawMedia { url?: string | null }
+interface RawMedia { url?: string | null; type?: string | null }
 interface RawTickets {
   name?: string | null;
   ticketType?: string | null;
@@ -116,7 +116,7 @@ interface RawItem {
   currency?: string | null;
   startDate?: string | null;
   duration?: number | null;
-  accommodation?: { name?: string | null; rating?: number | null; location?: RawLocation | null; units?: RawUnit[] } | null;
+  accommodation?: { name?: string | null; rating?: number | null; location?: RawLocation | null; units?: RawUnit[]; media?: RawMedia[] } | null;
   flights?: { routes?: RawRoute[] } | null;
   airportExtras?: { type?: string | null; name?: string | null; subTitle?: string | null; startDateTime?: string | null; endDateTime?: string | null; location?: { iataCode?: string | null } | null; travellers?: RawPerson[] } | null;
   // Control has always trimmed these four; Luna simply never read them, so
@@ -287,6 +287,9 @@ function pointCountry(...points: Array<RawPoint | null | undefined>): string {
 
 function photoUrls(media?: RawMedia[] | null): string[] | undefined {
   const urls = (Array.isArray(media) ? media : [])
+    // A supplier's media list can carry a video or a floor plan; a hero or a
+    // gallery wants a picture.
+    .filter((m) => !/video|plan|map/i.test(m?.type || ''))
     .map((m) => (m?.url || '').trim())
     .filter(Boolean)
     .slice(0, 6);
@@ -448,6 +451,9 @@ export function orderToBooking(
       roomType: roomTypeRaw && !/unknown/i.test(roomTypeRaw) ? roomTypeRaw : undefined,
       boardBasis: normaliseBoard(unit?.rates?.[0]?.board),
       hotelReference: item.bookingReference || undefined,
+      // The hotel's own photographs. Control has always sent them; they were
+      // dropped here, so a Rome hotel's page opened on the Amalfi coast.
+      photos: photoUrls(a.media),
     });
   });
 

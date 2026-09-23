@@ -37,6 +37,25 @@ export const LIGHTEST_SURFACE = '#ffffff';
 /** The green wash behind a success badge — the darkest light surface in use. */
 export const DARKEST_LIGHT_SURFACE = '#e0f3ef';
 
+/**
+ * The darkening laid over a destination photograph that carries text directly
+ * (the trip reveal after an invite is redeemed). Never lighter than this
+ * anywhere text can sit, so the worst photo there is still leaves a readable
+ * backdrop.
+ */
+export const PHOTO_SCRIM = { r: 2, g: 6, b: 23, alpha: 0.62 } as const;
+
+/**
+ * What that scrim leaves behind over a PURE WHITE photo — the worst case, and
+ * the one white-on-photo text is held to. Text on a scrimmed photo is checked
+ * against this, not against the average photo.
+ */
+export const PHOTO_SCRIM_FLOOR = (() => {
+  const over = (c: number) => Math.round(255 * (1 - PHOTO_SCRIM.alpha) + c * PHOTO_SCRIM.alpha);
+  const hex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${hex(over(PHOTO_SCRIM.r))}${hex(over(PHOTO_SCRIM.g))}${hex(over(PHOTO_SCRIM.b))}`;
+})();
+
 export function parseHex(hex?: string | null): RGB | null {
   if (typeof hex !== 'string') return null;
   const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(hex.trim());

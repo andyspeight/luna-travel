@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
-import { parseHex, contrast, AA_NORMAL, AA_LARGE, DARKEST_LIGHT_SURFACE } from '@/lib/contrast';
+import { parseHex, contrast, AA_NORMAL, AA_LARGE, DARKEST_LIGHT_SURFACE, PHOTO_SCRIM_FLOOR } from '@/lib/contrast';
 
 /**
  * An agency picks its own colours and nobody checks them. So the check is
@@ -36,6 +36,49 @@ describe('the readable shade of an agency accent', () => {
     const navy = '#1b2b5b';
     const v = brandVars(undefined, navy);
     expect(v['--brand-accent-dark-rgb']).toBe('27 43 91');
+  });
+});
+
+describe('the light shade of an agency accent', () => {
+  // Where it lives: the destination photo on the trip reveal ("Rome", the
+  // countdown), and every dark-mode surface. It was a fixed 42% toward white,
+  // so a deep brand colour came out a mid grey-blue that vanished on both.
+  const FLOOR = parseHex(PHOTO_SCRIM_FLOOR)!;
+  const DARK_SURFACES = ['#0f172a', '#1e293b', '#334155'].map((h) => parseHex(h)!);
+
+  it('reads on the worst photo the reveal can show, for any colour an agency could type', () => {
+    for (let h = 0; h < 360; h += 10) {
+      for (const l of [15, 40, 65, 88, 97]) {
+        const hex = hsl(h, 90, l);
+        const got = contrast(rgb(brandVars(undefined, hex)['--brand-accent-light-rgb']), FLOOR);
+        expect(got, `${hex} came out at ${got.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_LARGE);
+      }
+    }
+  });
+
+  it('and is past 4.5:1 as small text on every dark surface', () => {
+    for (let h = 0; h < 360; h += 10) {
+      for (const l of [15, 40, 65, 88, 97]) {
+        const hex = hsl(h, 90, l);
+        const light = rgb(brandVars(undefined, hex)['--brand-accent-light-rgb']);
+        for (const surface of DARK_SURFACES) {
+          expect(contrast(light, surface), hex).toBeGreaterThanOrEqual(AA_NORMAL);
+        }
+      }
+    }
+  });
+
+  // The one the old mix got most wrong.
+  it('rescues a deep navy accent', () => {
+    const light = rgb(brandVars(undefined, '#1b2b5b')['--brand-accent-light-rgb']);
+    expect(contrast(light, FLOOR)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+
+  it('leaves a light accent that already reads exactly where it was', () => {
+    // #2ec4b6 mixed 42% toward white (134 221 213) already clears 3:1 on the
+    // floor, so the solver must hand it back untouched.
+    const v = brandVars(undefined, '#2ec4b6');
+    expect(v['--brand-accent-light-rgb']).toBe('134 221 213');
   });
 });
 

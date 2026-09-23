@@ -40,7 +40,80 @@ export interface TimelineEvent {
 }
 
 const now = () => Date.now();
-const isPast = (iso: string) => new Date(iso).getTime() < now();
+const DAY_MS = 86_400_000;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const isDateOnly = (iso: string) => DATE_ONLY.test(iso);
+
+/**
+ * Over yet? A bare date is a day, so it is not over until the day is: a check-in
+ * dated today is still ahead of somebody who has not landed.
+ */
+const isPast = (iso: string) => {
+  const t = new Date(iso).getTime();
+  return (isDateOnly(iso) ? t + DAY_MS : t) < now();
+};
+
+/**
+ * Where an event with no time of day goes within its day.
+ *
+ * Travelify dates a hotel check-in and check-out with no time, and read as an
+ * instant that is midnight, so a check-in came out BEFORE the flight that takes
+ * you there (WCS96420, Rome, 23 Sep 2026). A bare date is placed by what it is
+ * instead:
+ *
+ *   'before'  the departure end of the day — checking out, parking, the lounge,
+ *             fast track — goes first, before that day's travel.
+ *   number    everything else happens once you have arrived: after the last
+ *             flight or transfer to land that day, the transfer first, then
+ *             the hotel, then anything else booked for the day.
+ */
+const UNTIMED_PLACE: Record<EventKind, 'before' | number> = {
+  'hotel-checkout': 'before',
+  parking: 'before',
+  lounge: 'before',
+  'fast-track': 'before',
+  transfer: 1,
+  'car-hire': 1,
+  'hotel-checkin': 2,
+  excursion: 3,
+  activity: 3,
+  other: 3,
+  flight: 3, // a flight always carries a time; listed for completeness
+};
+
+/** The kinds that bring somebody to where they are staying. */
+const ARRIVES: EventKind[] = ['flight', 'transfer', 'car-hire'];
+
+function orderedByTime(events: TimelineEvent[]): TimelineEvent[] {
+  // The latest timed arrival on each calendar day. Flights land at endDate;
+  // a transfer or car hire is over at its end, or at its start if that is all
+  // it has. Airport-local times arrive dressed as UTC, so the UTC date is the
+  // local day.
+  const arrivals = new Map<string, number>();
+  for (const e of events) {
+    if (!ARRIVES.includes(e.kind)) continue;
+    const at = e.endDate || e.date;
+    if (!at || isDateOnly(at)) continue;
+    const t = new Date(at).getTime();
+    if (!Number.isFinite(t)) continue;
+    const day = new Date(t).toISOString().slice(0, 10);
+    arrivals.set(day, Math.max(arrivals.get(day) ?? -Infinity, t));
+  }
+
+  const key = (e: TimelineEvent): number => {
+    const t = new Date(e.date).getTime();
+    if (!isDateOnly(e.date)) return t;
+    const place = UNTIMED_PLACE[e.kind];
+    if (place === 'before') return t;
+    const landed = arrivals.get(e.date);
+    return (landed ?? t) + place;
+  };
+
+  return events
+    .map((e, i) => ({ e, i, k: key(e) }))
+    .sort((a, b) => a.k - b.k || a.i - b.i)
+    .map((x) => x.e);
+}
 
 /**
  * Build the canonical ordered event list for a booking.
@@ -113,8 +186,7 @@ export function buildTimeline(booking: Booking): TimelineEvent[] {
     });
   }
 
-  events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  return events;
+  return orderedByTime(events);
 }
 
 function experienceEventKind(k: Experience['kind']): EventKind {

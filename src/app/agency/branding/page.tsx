@@ -8,6 +8,8 @@
 
 import { useState } from 'react';
 import { Check } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
+import { brandPath, BRAND_IMAGE_TYPES, BRAND_IMAGE_MAX_BYTES, type BrandImageKind } from '@/lib/brand-upload';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, primaryBtn } from '../portal-chrome';
 import { PhonePreview } from '../phone-preview';
 
@@ -67,7 +69,7 @@ function BrandingForm() {
 
       <div style={{ marginTop: 16 }}>
         <Callout title="Make it unmistakably yours">
-          Set your app name, pick two brand colours, add a warm welcome message and your logo. Watch
+          Set your app name, pick two brand colours, add a warm welcome message and upload your logo. Watch
           the phone re-skin as you type — then hit <strong>Save branding</strong>. It goes live for
           every traveller instantly.
         </Callout>
@@ -94,9 +96,14 @@ function BrandingForm() {
             <textarea value={welcome} onChange={(e) => setWelcome(e.target.value)} maxLength={240} rows={3} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }} placeholder="e.g. Welcome aboard — we can't wait for you to travel with us." />
           </Field>
 
-          <Field label="Logo URL" hint="Paste a hosted logo image URL (https). File upload is coming soon.">
-            <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://…" style={inputStyle} />
-          </Field>
+          <ImageUpload
+            kind="logo"
+            agencyId={me.agency.id}
+            label="Logo"
+            hint="PNG, JPG or WebP, up to 2 MB. A wide logo on a transparent background looks best."
+            value={logoUrl}
+            onChange={setLogoUrl}
+          />
 
           {status === 'error' && <p style={{ color: '#dc2626', fontSize: 13, margin: 0 }}>{errorMsg}</p>}
 
@@ -116,11 +123,117 @@ function BrandingForm() {
   );
 }
 
+/**
+ * Pick a file, and it goes straight to storage; the URL it lands at is what
+ * Save branding keeps. There used to be a box for pasting a hosted logo URL,
+ * which no agent has to hand.
+ */
+function ImageUpload({
+  kind,
+  agencyId,
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  kind: BrandImageKind;
+  agencyId: string;
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const inputId = `upload-${kind}`;
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    if (!BRAND_IMAGE_TYPES.includes(file.type)) {
+      setNote({ ok: false, text: 'That file type will not work. Use a PNG, JPG or WebP image.' });
+      return;
+    }
+    if (file.size > BRAND_IMAGE_MAX_BYTES) {
+      setNote({ ok: false, text: 'That file is over 2 MB. A smaller version will look just as sharp.' });
+      return;
+    }
+    setBusy(true);
+    setNote(null);
+    try {
+      const blob = await upload(brandPath(kind, agencyId, file.name), file, {
+        access: 'public',
+        contentType: file.type,
+        handleUploadUrl: '/api/agency/upload-image',
+      });
+      onChange(blob.url);
+      setNote({ ok: true, text: 'Uploaded. Press Save branding to put it live.' });
+    } catch {
+      setNote({ ok: false, text: 'The upload did not go through. Please try again.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: P.ink, marginBottom: 6 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={value}
+            alt={`Current ${label.toLowerCase()}`}
+            style={{ height: 48, maxWidth: 160, objectFit: 'contain', border: `1px solid ${P.line}`, borderRadius: 10, background: '#fff', padding: 4 }}
+          />
+        ) : (
+          <span style={{ fontSize: 13, color: P.ink3 }}>None yet</span>
+        )}
+        <label
+          htmlFor={inputId}
+          style={{
+            display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 16px', borderRadius: 11,
+            border: `1px solid ${P.line}`, background: '#fff', color: P.ink, fontSize: 14, fontWeight: 600,
+            cursor: busy ? 'progress' : 'pointer', opacity: busy ? 0.7 : 1,
+          }}
+        >
+          {busy ? 'Uploading…' : value ? `Replace ${label.toLowerCase()}` : `Upload ${label.toLowerCase()}`}
+        </label>
+        <input
+          id={inputId}
+          type="file"
+          accept={BRAND_IMAGE_TYPES.join(',')}
+          disabled={busy}
+          onChange={(e) => {
+            void pick(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+        />
+        {value && !busy && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange('');
+              setNote({ ok: true, text: 'Removed. Press Save branding to put it live.' });
+            }}
+            style={{ minHeight: 44, padding: '0 12px', border: 'none', background: 'none', color: P.ink2, fontSize: 13, cursor: 'pointer' }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: note ? (note.ok ? '#047857' : '#b91c1c') : P.ink3, marginTop: 6 }} role={note ? 'status' : undefined}>
+        {note ? note.text : hint}
+      </div>
+    </div>
+  );
+}
+
 function prettyError(code?: string): string {
   switch (code) {
     case 'appName_too_long': return 'App name is too long (max 60 characters).';
     case 'welcomeMessage_too_long': return 'Welcome message is too long (max 240 characters).';
-    case 'invalid_logo_url': return 'Logo URL must be an https link.';
+    case 'invalid_logo_url': return 'That logo could not be used. Please upload it again.';
     case 'agency_inactive': return 'This agency is no longer active — contact Luna Travel.';
     case 'unauthorised': return 'Your session has ended — ask for a fresh access link.';
     default: return 'Could not save. Please try again.';

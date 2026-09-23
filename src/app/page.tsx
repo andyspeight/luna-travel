@@ -718,7 +718,7 @@ function UpNextCard({ event }: { event: TimelineEvent }) {
           </div>
           <div className="text-xs text-ink-3 mt-1 inline-flex items-center gap-1.5">
             <IconClock size={12} />
-            <span>{formatDayMonth(event.date)} · {formatTime(event.date)}</span>
+            <span>{[formatDayMonth(event.date), formatTime(event.date)].filter(Boolean).join(' · ')}</span>
           </div>
         </div>
         <IconChevR size={18} className="text-ink-3 flex-shrink-0 mt-1" />
@@ -742,7 +742,7 @@ function CompactEventRow({ event }: { event: TimelineEvent }) {
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-ink truncate">{event.title}</div>
         <div className="text-xs text-ink-2 truncate">
-          {formatDayMonth(event.date)} · {formatTime(event.date)} · {event.subtitle}
+          {[formatDayMonth(event.date), formatTime(event.date), event.subtitle].filter(Boolean).join(' · ')}
         </div>
       </div>
       <IconChevR size={18} className="text-ink-3" />

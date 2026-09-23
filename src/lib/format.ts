@@ -93,8 +93,15 @@ export function formatWeekday(iso: string): string {
   return formatDate(iso, { weekday: 'short' });
 }
 
+/**
+ * A clock time, or nothing when there is no time to tell.
+ *
+ * A bare date ("2027-02-12") is a day, not midnight. Travelify sends hotel
+ * check-in and check-out that way, and printing it as "00:00" told a traveller
+ * they could check in at midnight — a time nobody ever gave us.
+ */
 export function formatTime(iso: string): string {
-  if (!iso) return '';
+  if (!iso || isDateOnly(iso)) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const hh = String(d.getUTCHours()).padStart(2, '0');
@@ -178,4 +185,9 @@ export function countdownTo(iso: string, now: number = Date.now()): CountdownPar
     minutes: Math.floor((totalSec % 3600) / 60),
     seconds: totalSec % 60,
   };
+}
+
+/** A calendar date with no time of day, e.g. "2027-02-12". */
+export function isDateOnly(s: string | null | undefined): boolean {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
 }

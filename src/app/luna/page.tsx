@@ -11,6 +11,7 @@ import { essentialsAnswer, type EssentialsContext } from '@/lib/luna-essentials'
 import { bookingAnswer, signpostAnswer } from '@/lib/luna-booking';
 import { findKnowledge, knowledgeReply, type KnowledgeItem } from '@/lib/luna-knowledge';
 import { buildLunaContext } from '@/lib/luna-context';
+import { assistantOf, initialOf } from '@/lib/app-name';
 import { PageEnter } from '@/components/page-enter';
 import {
   IconInfo,
@@ -40,6 +41,7 @@ interface ChatMessage {
  */
 export default function LunaPage() {
   const { booking } = useBooking();
+  const assistant = assistantOf(booking.agency);
   const { place } = usePlace(booking);
   const { brain } = useBrainGuide(booking);
   const lead = leadTraveller(booking);
@@ -190,11 +192,11 @@ export default function LunaPage() {
         {/* Header */}
         <header className="px-5 pt-3 pb-3 border-b border-line-light">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-navy to-teal text-white font-bold text-sm flex items-center justify-center">
-              L
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-navy to-teal-dark text-white font-bold text-sm flex items-center justify-center">
+              {initialOf(assistant)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-base font-semibold text-ink leading-tight">Luna</div>
+              <div className="text-base font-semibold text-ink leading-tight">{assistant}</div>
               <div className="text-[11px] text-success-ink inline-flex items-center gap-1 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-success" />
                 {booking.agency.name} concierge
@@ -207,7 +209,7 @@ export default function LunaPage() {
         <div className="px-5 py-2.5 bg-teal/5 border-b border-teal/10 text-[11px] text-teal-dark dark:text-teal-light inline-flex items-start gap-1.5 leading-relaxed">
           <IconInfo size={12} className="flex-shrink-0 mt-0.5" />
           <span>
-            <span className="font-semibold">Luna knows:</span> {safeContext}
+            <span className="font-semibold">{assistant} knows:</span> {safeContext}
           </span>
         </div>
 
@@ -235,7 +237,7 @@ export default function LunaPage() {
               }
             }}
             placeholder="Ask about your trip…"
-            aria-label="Ask Luna"
+            aria-label={`Ask ${assistant}`}
             enterKeyHint="send"
             className="flex-1 h-11 px-4 rounded-full bg-surface-3 text-sm text-ink placeholder:text-ink-3 outline-none focus:ring-2 focus:ring-teal/40"
           />

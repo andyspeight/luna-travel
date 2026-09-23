@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
+import { assistantOf } from '@/lib/app-name';
 import { useCover } from '@/lib/cover-context';
 import { BookingPicker } from '@/components/booking-picker';
 import { AgencyLogo } from '@/components/agency-logo';
@@ -354,7 +355,7 @@ export function CoverSplash() {
         />
         <DockButton
           href="/luna"
-          label="Ask Luna"
+          label={`Ask ${assistantOf(booking.agency)}`}
           icon={<IconChat size={20} />}
           onTap={dismiss}
         />

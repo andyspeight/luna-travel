@@ -9,6 +9,7 @@
 
 import { Plane, Bell, BedDouble, FileText, Home, CalendarDays, MessageCircle, User, Wifi } from 'lucide-react';
 import { SERIF } from './portal-chrome';
+import { initialOf } from '@/lib/app-name';
 
 export function PhonePreview({
   name,
@@ -63,7 +64,7 @@ export function PhonePreview({
                 <img src={logoUrl} alt="" style={{ width: 30, height: 30, borderRadius: 9, objectFit: 'cover', background: '#fff', flexShrink: 0 }} />
               ) : (
                 <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(255,255,255,0.9)', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
-                  {name.charAt(0).toUpperCase()}
+                  {initialOf(name) || <Plane size={14} />}
                 </div>
               )}
               <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{name}</div>

@@ -180,6 +180,8 @@ export interface Agency {
   brandPrimaryColour?: string; // sanitised #RRGGBB
   brandAccentColour?: string; // sanitised #RRGGBB
   welcomeMessage?: string;
+  /** What the in-app assistant is called. Absent means "Luna". */
+  assistantName?: string;
   /**
    * When the agency is open, and what they promise. Set by the agency in the
    * portal, not held on the Control record.

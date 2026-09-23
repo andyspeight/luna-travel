@@ -22,6 +22,8 @@ export interface BrandingFields {
   brandPrimaryColour?: string;
   brandAccentColour?: string;
   welcomeMessage?: string;
+  /** What the in-app assistant is called. Absent means "Luna". */
+  assistantName?: string;
 }
 
 /** Accept only a plain hex colour (#RGB / #RRGGBB); normalise to #rrggbb. */
@@ -44,6 +46,7 @@ type BrandingRow = {
   brand_primary_colour: string | null;
   brand_accent_colour: string | null;
   welcome_message: string | null;
+  assistant_name?: string | null;
 };
 
 function rowToFields(row: Partial<BrandingRow> | null | undefined): BrandingFields {
@@ -54,6 +57,7 @@ function rowToFields(row: Partial<BrandingRow> | null | undefined): BrandingFiel
     brandPrimaryColour: sanitizeHex(row.brand_primary_colour),
     brandAccentColour: sanitizeHex(row.brand_accent_colour),
     welcomeMessage: clean(row.welcome_message),
+    assistantName: clean(row.assistant_name),
   };
 }
 
@@ -96,6 +100,7 @@ export function mergeBranding(base: BrandingFields, override: BrandingFields): B
     brandPrimaryColour: override.brandPrimaryColour ?? base.brandPrimaryColour,
     brandAccentColour: override.brandAccentColour ?? base.brandAccentColour,
     welcomeMessage: override.welcomeMessage ?? base.welcomeMessage,
+    assistantName: override.assistantName ?? base.assistantName,
   };
 }
 
@@ -110,26 +115,38 @@ export function applyBrandingOverride(agency: Agency, override: BrandingFields):
   if (override.brandPrimaryColour !== undefined) agency.brandPrimaryColour = override.brandPrimaryColour;
   if (override.brandAccentColour !== undefined) agency.brandAccentColour = override.brandAccentColour;
   if (override.welcomeMessage !== undefined) agency.welcomeMessage = override.welcomeMessage;
+  if (override.assistantName !== undefined) agency.assistantName = override.assistantName;
 }
 
 /**
- * Upsert the Luna override for an agency. A field passed as undefined/empty is
- * stored as NULL — i.e. "inherit from Control" for that field.
+ * The row to upsert for an agency's override. A field passed as undefined or
+ * empty is stored as NULL — "inherit from Control" for that field.
+ *
+ * The assistant name is written only when the caller passes the key at all.
+ * The admin White-label tab saves the original five fields and knows nothing of
+ * it, and a save there must not quietly rename the agency's assistant back to
+ * Luna.
  */
+export function brandingRow(agencyId: string, fields: BrandingFields, now = new Date()): Record<string, string | null> {
+  const row: Record<string, string | null> = {
+    agency_id: agencyId,
+    app_name: clean(fields.appName) ?? null,
+    logo_url: clean(fields.logoUrl) ?? null,
+    brand_primary_colour: sanitizeHex(fields.brandPrimaryColour) ?? null,
+    brand_accent_colour: sanitizeHex(fields.brandAccentColour) ?? null,
+    welcome_message: clean(fields.welcomeMessage) ?? null,
+    updated_at: now.toISOString(),
+  };
+  if ('assistantName' in fields) row.assistant_name = clean(fields.assistantName) ?? null;
+  return row;
+}
+
+/** Upsert the Luna override for an agency (see brandingRow for what is written). */
 export async function setBrandingOverride(agencyId: string, fields: BrandingFields): Promise<void> {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from('agency_branding').upsert(
-    {
-      agency_id: agencyId,
-      app_name: clean(fields.appName) ?? null,
-      logo_url: clean(fields.logoUrl) ?? null,
-      brand_primary_colour: sanitizeHex(fields.brandPrimaryColour) ?? null,
-      brand_accent_colour: sanitizeHex(fields.brandAccentColour) ?? null,
-      welcome_message: clean(fields.welcomeMessage) ?? null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'agency_id' },
-  );
+  const { error } = await supabase
+    .from('agency_branding')
+    .upsert(brandingRow(agencyId, fields), { onConflict: 'agency_id' });
   if (error) throw new Error(error.message);
 }
 

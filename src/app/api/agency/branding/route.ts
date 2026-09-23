@@ -4,8 +4,8 @@
  * can only ever edit its OWN branding.
  *
  *   GET  — the agency's current branding override.
- *   POST — save it. Body: { appName?, brandPrimaryColour?, brandAccentColour?,
- *          welcomeMessage?, logoUrl? }.
+ *   POST — save it. Body: { appName?, assistantName?, brandPrimaryColour?,
+ *          brandAccentColour?, welcomeMessage?, logoUrl? }.
  *
  * Luna-native agencies have no Control record, so there is nothing to sync to
  * Control (unlike the admin branding route) — the Luna override IS the source.
@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
+import { isAssistantName } from '@/lib/app-name';
 import {
   getBrandingOverride,
   setBrandingOverride,
@@ -27,7 +28,7 @@ export const runtime = 'nodejs';
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() ? v.trim() : undefined;
 
-const MAX = { appName: 60, welcomeMessage: 240, logoUrl: 2048 };
+const MAX = { appName: 60, assistantName: 30, welcomeMessage: 240, logoUrl: 2048 };
 
 export async function GET(req: NextRequest) {
   const claims = await requireAgency(req as unknown as Request);
@@ -55,11 +56,19 @@ export async function POST(req: NextRequest) {
   }
 
   const appName = str(body.appName);
+  const assistantName = str(body.assistantName);
   const welcomeMessage = str(body.welcomeMessage);
   const logoUrl = str(body.logoUrl);
 
   if (appName && appName.length > MAX.appName) {
     return NextResponse.json({ error: 'appName_too_long' }, { status: 400 });
+  }
+  // It sits in tab labels and buttons ("Ask Nova"), so a short name only.
+  if (assistantName && assistantName.length > MAX.assistantName) {
+    return NextResponse.json({ error: 'assistantName_too_long' }, { status: 400 });
+  }
+  if (assistantName && !isAssistantName(assistantName)) {
+    return NextResponse.json({ error: 'assistantName_invalid' }, { status: 400 });
   }
   if (welcomeMessage && welcomeMessage.length > MAX.welcomeMessage) {
     return NextResponse.json({ error: 'welcomeMessage_too_long' }, { status: 400 });
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest) {
 
   const fields: BrandingFields = {
     appName,
+    assistantName,
     welcomeMessage,
     logoUrl,
     brandPrimaryColour: sanitizeHex(body.brandPrimaryColour as string | undefined),

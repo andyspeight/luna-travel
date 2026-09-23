@@ -184,6 +184,11 @@ export async function POST(req: NextRequest) {
       departure_date: departureDate,
       expires_at: expiresAt,
       created_by: claims.email,
+      // So the install screen can name the agency before the trip is
+      // unlocked: a Control agency's name is otherwise only known from the
+      // booking, and the booking stays locked until the traveller proves it is
+      // theirs.
+      agency_name: agency.name || null,
     } as any)
     .select('id, expires_at')
     .single();

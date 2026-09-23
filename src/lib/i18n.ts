@@ -52,7 +52,8 @@ const S: Record<string, Dict> = {
   'tab.trip': { en: 'Trip', ro: 'Călătorie', fr: 'Voyage', de: 'Reise', es: 'Viaje', it: 'Viaggio' },
   'tab.itinerary': { en: 'Itinerary', ro: 'Itinerar', fr: 'Itinéraire', de: 'Reiseplan', es: 'Itinerario', it: 'Itinerario' },
   'tab.docs': { en: 'Docs', ro: 'Docs', fr: 'Docs', de: 'Docs', es: 'Docs', it: 'Docs' },
-  'tab.luna': { en: 'Luna', ro: 'Luna', fr: 'Luna', de: 'Luna', es: 'Luna', it: 'Luna' },
+  // {assistant} is the agency's name for the assistant, Luna when unset.
+  'tab.luna': { en: '{assistant}', ro: '{assistant}', fr: '{assistant}', de: '{assistant}', es: '{assistant}', it: '{assistant}' },
   'tab.me': { en: 'Me', ro: 'Eu', fr: 'Moi', de: 'Ich', es: 'Yo', it: 'Io' },
 
   // ── Home greetings ──
@@ -68,7 +69,7 @@ const S: Record<string, Dict> = {
   'tile.hotel': { en: 'Hotel', ro: 'Hotel', fr: 'Hôtel', de: 'Hotel', es: 'Hotel', it: 'Hotel' },
   'tile.map': { en: 'Map', ro: 'Hartă', fr: 'Carte', de: 'Karte', es: 'Mapa', it: 'Mappa' },
   'tile.docs': { en: 'Docs', ro: 'Docs', fr: 'Docs', de: 'Docs', es: 'Docs', it: 'Docs' },
-  'tile.luna': { en: 'Luna', ro: 'Luna', fr: 'Luna', de: 'Luna', es: 'Luna', it: 'Luna' },
+  'tile.luna': { en: '{assistant}', ro: '{assistant}', fr: '{assistant}', de: '{assistant}', es: '{assistant}', it: '{assistant}' },
 
   // ── Home sections ──
   'home.upNext': { en: 'Up next', ro: 'Urmează', fr: 'À suivre', de: 'Als Nächstes', es: 'A continuación', it: 'Prossimo' },
@@ -185,7 +186,7 @@ const S: Record<string, Dict> = {
   },
   'next.emailAgency': { en: 'Email {agency}', ro: 'Scrie la {agency}', fr: 'Écrire à {agency}', de: '{agency} mailen', es: 'Escribir a {agency}', it: 'Scrivi a {agency}' },
   'next.call': { en: 'Call {phone}', ro: 'Sună {phone}', fr: 'Appeler {phone}', de: '{phone} anrufen', es: 'Llamar {phone}', it: 'Chiama {phone}' },
-  'next.askLuna': { en: 'Ask Luna about it', ro: 'Întreabă Luna', fr: 'Demander à Luna', de: 'Luna fragen', es: 'Pregúntale a Luna', it: 'Chiedi a Luna' },
+  'next.askLuna': { en: 'Ask {assistant} about it', ro: 'Întreabă {assistant}', fr: 'Demander à {assistant}', de: '{assistant} fragen', es: 'Pregúntale a {assistant}', it: 'Chiedi a {assistant}' },
   'next.browseMore': { en: 'Browse more at {site}', ro: 'Vezi mai multe pe {site}', fr: 'Plus sur {site}', de: 'Mehr auf {site}', es: 'Más en {site}', it: 'Altro su {site}' },
   'next.footer': {
     en: 'Handpicked by {agency}. Tap any trip to enquire — no obligation, and your dedicated team will tailor it to you.',
@@ -260,7 +261,7 @@ const S: Record<string, Dict> = {
   'me.notifications': { en: 'Notifications', ro: 'Notificări', fr: 'Notifications', de: 'Benachrichtigungen', es: 'Notificaciones', it: 'Notifiche' },
   'me.notificationsSub': { en: 'Trip updates, check-in reminders, weather', ro: 'Noutăți călătorie, mementouri cazare, vreme', fr: 'Mises à jour, rappels d’enregistrement, météo', de: 'Reise-Updates, Check-in-Erinnerungen, Wetter', es: 'Novedades del viaje, recordatorios de check-in, tiempo', it: 'Aggiornamenti viaggio, promemoria check-in, meteo' },
   'me.help': { en: 'Help & FAQ', ro: 'Ajutor & întrebări', fr: 'Aide & FAQ', de: 'Hilfe & FAQ', es: 'Ayuda y FAQ', it: 'Aiuto e FAQ' },
-  'me.helpSub': { en: 'Ask Luna, or contact your agent', ro: 'Întreabă Luna sau contactează agentul', fr: 'Demandez à Luna ou contactez votre agence', de: 'Fragen Sie Luna oder Ihr Reisebüro', es: 'Pregunta a Luna o contacta tu agencia', it: 'Chiedi a Luna o contatta la tua agenzia' },
+  'me.helpSub': { en: 'Ask {assistant}, or contact your agent', ro: 'Întreabă {assistant} sau contactează agentul', fr: 'Demandez à {assistant} ou contactez votre agence', de: 'Fragen Sie {assistant} oder Ihr Reisebüro', es: 'Pregunta a {assistant} o contacta tu agencia', it: 'Chiedi a {assistant} o contatta la tua agenzia' },
   'me.signOut': { en: 'Sign out', ro: 'Deconectare', fr: 'Déconnexion', de: 'Abmelden', es: 'Cerrar sesión', it: 'Esci' },
   'me.chooseLanguage': { en: 'Choose language', ro: 'Alege limba', fr: 'Choisir la langue', de: 'Sprache wählen', es: 'Elegir idioma', it: 'Scegli la lingua' },
 

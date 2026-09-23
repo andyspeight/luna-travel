@@ -12,6 +12,8 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { toMinutes, type OpeningDay, type SupportHours } from '@/lib/support-hours';
+import type { Agency } from '@/types/booking';
+import { isEmail, isPhone } from '@/lib/contact-check';
 
 export interface AgencySettings {
   /** Where to email the agency when a traveller replies. */
@@ -26,6 +28,15 @@ export interface AgencySettings {
   supportHours?: SupportHours;
   /** What the agency promises, in its own words, e.g. "within one working day". */
   replyWithin?: string;
+  /**
+   * The contact details a traveller sees on Get help. Each one absent means
+   * the one on the agency's Travelgenix record, which is where they all came
+   * from before, and which is not always the address an agency wants its
+   * travellers writing to.
+   */
+  travellerEmail?: string;
+  travellerPhone?: string;
+  travellerEmergencyPhone?: string;
 }
 
 /** Long enough for a real promise, short enough not to be a paragraph. */
@@ -67,12 +78,7 @@ export function isTimezone(v: unknown): v is string {
   }
 }
 
-/** Deliberately loose — this is a sanity check, not an attempt to parse RFC 5322. */
-export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export function isEmail(v: unknown): v is string {
-  return typeof v === 'string' && EMAIL_RE.test(v.trim());
-}
+export { EMAIL_RE, isEmail, isPhone } from '@/lib/contact-check';
 
 type SettingsRow = {
   agency_id: string;
@@ -80,6 +86,9 @@ type SettingsRow = {
   support_hours: unknown;
   support_timezone: string | null;
   reply_within: string | null;
+  traveller_email?: string | null;
+  traveller_phone?: string | null;
+  traveller_emergency_phone?: string | null;
 };
 
 function rowToSettings(row: Partial<SettingsRow> | null | undefined): AgencySettings {
@@ -95,10 +104,17 @@ function rowToSettings(row: Partial<SettingsRow> | null | undefined): AgencySett
 
   const replyWithin = (row?.reply_within || '').trim().slice(0, MAX_REPLY_WITHIN);
 
+  const tEmail = (row?.traveller_email || '').trim();
+  const tPhone = (row?.traveller_phone || '').trim();
+  const tEmergency = (row?.traveller_emergency_phone || '').trim();
+
   return {
     replyNotifyEmail: isEmail(email) ? email : undefined,
     supportHours,
     replyWithin: replyWithin || undefined,
+    travellerEmail: isEmail(tEmail) ? tEmail : undefined,
+    travellerPhone: isPhone(tPhone) ? tPhone : undefined,
+    travellerEmergencyPhone: isPhone(tEmergency) ? tEmergency : undefined,
   };
 }
 
@@ -108,7 +124,9 @@ export async function getAgencySettings(agencyId: string): Promise<AgencySetting
   try {
     const { data } = await getSupabaseAdmin()
       .from('agency_settings')
-      .select('agency_id, reply_notify_email, support_hours, support_timezone, reply_within')
+      .select(
+        'agency_id, reply_notify_email, support_hours, support_timezone, reply_within, traveller_email, traveller_phone, traveller_emergency_phone',
+      )
       .eq('agency_id', agencyId)
       .maybeSingle();
     return rowToSettings(data as SettingsRow | null);
@@ -129,6 +147,9 @@ export async function setAgencySettings(agencyId: string, settings: AgencySettin
   const keepHours = days.length > 0 && isTimezone(zone);
 
   const within = (settings.replyWithin || '').trim().slice(0, MAX_REPLY_WITHIN);
+  const tEmail = (settings.travellerEmail || '').trim();
+  const tPhone = (settings.travellerPhone || '').trim();
+  const tEmergency = (settings.travellerEmergencyPhone || '').trim();
 
   const { error } = await getSupabaseAdmin().from('agency_settings').upsert(
     {
@@ -139,9 +160,27 @@ export async function setAgencySettings(agencyId: string, settings: AgencySettin
       support_hours: keepHours ? days : null,
       support_timezone: keepHours ? zone!.trim() : null,
       reply_within: within || null,
+      // Empty means the traveller sees the one on the agency's record again.
+      traveller_email: isEmail(tEmail) ? tEmail : null,
+      traveller_phone: isPhone(tPhone) ? tPhone : null,
+      traveller_emergency_phone: isPhone(tEmergency) ? tEmergency : null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'agency_id' },
   );
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Lay the agency's own statements over a booking's agency, in place: when it
+ * is open, what it promises, and the contact details it wants travellers to
+ * use. Only what the agency has set; everything else stays as the booking
+ * brought it (the Control record, or a stored booking's payload).
+ */
+export function applySupportSettings(agency: Agency, s: AgencySettings): void {
+  if (s.supportHours) agency.supportHours = s.supportHours;
+  if (s.replyWithin) agency.replyWithin = s.replyWithin;
+  if (s.travellerEmail) agency.email = s.travellerEmail;
+  if (s.travellerPhone) agency.phone = s.travellerPhone;
+  if (s.travellerEmergencyPhone) agency.emergencyPhone = s.travellerEmergencyPhone;
 }

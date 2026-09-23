@@ -1,30 +1,39 @@
 'use client';
 
 /**
- * /agency/settings — operational settings for the agency.
+ * /agency/settings — how a traveller reaches the agency, and how the agency
+ * hears about it.
  *
- * Two things here, and both are about a traveller getting an answer.
+ * The contact details travellers see on Get help. They came only from the
+ * Control record, whose email is often an accounts or login address rather
+ * than the one an agency wants travellers writing to (23 Sep 2026: "it seems
+ * to be picking up the email address in Control which isn't correct"). Each
+ * one left empty still shows the record's.
  *
- * Where replies are emailed. Without it the app guesses from whoever last sent
- * an access link, which follows whoever happened to click last rather than the
- * person who actually watches the inbox.
+ * Where replies are emailed. Only the agency sees it. Without it the app
+ * guesses from whoever last sent an access link, which follows whoever happened
+ * to click last rather than the person who actually watches the inbox. This
+ * page used to say the fallback was the signed-in person's own address, which
+ * is not where anything went.
  *
- * And when the agency is open. This is the one page where something an agency
- * types is shown to travellers as a promise, so nothing here is pre-filled:
- * an agency that says nothing has an app that claims nothing about timing.
+ * And when the agency is open, shown to travellers as a promise, so nothing
+ * here is pre-filled: an agency that says nothing has an app that claims
+ * nothing about timing.
  */
 
 import { useState } from 'react';
-import { Check, Mail, Clock } from 'lucide-react';
+import { Check, Mail, Clock, LifeBuoy } from 'lucide-react';
+import { isEmail, isPhone } from '@/lib/contact-check';
 import { WEEK_ORDER, DAY_LABEL, toMinutes, type OpeningDay } from '@/lib/support-hours';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, primaryBtn } from '../portal-chrome';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function SettingsForm() {
   const { me, refresh } = useAgencyMe();
 
   const [email, setEmail] = useState(me.settings?.replyNotifyEmail ?? '');
+  const [tEmail, setTEmail] = useState(me.settings?.travellerEmail ?? '');
+  const [tPhone, setTPhone] = useState(me.settings?.travellerPhone ?? '');
+  const [tEmergency, setTEmergency] = useState(me.settings?.travellerEmergencyPhone ?? '');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -41,7 +50,11 @@ function SettingsForm() {
   const [replyWithin, setReplyWithin] = useState(me.settings?.replyWithin ?? '');
 
   const trimmed = email.trim();
-  const malformed = trimmed !== '' && !EMAIL_RE.test(trimmed);
+  const replyBad = trimmed !== '' && !isEmail(trimmed);
+  const tEmailBad = tEmail.trim() !== '' && !isEmail(tEmail);
+  const tPhoneBad = tPhone.trim() !== '' && !isPhone(tPhone);
+  const tEmergencyBad = tEmergency.trim() !== '' && !isPhone(tEmergency);
+  const malformed = replyBad || tEmailBad || tPhoneBad || tEmergencyBad;
 
   const openDays: OpeningDay[] = WEEK_ORDER.filter((d) => days[d]).map((d) => ({
     day: d,
@@ -67,6 +80,9 @@ function SettingsForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           replyNotifyEmail: trimmed,
+          travellerEmail: tEmail.trim(),
+          travellerPhone: tPhone.trim(),
+          travellerEmergencyPhone: tEmergency.trim(),
           supportHours: openDays.length ? { timezone, days: openDays } : null,
           replyWithin: replyWithin.trim(),
         }),
@@ -90,10 +106,50 @@ function SettingsForm() {
     <div style={{ maxWidth: 620 }}>
       <h1 style={{ fontFamily: SERIF, fontSize: 30, color: P.ink, margin: 0 }}>Settings</h1>
       <p style={{ color: P.ink2, fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>
-        How your agency works behind the scenes. Travellers never see any of this.
+        How your travellers reach you, and how you hear about it.
       </p>
 
+      {/* ── What travellers see ── */}
       <div style={{ marginTop: 16 }}>
+        <Callout title="Contact details travellers see" icon={<LifeBuoy size={16} />}>
+          These are on Get help in your travellers&rsquo; app, and on every &ldquo;contact your
+          agent&rdquo; button. Leave a box empty and travellers see the one on your Travelgenix
+          account.
+        </Callout>
+      </div>
+
+      <div style={{ marginTop: 18, display: 'grid', gap: 16 }}>
+        <ContactField
+          label="Email for travellers"
+          type="email"
+          value={tEmail}
+          onChange={setTEmail}
+          placeholder="hello@youragency.co.uk"
+          bad={tEmailBad}
+          badText="That does not look like an email address."
+        />
+        <ContactField
+          label="Phone for travellers"
+          type="tel"
+          value={tPhone}
+          onChange={setTPhone}
+          placeholder="01234 567890"
+          bad={tPhoneBad}
+          badText="That does not look like a phone number. Use digits, spaces and a + if you need one."
+        />
+        <ContactField
+          label="Out-of-hours phone"
+          type="tel"
+          value={tEmergency}
+          onChange={setTEmergency}
+          placeholder="+44 7700 900123"
+          hint="For a traveller in trouble when you are closed. Shown beside your hours."
+          bad={tEmergencyBad}
+          badText="That does not look like a phone number. Use digits, spaces and a + if you need one."
+        />
+      </div>
+
+      <div style={{ marginTop: 34 }}>
         <Callout title="Don't miss a reply" icon={<Mail size={16} />}>
           When a traveller replies in their app we email you straight away, because a question from
           an airport at 9pm cannot wait for somebody to open the portal. Tell us where that email
@@ -111,11 +167,11 @@ function SettingsForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             maxLength={254}
-            placeholder={me.agency.email || 'you@youragency.com'}
-            aria-invalid={malformed}
+            placeholder="team@youragency.co.uk"
+            aria-invalid={replyBad}
             style={{
               width: '100%',
-              border: `1px solid ${malformed ? '#dc2626' : P.line}`,
+              border: `1px solid ${replyBad ? '#dc2626' : P.line}`,
               borderRadius: 11,
               padding: '11px 13px',
               fontSize: 14,
@@ -127,17 +183,21 @@ function SettingsForm() {
           />
         </label>
 
-        {malformed ? (
+        {replyBad ? (
           <p style={{ color: '#dc2626', fontSize: 12.5, margin: 0 }}>
             That does not look like an email address.
           </p>
         ) : (
           <p style={{ fontSize: 12.5, color: P.ink3, margin: 0, lineHeight: 1.55 }}>
-            One address — a shared inbox your team actually watches works best. Leave it empty and
-            we fall back to {me.agency.contactEmail ? (
-              <strong style={{ color: P.ink2 }}>{me.agency.contactEmail}</strong>
+            Only your team sees this address. One address, ideally a shared inbox your team
+            actually watches. Leave it empty and we email{' '}
+            {me.agency.contactEmail ? (
+              <>
+                <strong style={{ color: P.ink2 }}>{me.agency.contactEmail}</strong>, your agency&rsquo;s
+                contact address
+              </>
             ) : (
-              'whoever last sent that traveller their access link'
+              'whoever sent that traveller their access link'
             )}
             .
           </p>
@@ -287,6 +347,56 @@ function SettingsForm() {
   );
 }
 
+function ContactField({
+  label,
+  type,
+  value,
+  onChange,
+  placeholder,
+  hint,
+  bad,
+  badText,
+}: {
+  label: string;
+  type: 'email' | 'tel';
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  hint?: string;
+  bad: boolean;
+  badText: string;
+}) {
+  return (
+    <label style={{ display: 'block' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: P.ink, marginBottom: 6 }}>{label}</div>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={type === 'email' ? 254 : 24}
+        placeholder={placeholder}
+        aria-invalid={bad}
+        style={{
+          width: '100%',
+          border: `1px solid ${bad ? '#dc2626' : P.line}`,
+          borderRadius: 11,
+          padding: '11px 13px',
+          fontSize: 14,
+          color: P.ink,
+          background: '#fff',
+          boxSizing: 'border-box',
+          outlineColor: P.teal,
+        }}
+      />
+      {(bad || hint) && (
+        <p style={{ color: bad ? '#dc2626' : P.ink3, fontSize: 12.5, margin: '6px 0 0', lineHeight: 1.55 }}>
+          {bad ? badText : hint}
+        </p>
+      )}
+    </label>
+  );
+}
+
 function TimeBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <input
@@ -310,6 +420,12 @@ function prettyError(code?: string): string {
   switch (code) {
     case 'invalid_email':
       return 'That does not look like an email address.';
+    case 'invalid_traveller_email':
+      return 'The email for travellers does not look like an email address.';
+    case 'invalid_traveller_phone':
+      return 'The phone for travellers does not look like a phone number.';
+    case 'invalid_emergency_phone':
+      return 'The out-of-hours phone does not look like a phone number.';
     case 'invalid_timezone':
       return 'That timezone is not one we recognise — try Europe/London.';
     case 'invalid_hours':

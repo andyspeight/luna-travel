@@ -35,8 +35,8 @@ import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/ord
 import { getStoredBooking } from '@/lib/stored-booking';
 import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-branding';
 import { isAgencyId, isLunaAgency } from '@/lib/agency-id';
-import type { Booking } from '@/types/booking';
-import { getAgencySettings } from '@/lib/agency-settings';
+import type { Agency, Booking } from '@/types/booking';
+import { getAgencySettings, applySupportSettings } from '@/lib/agency-settings';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -132,10 +132,11 @@ export async function GET(req: NextRequest) {
   // so it is layered on the same way branding is. Absent means they have not
   // said, and the app then claims nothing about timing.
   const support = await getAgencySettings(recordId);
-  const applySupport = (agency: { supportHours?: unknown; replyWithin?: string }) => {
-    if (support.supportHours) agency.supportHours = support.supportHours;
-    if (support.replyWithin) agency.replyWithin = support.replyWithin;
-  };
+  //
+  // So are the contact details on Get help, when the agency has set its own:
+  // the ones on the Control record are not always the address an agency wants
+  // its travellers writing to.
+  const applySupport = (agency: Agency) => applySupportSettings(agency, support);
 
   // 1b. Off-platform booking? Return the stored payload directly — there is no
   //     Travelify order to fetch. Still kicks off flight auto-subscribe so live

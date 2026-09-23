@@ -449,7 +449,7 @@ function sampleNotifications(booking: ReturnType<typeof useBooking>['booking']):
     out.push({
       id: 'n1',
       category: 'flight',
-      title: 'Online check-in is open ✈️',
+      title: 'Online check-in is open',
       body: `${firstFlight.carrierName} ${firstFlight.flightNumber} to ${firstFlight.arrCity} opens for check-in. Tap to claim your seats together.`,
       when: 'now',
     });
@@ -492,7 +492,7 @@ function sampleNotifications(booking: ReturnType<typeof useBooking>['booking']):
   out.push({
     id: 'n5',
     category: 'luna',
-    title: '24 hours to go ✨',
+    title: '24 hours to go',
     body: `Quick reminder: passport, sunglasses, the docs are in the app — happy travels, ${
       (booking.travellers.find((t) => t.isLead) ?? booking.travellers[0]).firstName
     }.`,

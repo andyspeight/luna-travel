@@ -22,16 +22,15 @@ export const DEFAULT_LOCALE: Locale = 'en';
 export interface LocaleMeta {
   code: Locale;
   label: string; // native name
-  flag: string; // emoji
 }
 
 export const LOCALES: LocaleMeta[] = [
-  { code: 'en', label: 'English', flag: '🇬🇧' },
-  { code: 'ro', label: 'Română', flag: '🇷🇴' },
-  { code: 'fr', label: 'Français', flag: '🇫🇷' },
-  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
-  { code: 'es', label: 'Español', flag: '🇪🇸' },
-  { code: 'it', label: 'Italiano', flag: '🇮🇹' },
+  { code: 'en', label: 'English' },
+  { code: 'ro', label: 'Română' },
+  { code: 'fr', label: 'Français' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'es', label: 'Español' },
+  { code: 'it', label: 'Italiano' },
 ];
 
 const SUPPORTED = new Set<Locale>(LOCALES.map((l) => l.code));
@@ -101,6 +100,23 @@ const S: Record<string, Dict> = {
 
   // ── Where next? / Inspirations ──
   'next.whereNext': { en: 'Where next?', ro: 'Unde mergem?', fr: 'Et après ?', de: 'Wohin als Nächstes?', es: '¿A dónde ahora?', it: 'E adesso?' },
+  // ── After the trip ──
+  // A trip that ended four days ago was still badged "Upcoming", with a
+  // countdown frozen at 00:00:00:00 and a welcome message about "before or
+  // during your trip". These are what it says instead.
+  'post.tripComplete': { en: 'Trip complete', ro: 'Călătorie încheiată', fr: 'Voyage terminé', de: 'Reise beendet', es: 'Viaje completado', it: 'Viaggio concluso' },
+  'post.stillHere': { en: 'Your documents and your {agency} team are still here if you need them.', ro: 'Documentele tale și echipa {agency} sunt în continuare aici, dacă ai nevoie.', fr: 'Vos documents et l’équipe {agency} restent là si vous en avez besoin.', de: 'Ihre Unterlagen und Ihr Team von {agency} sind weiterhin für Sie da.', es: 'Tus documentos y el equipo de {agency} siguen aquí si los necesitas.', it: 'I tuoi documenti e il team di {agency} sono ancora qui se ti servono.' },
+  'post.feedbackTitle': { en: 'How was your {dest} trip?', ro: 'Cum a fost în {dest}?', fr: 'Comment était {dest} ?', de: 'Wie war {dest}?', es: '¿Qué tal {dest}?', it: 'Com’è andata a {dest}?' },
+  // Says where it goes, because the review asked for exactly that and because
+  // it is true: reviews are private to the agency unless the traveller ticks
+  // the box on the next screen.
+  'post.feedbackBody': { en: 'Tell {agency} how it went. It goes to them only.', ro: 'Spune-i lui {agency} cum a fost. Ajunge doar la ei.', fr: 'Dites à {agency} comment ça s’est passé. Cela ne va qu’à eux.', de: 'Erzählen Sie {agency}, wie es war. Nur sie sehen es.', es: 'Cuéntale a {agency} qué tal fue. Solo lo verán ellos.', it: 'Racconta a {agency} com’è andata. Lo vedranno solo loro.' },
+  'post.feedbackCta': { en: 'Leave feedback', ro: 'Lasă o părere', fr: 'Donner mon avis', de: 'Feedback geben', es: 'Dejar mi opinión', it: 'Lascia un commento' },
+  'post.notNow': { en: 'Not now', ro: 'Nu acum', fr: 'Pas maintenant', de: 'Nicht jetzt', es: 'Ahora no', it: 'Non ora' },
+  'post.nextIdea': { en: 'An idea for next time', ro: 'O idee pentru data viitoare', fr: 'Une idée pour la prochaine fois', de: 'Eine Idee für das nächste Mal', es: 'Una idea para la próxima vez', it: 'Un’idea per la prossima volta' },
+  // The review's own example. An enquiry to a person, not a claim about a
+  // place: no price, no availability, no dates — the agent supplies those.
+  'post.askAbout': { en: 'Ask {agency} about {place}', ro: 'Întreabă {agency} despre {place}', fr: 'Demander à {agency} pour {place}', de: '{agency} nach {place} fragen', es: 'Preguntar a {agency} por {place}', it: 'Chiedi a {agency} di {place}' },
   'next.welcomeHome': { en: 'Welcome home', ro: 'Bun venit acasă', fr: 'Bon retour', de: 'Willkommen zurück', es: 'Bienvenido a casa', it: 'Bentornato' },
   // Used when the booking has no destination to name — "Loved ?" is worse than
   // dropping the place entirely.

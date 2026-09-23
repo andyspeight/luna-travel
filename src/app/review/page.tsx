@@ -1,21 +1,36 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/booking-context';
 import { PageEnter } from '@/components/page-enter';
 import { ActionButton } from '@/components/action-button';
 import { NavBar } from '@/components/nav-bar';
-import { IconStar, IconCheck, IconChevR } from '@/components/icons';
+import { IconStar, IconCheck } from '@/components/icons';
 import { leadTraveller } from '@/lib/booking-helpers';
+import { writeFeedback } from '@/lib/feedback-state';
+import { NextIdeaCard } from '@/components/post-trip';
 
 /**
  * Post-trip review.
  *
- * In production this appears automatically after `tripEnd` has passed (deep
- * link from a "Welcome home" push notification). For the prototype it's
- * reachable via the route directly and shows for the active booking
- * regardless of date — handy for the show demo.
+ * Reached from the feedback card on the home screen once the trip is over. It
+ * used to claim it arrived by a "Welcome home" push notification; none was
+ * ever built, and nothing else linked here, so no traveller ever saw it.
+ * Still reachable by URL for any booking regardless of date, for demos.
+ *
+ * TWO THINGS THIS SCREEN MUST NOT DO.
+ *
+ * Promise a choice it does not offer. It said "with your permission, we may
+ * also share on the agency website" and had no way to give permission, so
+ * every review was sent with consent false. The box is real now, and unticked
+ * by default: a review is private to the agency unless somebody says it isn't.
+ *
+ * Speak for the agency. The rebooking card underneath promised "direct flights
+ * from Birmingham" and "school-holiday dates available" in the agency's voice,
+ * credited itself to a "Promotion Engine" that was a switch statement, and
+ * sent the traveller to the AI rather than the agent. It now names one place
+ * and asks the agent, who supplies the dates and the price.
  */
 export default function ReviewPage() {
   const { booking } = useBooking();
@@ -23,6 +38,10 @@ export default function ReviewPage() {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState('');
+  // Off by default. A review is private to the agency unless the traveller
+  // says otherwise, and the wording below says exactly that.
+  const [shareConsent, setShareConsent] = useState(false);
+  const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,13 +55,15 @@ export default function ReviewPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ rating, comment: comment.trim() }),
+        body: JSON.stringify({ rating, comment: comment.trim(), shareConsent }),
       });
       // 201 = saved for a real traveller session. 401 = the mock/demo booking
       // (no lt_session) — nothing to persist, but the traveller has finished, so
       // still confirm. Only a genuine server error is surfaced to them.
       if (res.ok || res.status === 401) {
         setSubmitted(true);
+        // So the home screen stops asking.
+        writeFeedback(booking.reference, 'sent');
       } else {
         setError("We couldn't send your review just now. Please try again.");
       }
@@ -53,9 +74,6 @@ export default function ReviewPage() {
     }
   };
 
-  // Rebook suggestion based on destination personality
-  const next = nextDestination(booking.primaryCountryCode);
-
   return (
     <>
       <NavBar title="Welcome home" backLabel="Trip" />
@@ -63,9 +81,6 @@ export default function ReviewPage() {
         <main className="px-5 pt-3 pb-6">
           {/* Welcome */}
           <header className="text-center pt-4 pb-2">
-            <div className="text-5xl mb-3" aria-hidden>
-              {welcomeEmoji(booking.primaryCountryCode)}
-            </div>
             <h1 className="font-serif text-[28px] leading-tight text-ink">
               Welcome home,{' '}
               <em className="not-italic italic text-teal-dark dark:text-teal-light">
@@ -74,7 +89,7 @@ export default function ReviewPage() {
               .
             </h1>
             <p className="text-sm text-ink-2 mt-2 max-w-[300px] mx-auto leading-relaxed">
-              How was {booking.destinationLabel}? A few words to help{' '}
+              How was your {booking.destinationLabel} trip? A few words to help{' '}
               {booking.agency.name} send more travellers somewhere they&rsquo;ll love.
             </p>
           </header>
@@ -99,12 +114,18 @@ export default function ReviewPage() {
                     >
                       <IconStar
                         size={40}
-                        className={lit ? 'text-gold' : 'text-line'}
+                        className={lit ? 'text-gold' : 'text-star-off'}
                       />
                     </button>
                   );
                 })}
               </div>
+              {/* Which rating is chosen, in words. The stars only differ by
+                  colour, and colour alone is not enough to tell somebody what
+                  they have picked. */}
+              <p className="-mt-4 mb-5 text-center text-[13px] text-ink-2" aria-live="polite">
+                {rating ? `${rating} out of 5` : 'Tap a star to rate your trip'}
+              </p>
 
               {/* Textarea-ish field */}
               <div className="bg-surface border border-line-light rounded-2xl p-4 mb-3">
@@ -132,9 +153,31 @@ export default function ReviewPage() {
                 </p>
               )}
 
-              <p className="text-[11px] text-ink-3 text-center mt-3 leading-relaxed max-w-[280px] mx-auto">
-                Reviews go straight to your agent. With your permission, we may also share on the agency website.
+              <p className="text-[12.5px] text-ink-2 text-center mt-3 leading-relaxed max-w-[300px] mx-auto">
+                This goes to {booking.agency.name || 'your travel agent'} only.
               </p>
+              <label className="mt-2 flex min-h-[44px] cursor-pointer items-start gap-3 rounded-xl px-1 py-2">
+                <input
+                  type="checkbox"
+                  checked={shareConsent}
+                  onChange={(e) => setShareConsent(e.target.checked)}
+                  className="mt-0.5 h-5 w-5 flex-none accent-teal"
+                />
+                <span className="text-[13px] leading-snug text-ink-2">
+                  {booking.agency.name || 'They'} may also share it on their website
+                </span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  writeFeedback(booking.reference, 'dismissed');
+                  router.push('/');
+                }}
+                className="mx-auto mt-1 flex min-h-[44px] items-center px-4 text-[13px] font-medium text-ink-2"
+              >
+                Not now
+              </button>
             </>
           ) : (
             <div className="text-center my-8 p-6 rounded-2xl bg-success/5 border border-success/20">
@@ -148,110 +191,12 @@ export default function ReviewPage() {
             </div>
           )}
 
-          {/* Rebook nudge */}
-          {next && (
-            <section className="mt-7">
-              <article
-                className="relative overflow-hidden rounded-3xl p-5 text-white"
-                style={{
-                  background:
-                    'linear-gradient(135deg, #1B2B5B 0%, #2A3F7A 50%, #0077B6 100%)',
-                }}
-              >
-                <div
-                  aria-hidden
-                  className="absolute -top-10 -right-10 w-40 h-40 rounded-full"
-                  style={{
-                    background:
-                      'radial-gradient(circle, rgba(0,180,216,0.45), transparent 70%)',
-                  }}
-                />
-                <div className="relative">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-white/80 mb-1.5">
-                    Next idea · for {lead.firstName}
-                  </div>
-                  <h3 className="font-serif text-[26px] leading-tight">
-                    Loved {booking.destinationLabel}?
-                    <br />
-                    Try <em>{next.name}</em>{' '}
-                    <span className="text-white/85 text-base font-sans not-italic">
-                      {next.when}
-                    </span>
-                  </h3>
-                  <p className="text-[13px] text-white/85 mt-3 leading-relaxed">
-                    {next.pitch}
-                  </p>
-                  <Link
-                    href="/luna"
-                    className="inline-flex items-center gap-1.5 mt-4 px-4 h-10 rounded-xl bg-white text-navy text-sm font-semibold hover:bg-white/95"
-                  >
-                    Get a tailored idea
-                    <IconChevR size={16} />
-                  </Link>
-                </div>
-              </article>
-
-              <p className="text-[11px] text-ink-3 text-center mt-2.5">
-                Powered by Luna Marketing&rsquo;s Promotion Engine
-              </p>
-            </section>
-          )}
+          {/* One place, and a way to ask the agent about it. */}
+          <section className="mt-7">
+            <NextIdeaCard booking={booking} />
+          </section>
         </main>
       </PageEnter>
     </>
   );
-}
-
-function welcomeEmoji(cc: string): string {
-  switch (cc) {
-    case 'MV': return '🌴';
-    case 'ES': return '☀️';
-    case 'AE': return '🌅';
-    case 'GR': return '🏛';
-    default: return '✈️';
-  }
-}
-
-/**
- * Light cross-sell logic. Per-destination "what would they love next?"
- * driven by similar vibe (beach → other beach, city → other city) and a
- * seasonal hint.
- *
- * In production this is the Luna Marketing Promotion Engine call.
- */
-function nextDestination(
-  cc: string
-): { name: string; when: string; pitch: string } | undefined {
-  switch (cc) {
-    case 'MV':
-      return {
-        name: 'Mauritius',
-        when: 'in spring',
-        pitch:
-          'Similar vibe, longer stay possible, school-holiday dates available. Reef walks that work for younger swimmers too.',
-      };
-    case 'ES':
-      return {
-        name: 'Crete',
-        when: 'next summer',
-        pitch:
-          'A bigger island for older kids — beaches, ruins to climb, and food that keeps the family happy. Direct flights from Birmingham.',
-      };
-    case 'AE':
-      return {
-        name: 'the Maldives',
-        when: 'in November',
-        pitch:
-          'A natural pairing with Dubai for an anniversary trip. Water-villa overnighters available — we can build a 2-stop itinerary.',
-      };
-    case 'GR':
-      return {
-        name: 'Lisbon',
-        when: 'in October',
-        pitch:
-          'Another walkable European city you can do in a long weekend. Different food, similar pace — proper tavernas-meets-tascas energy.',
-      };
-    default:
-      return undefined;
-  }
 }

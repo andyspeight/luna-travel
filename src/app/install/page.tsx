@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageEnter } from '@/components/page-enter';
-import { IconShare } from '@/components/icons';
+import { IconShare, IconSparkle } from '@/components/icons';
 import { useBooking } from '@/lib/booking-context';
 import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
 import { cinematicCover } from '@/lib/hero';
@@ -540,16 +540,18 @@ function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Brandin
         ? `${who}your ${dest} trip is almost here.`
         : `${who}your trip is almost here.`;
 
-  let cdNum = '✦';
+  // null means "no number to show" — drawn as an icon below rather than a
+  // dingbat glyph standing in for one.
+  let cdNum: string | null = null;
   let cdLabel = 'enjoy every minute';
   if (tripPast) {
-    cdNum = '✦';
+    cdNum = null;
     cdLabel = 'we hope it was wonderful';
   } else if (typeof days === 'number') {
     if (days > 1) { cdNum = String(days); cdLabel = 'days until you fly'; }
     else if (days === 1) { cdNum = '1'; cdLabel = 'day until you fly'; }
     else if (days === 0) { cdNum = 'Today'; cdLabel = 'you fly today'; }
-    else { cdNum = '✦'; cdLabel = 'enjoy every minute'; }
+    else { cdNum = null; cdLabel = 'enjoy every minute'; }
   }
 
   return (
@@ -578,7 +580,7 @@ function RevealView({ trip, branding, onOpen }: { trip: Trip; branding?: Brandin
         {/* Countdown */}
         <div className="text-center mb-9">
           <div className="font-serif text-[76px] leading-none text-teal-light tracking-tight">
-            {cdNum}
+            {cdNum ?? <IconSparkle size={60} className="mx-auto" />}
           </div>
           <div className="mt-2 text-[12px] uppercase tracking-[0.16em] text-white/55 font-semibold">
             {cdLabel}

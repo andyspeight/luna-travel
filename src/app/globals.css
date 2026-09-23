@@ -48,6 +48,14 @@
   /* Dark ink on all three fills: 7.04:1, 8.31:1 and 4.74:1 respectively. */
   --semantic-on: #0f172a;
 
+  /* Star ratings. Used in five places and, until now, defined in none — so
+     "gold" stars have never been gold; they inherited the text colour. Solved
+     to 3:1, the bar for a graphical object that carries meaning. */
+  --gold-rgb: 179 134 37; /* #b38625 */
+  /* An empty star on the rating control. It was the border colour, 1.23:1,
+     which made the five targets a traveller has to tap close to invisible. */
+  --star-off: #8c9095;
+
   /* White-label brand colours — space-separated RGB channels so Tailwind's
      `rgb(var(--x) / <alpha-value>)` tokens support opacity modifiers. These are
      the Luna Travel defaults; the active agency's colours override them at
@@ -85,6 +93,8 @@
   --success-ink: #2dc190;
   --warning-ink: #f59e0b;
   --danger-ink: #f58f8f;
+  --gold-rgb: 224 168 46; /* #e0a82e */
+  --star-off: #5c6777;
 }
 
 /* ────────────────────────────────────────────────────────────

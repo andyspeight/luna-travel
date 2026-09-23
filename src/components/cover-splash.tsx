@@ -141,18 +141,14 @@ export function CoverSplash() {
   const shareTrip = async () => {
     const dest = booking.destinationLabel.trim();
     const now = Date.now();
-    // The plane is only honest when there is a flight — an attractions booking
-    // sharing "Flying to…" is the same class of bug as calling a flight-only
-    // booking a holiday.
-    const sign = booking.flights.length ? '✈️' : '✨';
     const text =
       now > new Date(booking.tripEnd).getTime()
-        ? `Just home${dest ? ` from ${dest}` : ''} — what a trip! ${sign}`
+        ? `Just home${dest ? ` from ${dest}` : ''} — what a trip!`
         : now >= new Date(startIso).getTime()
-          ? `${dest ? `I'm in ${dest}` : "I'm away"} right now ${sign}`
+          ? `${dest ? `I'm in ${dest}` : "I'm away"} right now`
           : parts.days > 0
-            ? `${parts.days} day${parts.days === 1 ? '' : 's'} until ${dest || 'my trip'}! ${sign}`
-            : `${dest ? `Off to ${dest}` : 'My trip starts'} today ${sign}`;
+            ? `${parts.days} day${parts.days === 1 ? '' : 's'} until ${dest || 'my trip'}!`
+            : `${dest ? `Off to ${dest}` : 'My trip starts'} today`;
     try {
       if (typeof navigator !== 'undefined' && navigator.share) {
         await navigator.share({ text });

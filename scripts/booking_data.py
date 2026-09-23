@@ -5,11 +5,11 @@ PDF generator and accept the drift.
 """
 
 DEMO_AGENCY = {
-    "name": "Travelaire Holidays",
+    "name": "Travelgenix",
     "phone": "+44 121 555 8800",
-    "email": "hello@travelaire.co.uk",
+    "email": "hello@travelgenix.io",
     "emergencyPhone": "+44 7700 900900",
-    "website": "travelaire.co.uk",
+    "website": "travelgenix.io",
     "atolNumber": "ATOL 12345",
 }
 

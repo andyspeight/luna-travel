@@ -238,9 +238,16 @@ export default function HomePage() {
               <div className="text-sm font-semibold text-ink leading-none">
                 {booking.agency.appName || 'Luna Travel'}
               </div>
-              <div className="text-[11px] text-ink-3 leading-none mt-1">
-                {booking.agency.name}
-              </div>
+              {/* The company name only when it adds something. An agency whose
+                  app is simply called by its own name printed it twice, one
+                  above the other. */}
+              {booking.agency.name &&
+                booking.agency.name.trim().toLowerCase() !==
+                  (booking.agency.appName || 'Luna Travel').trim().toLowerCase() && (
+                  <div className="text-[11px] text-ink-3 leading-none mt-1">
+                    {booking.agency.name}
+                  </div>
+                )}
             </div>
           </div>
         </BookingPicker>

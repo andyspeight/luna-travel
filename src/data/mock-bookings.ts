@@ -9,21 +9,29 @@ import type { Booking } from '@/types/booking';
  * 3. Premium stopover, business class, multi-hotel, couple (Dubai — Patel)
  * 4. Hotel-only (no flight), solo traveller                 (Athens — Mitchell)
  *
- * The "Travelaire Holidays" demo agency wraps all four — change once and the
+ * The Travelgenix demo agency wraps all four — change once and the
  * whole demo rebrands.
  */
 
+/**
+ * The demo agency is Travelgenix itself.
+ *
+ * It used to carry an invented agency name, which turned out to be a real
+ * travel company — so every prospect shown a demo was seeing somebody else's
+ * brand on it. The phone numbers stay inside Ofcom's reserved ranges (555 and
+ * 07700 900xxx) so a curious prospect cannot dial a stranger.
+ */
 const DEMO_AGENCY = {
-  name: 'Travelaire Holidays',
-  appName: 'Travelaire',
-  logoUrl: '/images/travelaire-logo.svg',
+  name: 'Travelgenix',
+  appName: 'Travelgenix',
+  logoUrl: '/images/travelgenix-logo.svg',
   phone: '+44 121 555 8800',
-  email: 'hello@travelaire.co.uk',
+  email: 'hello@travelgenix.io',
   emergencyPhone: '+44 7700 900900',
-  website: 'travelaire.co.uk',
+  website: 'travelgenix.io',
   atolNumber: 'ATOL 12345',
   welcomeMessage:
-    "We're delighted to have you travelling with us. Anything you need before or during your trip, your Travelaire team is one tap away.",
+    "We're delighted to have you travelling with us. Anything you need before or during your trip, your Travelgenix team is one tap away.",
   // A real agency's hours, so the demo shows the open/closed state working
   // rather than the empty version. Saturday morning included: it is the case
   // that makes "opens Monday" wrong and is easy to get away with in testing.
@@ -43,22 +51,24 @@ const DEMO_AGENCY = {
   // which also exercises the "revert to defaults" path when switching bookings.
 };
 
-// A second demo agency with full white-label branding (its own colours + logo),
-// used by the Dubai booking so the demo shows the app re-themed per agency — and
-// switching to/from it proves brand colours apply and reset correctly.
-const MERIDIAN_AGENCY = {
-  name: 'Meridian Luxury Travel',
-  appName: 'Meridian',
-  logoUrl: '/images/meridian-logo.svg',
+// The same agency under a different set of brand colours, used by the Dubai
+// booking so the demo still shows the app re-themed — switching to and from it
+// proves brand colours apply and reset correctly, which is a real code path and
+// not only a look. It carried a separate invented name until that name turned
+// out to belong to a real company.
+const DEMO_AGENCY_GOLD = {
+  name: 'Travelgenix',
+  appName: 'Travelgenix',
+  logoUrl: '/images/travelgenix-gold-logo.svg',
   phone: '+44 20 7946 0500',
-  email: 'concierge@meridiantravel.co.uk',
+  email: 'hello@travelgenix.io',
   emergencyPhone: '+44 7700 900555',
-  website: 'meridiantravel.co.uk',
+  website: 'travelgenix.io',
   atolNumber: 'ATOL 20891',
   brandPrimaryColour: '#14243D', // deep navy
   brandAccentColour: '#c99b3f', // gold
   welcomeMessage:
-    'Welcome to your Meridian journey. Your dedicated concierge has arranged every detail — simply relax and let us take care of the rest.',
+    'Welcome to your trip. Your dedicated concierge has arranged every detail — simply relax and let us take care of the rest.',
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -283,7 +293,7 @@ export const DUBAI_PATEL: Booking = {
     { id: 'd6', name: 'Travel insurance summary', kind: 'insurance', url: '/documents/DEMO66541/travel-insurance.pdf', sizeBytes: 288619, updatedAt: '2026-05-13T14:15:00.000Z' },
   ],
   payment: { currency: 'GBP', total: 11280.00, deposit: 2256.00, balance: 0, balanceDueDate: '2026-08-08' },
-  agency: MERIDIAN_AGENCY,
+  agency: DEMO_AGENCY_GOLD,
 };
 
 // ────────────────────────────────────────────────────────────────

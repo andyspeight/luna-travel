@@ -107,7 +107,7 @@ export default function ExperienceDetailPage() {
           </div>
         </section>
 
-        <div className="px-5 -mt-4 space-y-3">
+        <div className="px-5 pt-4 space-y-3">
           {galleryPhotos.length > 0 && <PhotoGallery photos={galleryPhotos} className="pt-1" />}
 
           <Panel title="Details" icon={<IconInfo size={14} />}>

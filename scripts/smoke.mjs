@@ -827,6 +827,39 @@ async function main() {
   await pt.close();
   await postCtx.close();
 
+  // ── Nothing tucked under the top photo ──
+  //
+  // The hotel, extra, experience and park pages pulled their content up into
+  // the photo with a negative margin, and the photo's layers paint over
+  // ordinary content: the hotel's star rating and the top of every first card
+  // sat underneath it (reported 23 Sep 2026). Measured element by element, not
+  // just text — a card's hidden top edge has no text in it, which is how the
+  // first look at this missed the extra page.
+  const under = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const tucked = [];
+  for (const path of ['/hotel/h1?demo=DEMO81297', '/extra/x1?demo=DEMO74002', '/flight/f1?demo=DEMO81297', '/hotel/h2?demo=DEMO66541']) {
+    await under.goto(BASE + path, { waitUntil: 'domcontentloaded' });
+    await under.waitForTimeout(1800);
+    const hits = await under.evaluate(() => {
+      // The photo is the section the page opens with. A page that opens
+      // without one (the flight screen) has nothing to be tucked under.
+      const hero = document.querySelector('main > section:first-child');
+      if (!hero || hero.getBoundingClientRect().top > 5) return [];
+      const edge = hero.getBoundingClientRect().bottom;
+      const out = [];
+      for (const el of document.querySelectorAll('main *')) {
+        if (hero.contains(el) || el.contains(hero)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        if (r.top < edge - 0.5) out.push(`${el.tagName.toLowerCase()} starts ${Math.round(edge - r.top)}px under the photo`);
+      }
+      return out;
+    });
+    if (hits.length) tucked.push(`${path}: ${hits[0]}`);
+  }
+  check('nothing on a detail page is tucked under its top photo', tucked.length === 0, tucked.join(' | ') || '4 pages');
+  await under.close();
+
   // ── Money still owed ──
   //
   // Every real booking used to arrive with no balance, and Ask Luna read that

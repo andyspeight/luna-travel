@@ -140,6 +140,10 @@ export interface AgencyMe {
     supportHours?: SupportHours;
     /** What the agency promises, in its own words. */
     replyWithin?: string;
+    /** Contact details travellers see on Get help. Absent: the agency record's. */
+    travellerEmail?: string;
+    travellerPhone?: string;
+    travellerEmergencyPhone?: string;
   };
   /** Present only while a Travelgenix staff member is acting as this agency. */
   actingAs?: { agencyName: string; staffEmail: string } | null;

@@ -3,7 +3,8 @@
  * agencyId comes from the session, never the body, so an agency can only ever
  * edit its own.
  *
- *   POST — save. Body: { replyNotifyEmail?, supportHours?, replyWithin? }.
+ *   POST — save. Body: { replyNotifyEmail?, supportHours?, replyWithin?,
+ *          travellerEmail?, travellerPhone?, travellerEmergencyPhone? }.
  *
  * The support fields are what a traveller reads to decide whether to wait or
  * to ring the out-of-hours line, so they are the agency's own statement and
@@ -20,6 +21,7 @@ import { resolvePortalAgency } from '@/lib/agencies';
 import {
   setAgencySettings,
   isEmail,
+  isPhone,
   isTimezone,
   cleanOpeningDays,
   MAX_REPLY_WITHIN,
@@ -75,8 +77,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'reply_within_too_long' }, { status: 400 });
   }
 
+  // What travellers see on Get help. Each empty one goes back to the agency's
+  // record; a malformed one is refused, not saved, because it would be printed
+  // on somebody's phone as the number to ring.
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const travellerEmail = text(body.travellerEmail);
+  const travellerPhone = text(body.travellerPhone);
+  const travellerEmergencyPhone = text(body.travellerEmergencyPhone);
+  if (travellerEmail && (!isEmail(travellerEmail) || travellerEmail.length > MAX_EMAIL)) {
+    return NextResponse.json({ error: 'invalid_traveller_email' }, { status: 400 });
+  }
+  if (travellerPhone && !isPhone(travellerPhone)) {
+    return NextResponse.json({ error: 'invalid_traveller_phone' }, { status: 400 });
+  }
+  if (travellerEmergencyPhone && !isPhone(travellerEmergencyPhone)) {
+    return NextResponse.json({ error: 'invalid_emergency_phone' }, { status: 400 });
+  }
+
   const settings = {
     replyNotifyEmail: raw || undefined,
+    travellerEmail: travellerEmail || undefined,
+    travellerPhone: travellerPhone || undefined,
+    travellerEmergencyPhone: travellerEmergencyPhone || undefined,
     supportHours: days.length ? { timezone: String(zone).trim(), days } : undefined,
     replyWithin: replyWithin || undefined,
   };

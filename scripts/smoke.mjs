@@ -121,6 +121,26 @@ async function main() {
     await page.close();
   }
 
+  // ── Settings tells the truth about where things go ──
+  //
+  // The reply-notification box said an empty address "falls back to" the
+  // signed-in person's own email, which is not where anything went (23 Sep
+  // 2026). And there was nowhere to set the contact details travellers see.
+  const sp = await desk.newPage();
+  await sp.goto(`${BASE}/agency/settings`, { waitUntil: 'domcontentloaded' });
+  await sp.waitForSelector('text=Contact details travellers see');
+  const settingsBody = ((await sp.textContent('main').catch(() => '')) || '').replace(/\s+/g, ' ');
+  check(
+    'settings lets an agency set the contact details travellers see',
+    /Email for travellers/.test(settingsBody) && /Phone for travellers/.test(settingsBody) && /Out-of-hours phone/.test(settingsBody),
+  );
+  check(
+    'and names the real fallback for replies, not the signed-in person',
+    /we email whoever sent that traveller their access link/.test(settingsBody) && !settingsBody.includes('you@youragency.co.uk'),
+    settingsBody.match(/Leave it empty[^.]*\./)?.[0] || '',
+  );
+  await sp.close();
+
   // Every screenshot the guide promises actually resolves.
   const guide = await desk.newPage();
   await guide.goto(`${BASE}/agency/guide`, { waitUntil: 'domcontentloaded' });

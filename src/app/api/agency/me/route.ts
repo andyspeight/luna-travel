@@ -36,7 +36,12 @@ export async function GET(req: NextRequest) {
       id: agency.id,
       name: agency.name,
       legalName: agency.legalName,
-      contactEmail: agency.email || null,
+      // Where reply notifications go when no address is set: a Luna-native
+      // agency's own contact address. A Control agency has none on file here,
+      // so it is null, and replies go to whoever sent that traveller their
+      // access link. This used to be the signed-in person's own address,
+      // which is not where anything goes.
+      contactEmail: agency.source === 'luna' ? agency.email || null : null,
       email: claims.email,
     },
     branding,

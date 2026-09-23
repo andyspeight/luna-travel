@@ -21,6 +21,8 @@ import { findHotel } from '@/lib/booking-helpers';
 import { PhotoGallery } from '@/components/photo-gallery';
 import { formatBoard, formatDate, formatTime } from '@/lib/format';
 import { destinationHero } from '@/lib/hero';
+import { matchLocationSlug } from '@/lib/location-match';
+import { HeroPhoto } from '@/components/hero-photo';
 import type { Hotel } from '@/types/booking';
 
 export default function HotelDetailPage() {
@@ -49,7 +51,11 @@ export default function HotelDetailPage() {
   }
 
   const board = formatBoard(hotel.boardBasis);
-  const hero = destinationHero(hotel.countryCode);
+  // The hotel itself first; then where it is, the city before the country.
+  // This used to be the country alone, so a Rome hotel opened on the Amalfi
+  // coast (Villa Glori, 23 Sep 2026).
+  const hero = destinationHero(hotel.countryCode, matchLocationSlug(hotel.countryCode, [hotel.city, hotel.resort]));
+  const [hotelPhoto, ...morePhotos] = hotel.photos ?? [];
   const adults = booking.travellers.filter((t) => t.type === 'adult').length;
   const children = booking.travellers.filter((t) => t.type === 'child').length;
 
@@ -58,13 +64,7 @@ export default function HotelDetailPage() {
     <main className="pb-6">
       {/* Hero */}
       <section className="relative h-60 text-white" style={{ background: hero.gradient }}>
-        {hero.image && (
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{ background: `center/cover no-repeat url("${hero.image}")` }}
-          />
-        )}
+        <HeroPhoto candidates={[hotelPhoto, hero.imageLocation, hero.image]} />
         <div
           aria-hidden
           className="absolute inset-0"
@@ -90,8 +90,9 @@ export default function HotelDetailPage() {
       </section>
 
       <div className="px-5 pt-4">
-        {hotel.photos && hotel.photos.length > 0 && (
-          <PhotoGallery photos={hotel.photos} className="mb-3 pt-1" />
+        {/* The first photo is the one at the top; the rest are here. */}
+        {morePhotos.length > 0 && (
+          <PhotoGallery photos={morePhotos} className="mb-3 pt-1" />
         )}
         {/* Stars */}
         {hotel.stars && hotel.stars > 0 && (

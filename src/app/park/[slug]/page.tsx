@@ -105,7 +105,7 @@ export default function ParkGuidePage() {
           </div>
         </section>
 
-        <div className="px-5 -mt-4 space-y-3">
+        <div className="px-5 pt-4 space-y-3">
           {park.bestFor.length > 0 && (
             <div className="flex flex-wrap gap-1.5 pt-1">
               {park.bestFor.map((b) => (

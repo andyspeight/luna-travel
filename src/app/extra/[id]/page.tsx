@@ -76,7 +76,7 @@ export default function ExtraDetailPage() {
         </div>
       </section>
 
-      <div className="px-5 -mt-4 space-y-3">
+      <div className="px-5 pt-4 space-y-3">
         <Panel title="Details" icon={<IconInfo size={14} />}>
           <ul className="divide-y divide-line-light text-sm">
             <li className="py-2.5 flex justify-between">

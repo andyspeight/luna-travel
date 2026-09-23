@@ -89,7 +89,7 @@ export default function HotelDetailPage() {
         </div>
       </section>
 
-      <div className="px-5 -mt-2">
+      <div className="px-5 pt-4">
         {hotel.photos && hotel.photos.length > 0 && (
           <PhotoGallery photos={hotel.photos} className="mb-3 pt-1" />
         )}

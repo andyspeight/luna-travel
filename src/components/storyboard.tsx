@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import type { Booking, Hotel, FlightLeg } from '@/types/booking';
+import type { Booking, FlightLeg } from '@/types/booking';
 import { buildTimeline, type TimelineEvent } from '@/lib/booking-helpers';
 import { destinationHero } from '@/lib/hero';
+import { dayKey, hotelForDay, hotelDayPhotos, countryDayPhotos } from '@/lib/storyboard-photos';
+import { HeroPhoto } from '@/components/hero-photo';
 import { useI18n } from '@/lib/locale-context';
 import { formatDate, formatTime } from '@/lib/format';
 import {
@@ -24,14 +26,10 @@ import {
  * they're travelling through), and gives each day a clear headline so the
  * sequence reads at a glance. Built over the same canonical timeline as the
  * Itinerary list, so event order can never diverge from it.
+ *
+ * Each day's picture is of the trip itself: the city on the day you arrive,
+ * the hotel's own photos after that (lib/storyboard-photos).
  */
-
-function dayKey(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(
-    d.getUTCDate(),
-  ).padStart(2, '0')}`;
-}
 
 /** Inclusive list of YYYY-MM-DD keys from start to end (UTC). */
 function eachDay(startIso: string, endIso: string): string[] {
@@ -52,11 +50,6 @@ function eachDay(startIso: string, endIso: string): string[] {
     guard += 1;
   }
   return out;
-}
-
-/** The hotel the traveller is resident in on a given day (check-in..check-out inclusive). */
-function hotelForDay(booking: Booking, day: string): Hotel | undefined {
-  return booking.hotels.find((h) => dayKey(h.checkIn) <= day && day <= dayKey(h.checkOut));
 }
 
 /**
@@ -166,6 +159,7 @@ function DayScene({
     cc = IATA_COUNTRY[airport] ?? booking.primaryCountryCode;
   }
   const hero = destinationHero(cc);
+  const photos = dayHotel ? hotelDayPhotos(dayHotel, dayIso, booking.primaryCountryCode) : countryDayPhotos(cc);
 
   const hasCheckIn = events.some((e) => e.kind === 'hotel-checkin');
   const hasCheckOut = events.some((e) => e.kind === 'hotel-checkout');
@@ -202,13 +196,7 @@ function DayScene({
   return (
     <article className="rounded-3xl overflow-hidden shadow-sm border border-line-light">
       <div className="relative min-h-[220px] p-4 text-white" style={{ background: hero.gradient }}>
-        {hero.image && (
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{ background: `center/cover no-repeat url("${hero.image}")` }}
-          />
-        )}
+        <HeroPhoto candidates={photos} />
         <div aria-hidden className="absolute inset-0" style={{ background: hero.glow }} />
         <div
           aria-hidden

@@ -31,7 +31,8 @@ export type AuditEventType =
   | 'hero.uploaded'
   | 'hero.removed'
   | 'content.updated'
-  | 'storage.purged';
+  | 'storage.purged'
+  | 'push.welcome_home';
 
 export type AuditLogInput = {
   eventType: AuditEventType;

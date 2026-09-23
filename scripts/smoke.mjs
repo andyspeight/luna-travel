@@ -928,6 +928,21 @@ async function main() {
   );
   await cleanup.close();
 
+  // ── The Welcome-home job must refuse anyone without the secret ──
+  //
+  // It notifies real travellers, and even its dry run answers with booking
+  // references. Neither is for the public.
+  const welcome = await browser.newPage();
+  const welcomeGate = await welcome.goto(`${BASE}/api/cron/welcome-home?dryRun=1`, {
+    waitUntil: 'domcontentloaded',
+  });
+  check(
+    'the Welcome-home job refuses a caller with no secret',
+    welcomeGate.status() === 401,
+    String(welcomeGate.status()),
+  );
+  await welcome.close();
+
   // ── The admin button must be shut to the public, POST most of all ──
   //
   // GET previews and POST destroys. An unauthenticated POST here would let

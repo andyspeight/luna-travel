@@ -827,6 +827,17 @@ async function main() {
   check('with the date it is due', !!before && /Due by 8 Jun 2026/.test(before), before || 'no card');
   const after = await balanceCard('DEMO74002', '2026-06-10T10:00:00Z');
   check('and says due now once the date has passed', !!after && /Due now/.test(after), after || 'no card');
+
+  // The Pay button. In the demo there is no booking to pay against, so it must
+  // say what it would do and go nowhere.
+  const payBtn = bal.getByTestId('balance-pay');
+  check('the balance card offers to pay it', (await payBtn.count()) === 1 && /Pay £3,344\.00/.test((await payBtn.textContent()) || ''));
+  const urlBefore = bal.url();
+  await payBtn.click();
+  await bal.waitForTimeout(600);
+  const afterTap = ((await bal.getByTestId('balance-card').textContent()) || '').trim();
+  check('in the demo, Pay says what it would do', /Nothing is charged in the demo/.test(afterTap), afterTap);
+  check('and does not leave the app', bal.url() === urlBefore, bal.url());
   const paidUp = await balanceCard('DEMO81297', '2026-09-23T10:00:00Z');
   check('a booking that is paid shows no balance card', paidUp === null, paidUp || 'none');
   await balCtx.close();
@@ -952,6 +963,14 @@ async function main() {
     String(cleanupGate.status()),
   );
   await cleanup.close();
+
+  // ── Opening a payment page needs a signed-in traveller ──
+  //
+  // It raises a real Travelify basket against a real booking.
+  const payGate = await browser.newPage();
+  const payStatus = (await payGate.request.post(`${BASE}/api/traveller/pay`, { data: { amount: 1 } })).status();
+  check('the payment route refuses a caller with no session', payStatus === 401, String(payStatus));
+  await payGate.close();
 
   // ── The Welcome-home job must refuse anyone without the secret ──
   //

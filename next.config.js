@@ -116,6 +116,11 @@ const withPWA = withPWAInit({
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The home-screen icon route reads its font from disk; make sure the file
+  // travels with the function.
+  outputFileTracingIncludes: {
+    '/api/app/icon': ['./src/assets/fonts/**/*'],
+  },
   async headers() {
     return [
       {

@@ -9,6 +9,7 @@ import { VersionCheck } from '@/components/version-check';
 import { EngagementPing } from '@/components/engagement-ping';
 import { MaintenanceBanner } from '@/components/maintenance-banner';
 import { PhoneCanvas } from '@/components/phone-canvas';
+import { AppIdentity } from '@/components/app-identity';
 import './globals.css';
 
 const inter = Inter({
@@ -35,7 +36,9 @@ export const metadata: Metadata = {
     title: 'Luna Travel',
     statusBarStyle: 'black-translucent',
   },
+  // The defaults, until components/app-identity knows whose trip this is.
   manifest: '/manifest.json',
+  icons: { apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }] },
   formatDetection: {
     telephone: false,
   },
@@ -63,6 +66,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <CoverProvider>
                 <VersionCheck />
                 <EngagementPing />
+                <AppIdentity />
                 {/* The banner and the tab bar go INSIDE the canvas: both are
                     fixed, so on a wide screen they belong to the phone rather
                     than to the window. */}

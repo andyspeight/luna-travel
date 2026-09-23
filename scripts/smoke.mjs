@@ -661,6 +661,60 @@ async function main() {
   );
   await nameCtx.close();
 
+  // ── The home screen gets the agency's app, not ours ──
+  //
+  // Every agency's travellers installed "Luna Travel" with an "LT" icon (23
+  // Sep 2026). Once a real trip has loaded, the page's title, the iOS icon and
+  // name, and the Android manifest are the agency's, and the icons the
+  // manifest promises are the sizes it says.
+  const idCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await idCtx.route('**/api/traveller/booking*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        booking: {
+          reference: 'LIVE-0002',
+          agency: { name: 'Sunseekers Travel', brandPrimaryColour: '#0e7490', brandAccentColour: '#f59e0b', phone: '', email: '' },
+        },
+      }),
+    }),
+  );
+  const ip = await idCtx.newPage();
+  ip.on('pageerror', (e) => jsErrors.push(`identity: ${e.message}`));
+  await ip.goto(`${BASE}/offline`, { waitUntil: 'domcontentloaded' });
+  await ip.waitForTimeout(3000);
+  const head = await ip.evaluate(() => ({
+    title: document.title,
+    appleTitle: document.querySelector('meta[name="apple-mobile-web-app-title"]')?.getAttribute('content'),
+    appleIcon: document.querySelector('link[rel="apple-touch-icon"]')?.getAttribute('href'),
+    manifest: document.querySelector('link[rel="manifest"]')?.getAttribute('href'),
+  }));
+  check(
+    "a live trip names the page and the home-screen app after the agency",
+    head.title === 'Sunseekers Travel' && head.appleTitle === 'Sunseekers Travel',
+    JSON.stringify({ title: head.title, appleTitle: head.appleTitle }),
+  );
+  check(
+    'and points iOS and Android at its own icon and manifest',
+    /^\/api\/app\/icon\?.*l=S/.test(head.appleIcon || '') && /^\/api\/app\/manifest\?/.test(head.manifest || ''),
+    `${head.appleIcon} | ${head.manifest}`,
+  );
+  if (head.manifest) {
+    const man = await (await fetch(`${BASE}${head.manifest}`)).json();
+    const sizes = [];
+    for (const icon of man.icons || []) {
+      const buf = Buffer.from(await (await fetch(`${BASE}${icon.src}`)).arrayBuffer());
+      sizes.push(`${icon.sizes}=${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`);
+    }
+    check(
+      'the manifest is the agency’s, and every icon is the size it claims',
+      man.name === 'Sunseekers Travel' && sizes.length === 3 && sizes.every((x) => x.split('=')[0] === x.split('=')[1]),
+      `${man.name} ${sizes.join(' ')}`,
+    );
+  }
+  await idCtx.close();
+
   // ── Getting hold of a human ──
   //
   // The review's sixth point. Support was reachable only if you knew to look

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
 import { brandPath, BRAND_IMAGE_TYPES, BRAND_IMAGE_MAX_BYTES, type BrandImageKind } from '@/lib/brand-upload';
+import { ICON_IMAGE_TYPES, iconSpecFor, iconUrl } from '@/lib/app-icon';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, primaryBtn } from '../portal-chrome';
 import { PhonePreview } from '../phone-preview';
 
@@ -26,6 +27,7 @@ function BrandingForm() {
   const [accent, setAccent] = useState(b.brandAccentColour ?? DEFAULT_ACCENT);
   const [welcome, setWelcome] = useState(b.welcomeMessage ?? '');
   const [logoUrl, setLogoUrl] = useState(b.logoUrl ?? '');
+  const [iconUrlValue, setIconUrlValue] = useState(b.iconUrl ?? '');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -43,6 +45,7 @@ function BrandingForm() {
           brandAccentColour: accent,
           welcomeMessage: welcome.trim() || undefined,
           logoUrl: logoUrl.trim() || undefined,
+          iconUrl: iconUrlValue.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -111,6 +114,25 @@ function BrandingForm() {
             onChange={setLogoUrl}
           />
 
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            <HomeScreenIcon
+              // An upload is shown as itself: the icon route only draws icons
+              // that have been saved, and this one may not be yet.
+              src={iconUrlValue || iconUrl(iconSpecFor({ appName: shownName, brandPrimaryColour: primary, brandAccentColour: accent }), 192)}
+              name={shownName}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ImageUpload
+                kind="icon"
+                agencyId={me.agency.id}
+                label="Home-screen icon"
+                hint="A square PNG or JPG, 512 × 512 pixels or larger, up to 2 MB. Without one, travellers get the first letter of your app name on your brand colours, as shown."
+                value={iconUrlValue}
+                onChange={setIconUrlValue}
+              />
+            </div>
+          </div>
+
           {status === 'error' && <p style={{ color: '#dc2626', fontSize: 13, margin: 0 }}>{errorMsg}</p>}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -152,11 +174,13 @@ function ImageUpload({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const inputId = `upload-${kind}`;
+  // The icon is drawn by our icon renderer, which reads PNG and JPEG only.
+  const types = kind === 'icon' ? ICON_IMAGE_TYPES : BRAND_IMAGE_TYPES;
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
-    if (!BRAND_IMAGE_TYPES.includes(file.type)) {
-      setNote({ ok: false, text: 'That file type will not work. Use a PNG, JPG or WebP image.' });
+    if (!types.includes(file.type)) {
+      setNote({ ok: false, text: kind === 'icon' ? 'That file type will not work. Use a PNG or JPG image.' : 'That file type will not work. Use a PNG, JPG or WebP image.' });
       return;
     }
     if (file.size > BRAND_IMAGE_MAX_BYTES) {
@@ -207,7 +231,7 @@ function ImageUpload({
         <input
           id={inputId}
           type="file"
-          accept={BRAND_IMAGE_TYPES.join(',')}
+          accept={types.join(',')}
           disabled={busy}
           onChange={(e) => {
             void pick(e.target.files?.[0]);
@@ -235,6 +259,27 @@ function ImageUpload({
   );
 }
 
+/**
+ * The icon as it will sit on a phone: rounded the way iOS and Android round
+ * it, with the app name underneath. The generated one is drawn by the same
+ * route the phone uses, so it is the real icon, not an impression of it.
+ */
+function HomeScreenIcon({ src, name }: { src: string; name: string }) {
+  return (
+    <div style={{ width: 84, flex: 'none', textAlign: 'center', paddingTop: 22 }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt="Home-screen icon preview"
+        width={64}
+        height={64}
+        style={{ display: 'block', margin: '0 auto', width: 64, height: 64, objectFit: 'cover', borderRadius: 15, boxShadow: '0 2px 8px rgba(15,23,42,0.18)' }}
+      />
+      <div style={{ fontSize: 11, color: P.ink2, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+    </div>
+  );
+}
+
 function prettyError(code?: string): string {
   switch (code) {
     case 'appName_too_long': return 'App name is too long (max 60 characters).';
@@ -242,6 +287,7 @@ function prettyError(code?: string): string {
     case 'assistantName_invalid': return 'Use letters, numbers and spaces for the assistant name.';
     case 'welcomeMessage_too_long': return 'Welcome message is too long (max 240 characters).';
     case 'invalid_logo_url': return 'That logo could not be used. Please upload it again.';
+    case 'invalid_icon_url': return 'That icon could not be used. Please upload it again.';
     case 'agency_inactive': return 'This agency is no longer active — contact Luna Travel.';
     case 'unauthorised': return 'Your session has ended — ask for a fresh access link.';
     default: return 'Could not save. Please try again.';

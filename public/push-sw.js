@@ -31,9 +31,33 @@ self.addEventListener('push', (event) => {
   }
 
   const title = data.title || 'Your trip';
-  const options = {
+  event.waitUntil(
+    agencyIcon().then((icon) =>
+      self.registration.showNotification(title, notificationOptions(data, icon)),
+    ),
+  );
+});
+
+/**
+ * The agency's own icon, left in Cache Storage by the app
+ * (components/app-identity) the last time it was open. The default icon when
+ * there is none, or it is not one of ours.
+ */
+function agencyIcon() {
+  const fallback = '/icons/icon-192.png';
+  if (!self.caches) return Promise.resolve(fallback);
+  return caches
+    .open('app-identity')
+    .then((c) => c.match('/__app-identity.json'))
+    .then((r) => (r ? r.json() : null))
+    .then((j) => (j && typeof j.icon === 'string' && j.icon.indexOf('/api/app/icon?') === 0 ? j.icon : fallback))
+    .catch(() => fallback);
+}
+
+function notificationOptions(data, icon) {
+  return {
     body: data.body || '',
-    icon: '/icons/icon-192.png',
+    icon,
     badge: '/icons/icon-192.png',
     // Same tag collapses repeats — five gate changes are one row, not five.
     tag: data.tag || 'luna-travel',
@@ -45,9 +69,7 @@ self.addEventListener('push', (event) => {
     vibrate: data.urgent ? [200, 100, 200] : undefined,
     data: { url: data.url || '/' },
   };
-
-  event.waitUntil(self.registration.showNotification(title, options));
-});
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

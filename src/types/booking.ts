@@ -182,6 +182,8 @@ export interface Agency {
   welcomeMessage?: string;
   /** What the in-app assistant is called. Absent means "Luna". */
   assistantName?: string;
+  /** The agency's own home-screen icon. Absent means one is drawn. */
+  iconUrl?: string;
   /**
    * When the agency is open, and what they promise. Set by the agency in the
    * portal, not held on the Control record.

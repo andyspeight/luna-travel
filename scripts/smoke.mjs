@@ -735,6 +735,36 @@ async function main() {
   }
   await idCtx.close();
 
+  // ── The storyboard shows the trip, not the country ──
+  //
+  // Every day of a Rome break was the same photo of the Amalfi coast (23 Sep
+  // 2026). A day at a hotel now shows the place itself. The photos are served
+  // locally here, because the sandbox cannot reach storage.
+  const sbCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await sbCtx.route('**/storage/v1/object/public/**', (r) =>
+    r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#0e7490"/></svg>' }),
+  );
+  const sb = await sbCtx.newPage();
+  sb.on('pageerror', (e) => jsErrors.push(`storyboard: ${e.message}`));
+  await sb.goto(`${BASE}/?demo=DEMO52188`, { waitUntil: 'domcontentloaded' });
+  await sb.waitForTimeout(2000);
+  await sb.goto(`${BASE}/itinerary`, { waitUntil: 'domcontentloaded' });
+  await sb.getByRole('tab', { name: /Storyboard/ }).click();
+  await sb.waitForTimeout(2500);
+  const shown = await sb.$$eval('article', (days) =>
+    days.map((d) => ({
+      text: (d.textContent || '').replace(/\s+/g, ' '),
+      photo: d.querySelector('[data-hero-photo]')?.getAttribute('data-hero-photo') || '',
+    })),
+  );
+  const atHotel = shown.filter((d) => /Athens/.test(d.text) && !/Travel day/.test(d.text));
+  check(
+    'the storyboard shows the place each day, not the country',
+    atHotel.length >= 3 && atHotel.every((d) => /\/GR\/athens\//.test(d.photo)),
+    atHotel.map((d) => d.photo.split('destination-heroes/')[1] || 'none').join(' '),
+  );
+  await sbCtx.close();
+
   // ── Getting hold of a human ──
   //
   // The review's sixth point. Support was reachable only if you knew to look

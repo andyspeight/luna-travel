@@ -20,6 +20,8 @@
  * Neither configured → { ok: false }, and the caller falls back to the handoff.
  */
 
+import { DEFAULT_ASSISTANT, isAssistantName } from '@/lib/app-name';
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
 /**
@@ -110,7 +112,14 @@ export function lunaAiStatus(): LunaAiStatus {
   };
 }
 
-const SYSTEM = `You are Luna, a travel concierge inside a holiday app. You are answering one traveller about one trip they have already booked and paid for.
+/**
+ * The instructions, with the assistant's name in them: an agency that calls it
+ * Nova should not have it introduce itself as Luna. The name is re-checked
+ * here, because this is the one place it reaches the model.
+ */
+export function systemPrompt(assistant: string = DEFAULT_ASSISTANT): string {
+  const name = isAssistantName(assistant) ? assistant.trim() : DEFAULT_ASSISTANT;
+  return `You are ${name}, a travel concierge inside a holiday app. You are answering one traveller about one trip they have already booked and paid for.
 
 THE CONTEXT BELOW IS YOUR ONLY SOURCE. It contains their booking, the destination content the agency publishes, and verified country facts. Answer from it and from nothing else.
 
@@ -126,6 +135,7 @@ Rules, in order of importance:
 Style: British English. Warm, brief, specific. Two or three short paragraphs at most, usually one. No bullet lists unless you are genuinely listing things. No emoji. Do not open with "Certainly" or "Great question". Write as a knowledgeable person who has read their file, not as a brochure.
 
 If the traveller asks something that needs a human — changing the booking, a complaint, anything about money — answer what you can from the context and say their agent handles the rest.`;
+}
 
 export interface AiReply {
   ok: boolean;
@@ -142,7 +152,7 @@ interface AnthropicResponse {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-async function viaAnthropic(question: string, context: string): Promise<AiReply> {
+async function viaAnthropic(question: string, context: string, system: string): Promise<AiReply> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { ok: false };
 
@@ -156,7 +166,7 @@ async function viaAnthropic(question: string, context: string): Promise<AiReply>
     body: JSON.stringify({
       model: process.env.LUNA_CHAT_MODEL || DEFAULT_MODEL,
       max_tokens: 700,
-      system: SYSTEM,
+      system,
       messages: [
         {
           role: 'user',
@@ -198,7 +208,7 @@ async function viaAnthropic(question: string, context: string): Promise<AiReply>
   };
 }
 
-async function viaLunaChat(question: string, context: string): Promise<AiReply> {
+async function viaLunaChat(question: string, context: string, system: string): Promise<AiReply> {
   const url = process.env.LUNA_CHAT_URL;
   const key = process.env.TG_INTERNAL_KEY;
   if (!url || !key) return { ok: false };
@@ -206,7 +216,7 @@ async function viaLunaChat(question: string, context: string): Promise<AiReply> 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-tg-internal-key': key },
-    body: JSON.stringify({ system: SYSTEM, context, question, maxTokens: 700 }),
+    body: JSON.stringify({ system, context, question, maxTokens: 700 }),
     cache: 'no-store',
     signal: AbortSignal.timeout(20_000),
   });
@@ -227,17 +237,18 @@ async function viaLunaChat(question: string, context: string): Promise<AiReply> 
  * the agent. A traveller should never see a stack trace or a shrug that sounds
  * like a bug.
  */
-export async function askLuna(question: string, context: string): Promise<AiReply> {
+export async function askLuna(question: string, context: string, assistant?: string): Promise<AiReply> {
   if (!question.trim() || !context.trim()) return { ok: false };
+  const system = systemPrompt(assistant);
 
   try {
     if (process.env.LUNA_CHAT_URL) {
-      const viaService = await viaLunaChat(question, context);
+      const viaService = await viaLunaChat(question, context, system);
       if (viaService.ok) return viaService;
       // Fall through to Anthropic rather than failing: the point of two
       // backends is that one of them being down is survivable.
     }
-    return await viaAnthropic(question, context);
+    return await viaAnthropic(question, context, system);
   } catch (e) {
     console.error('[luna-ai] threw', e instanceof Error ? e.message : e);
     return { ok: false };

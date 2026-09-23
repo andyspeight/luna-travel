@@ -640,6 +640,27 @@ async function main() {
   );
   await revealCtx.close();
 
+  // ── The agency's name, not ours ──
+  //
+  // A Control agency that had set no separate app name got "Luna Travel" and
+  // an "L" on the very first screen its traveller saw (23 Sep 2026). The link
+  // now carries the agency's own name.
+  const nameCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const np = await nameCtx.newPage();
+  np.on('pageerror', (e) => jsErrors.push(`install name: ${e.message}`));
+  await np.route('**/api/invites/name-audit', (r) =>
+    r.fulfill({ json: { status: 'pending', prefill: { bookingRef: null }, branding: { agencyName: 'Sunseekers Travel' } } }),
+  );
+  await np.goto(`${BASE}/install?invite=name-audit`, { waitUntil: 'domcontentloaded' });
+  await np.waitForSelector('input[type="email"]');
+  const gateHeader = ((await np.textContent('header')) || '').replace(/\s+/g, ' ').trim();
+  check(
+    "the install screen wears the agency's name and initial, not Luna Travel",
+    /^S\s?Sunseekers Travel/.test(gateHeader) && !/Luna/.test(gateHeader),
+    gateHeader.slice(0, 80),
+  );
+  await nameCtx.close();
+
   // ── Getting hold of a human ──
   //
   // The review's sixth point. Support was reachable only if you knew to look

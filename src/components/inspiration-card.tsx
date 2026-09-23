@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { Agency } from '@/types/booking';
+import { assistantOf } from '@/lib/app-name';
 import type { Inspiration } from '@/data/inspirations';
 import { heroImageUrl } from '@/lib/hero';
 import { useI18n } from '@/lib/locale-context';
@@ -248,7 +249,7 @@ export function EnquirySheet({
             onClick={onClose}
           >
             <IconChat size={18} />
-            <span>{t('next.askLuna')}</span>
+            <span>{t('next.askLuna', { assistant: assistantOf(agency) })}</span>
           </Link>
           {agency.website && (
             <a

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { appNameOf, assistantOf } from '@/lib/app-name';
 import { NavBar } from '@/components/nav-bar';
 import { PageEnter } from '@/components/page-enter';
 import {
@@ -74,7 +75,7 @@ export default function NotificationsPage() {
     },
     {
       id: 'luna',
-      title: 'From Luna',
+      title: 'From Luna', // renamed at render, below, to the agency's assistant
       description: 'Trip tips, destination weather, packing nudges',
       enabled: true,
       icon: <IconChat size={18} />,
@@ -118,7 +119,11 @@ export default function NotificationsPage() {
           <section className="mt-4 rounded-2xl bg-surface border border-line-light overflow-hidden">
             <div className="divide-y divide-line-light">
               {prefs.map((p) => (
-                <PrefRow key={p.id} pref={p} onToggle={() => toggle(p.id)} />
+                <PrefRow
+                  key={p.id}
+                  pref={p.id === 'luna' ? { ...p, title: `From ${assistantOf(booking.agency)}` } : p}
+                  onToggle={() => toggle(p.id)}
+                />
               ))}
             </div>
           </section>
@@ -139,7 +144,7 @@ export default function NotificationsPage() {
           <ul className="space-y-2.5">
             {samples.map((s) => (
               <li key={s.id}>
-                <PushPreview push={s} />
+                <PushPreview push={s} appName={appNameOf(booking.agency)} />
               </li>
             ))}
           </ul>
@@ -421,7 +426,7 @@ function PrefRow({
  * Faithful iOS-style notification preview — looks the same as a real lock-screen
  * push, so the demo doesn't need any imagination.
  */
-function PushPreview({ push }: { push: SamplePush }) {
+function PushPreview({ push, appName }: { push: SamplePush; appName: string }) {
   return (
     <div className="rounded-2xl px-3.5 py-3 bg-surface border border-line-light shadow-sm">
       <div className="flex items-center gap-2 mb-1">
@@ -430,7 +435,7 @@ function PushPreview({ push }: { push: SamplePush }) {
           className="w-5 h-5 rounded-md bg-gradient-to-br from-navy to-teal flex-shrink-0"
         />
         <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-2">
-          Luna Travel
+          {appName || 'Your trip'}
         </span>
         <span className="ml-auto text-[10px] text-ink-3">{push.when}</span>
       </div>

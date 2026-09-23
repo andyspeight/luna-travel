@@ -15,6 +15,7 @@
  */
 
 import { useBooking } from '@/lib/booking-context';
+import { assistantOf } from '@/lib/app-name';
 import { NavBar } from '@/components/nav-bar';
 import { PageEnter } from '@/components/page-enter';
 import { SupportCard } from '@/components/support-card';
@@ -50,7 +51,7 @@ export default function HelpPage() {
             <IconChat size={17} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[14px] font-medium text-ink">Ask Luna</span>
+            <span className="block text-[14px] font-medium text-ink">Ask {assistantOf(booking.agency)}</span>
             <span className="block text-[12px] text-ink-2">
               Instant, and reads your booking — but it is not your travel agent
             </span>

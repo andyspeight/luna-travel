@@ -130,6 +130,7 @@ export interface AgencyMe {
     brandPrimaryColour?: string;
     brandAccentColour?: string;
     welcomeMessage?: string;
+    assistantName?: string;
   };
   settings?: {
     /** Where traveller replies are emailed. Absent means "work it out". */

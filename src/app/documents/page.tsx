@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { appNameOf } from '@/lib/app-name';
 import { warmCache, summarise, cacheSupported } from '@/lib/offline-docs';
 import { IMAGE_EXTS, extOf } from '@/lib/document-type';
 import { PageEnter } from '@/components/page-enter';
@@ -406,6 +407,7 @@ export default function DocumentsPage() {
  * Click outside, Escape, or the X button to close.
  */
 function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
+  const { booking } = useBooking();
   const [shareToast, setShareToast] = useState<string | null>(null);
   const canPreview = !!doc.previewUrl && doc.previewUrl !== '#';
   const isImage = IMAGE_EXTS.has(doc.ext);
@@ -455,7 +457,7 @@ function DocSheet({ doc, onClose }: { doc: DisplayDoc; onClose: () => void }) {
       try {
         await navigator.share({
           title: doc.name,
-          text: `${doc.name} — sent from Luna Travel`,
+          text: appNameOf(booking.agency) ? `${doc.name}, from ${appNameOf(booking.agency)}` : doc.name,
           url: absoluteUrl,
         });
         return;

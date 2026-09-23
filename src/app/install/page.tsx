@@ -3,7 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageEnter } from '@/components/page-enter';
-import { IconShare, IconSparkle } from '@/components/icons';
+import { IconShare, IconSparkle, IconPlane } from '@/components/icons';
+import { appNameOf, initialOf } from '@/lib/app-name';
 import { useBooking } from '@/lib/booking-context';
 import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
 import { cinematicCover } from '@/lib/hero';
@@ -143,6 +144,8 @@ function Step({ n, label, icon }: { n: number; label: string; icon?: React.React
 /** The agency's own branding, so the traveller sees their agent, not us. */
 type Branding = {
   appName?: string;
+  /** The agency's own name, for when it has not named its app. */
+  agencyName?: string;
   logoUrl?: string;
   brandPrimaryColour?: string;
   brandAccentColour?: string;
@@ -173,12 +176,13 @@ type Trip = {
 };
 
 /**
- * Agency wordmark. Falls back to the Luna mark when an agency has set no
- * branding, so a blank App branding screen never leaves a traveller looking at
- * an unbranded box.
+ * Agency wordmark: the logo, or the app's first letter in the brand colour,
+ * beside the app's name (the agency's own name when it has not set one).
+ * Nothing to name at all, which is only a link sent before names were saved on
+ * it, shows a plane and no name: never ours.
  */
 function AgencyMark({ branding, size = 'md' }: { branding?: Branding; size?: 'sm' | 'md' }) {
-  const name = branding?.appName?.trim() || 'Luna Travel';
+  const name = appNameOf({ appName: branding?.appName, name: branding?.agencyName });
   const logo = branding?.logoUrl?.trim();
   const box = size === 'sm' ? 'w-8 h-8 rounded-lg text-xs' : 'w-9 h-9 rounded-xl text-sm';
   const label = size === 'sm' ? 'text-sm text-white/90' : 'text-base';
@@ -192,10 +196,10 @@ function AgencyMark({ branding, size = 'md' }: { branding?: Branding; size?: 'sm
           className={`${box} bg-gradient-to-br from-navy to-teal-dark text-white font-bold flex items-center justify-center shadow-md flex-shrink-0`}
           style={branding?.brandPrimaryColour ? { background: branding.brandPrimaryColour } : undefined}
         >
-          {name.charAt(0).toUpperCase()}
+          {initialOf(name) || <IconPlane size={size === 'sm' ? 14 : 16} />}
         </span>
       )}
-      <span className={`${label} font-semibold tracking-tight`}>{name}</span>
+      {name && <span className={`${label} font-semibold tracking-tight`}>{name}</span>}
     </>
   );
 }

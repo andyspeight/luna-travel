@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { Agency } from '@/types/booking';
+import { appNameOf, initialOf } from '@/lib/app-name';
+import { IconPlane } from '@/components/icons';
 
 /**
  * Agency logo chip with a graceful fallback.
@@ -21,7 +23,7 @@ export function AgencyLogo({
   className?: string;
 }) {
   const [broken, setBroken] = useState(false);
-  const label = agency.appName || agency.name || 'Luna Travel';
+  const label = appNameOf(agency);
   const radius = Math.round(size * 0.28);
 
   if (agency.logoUrl && !broken) {
@@ -43,7 +45,7 @@ export function AgencyLogo({
       className={`bg-gradient-to-br from-navy to-teal text-white font-bold flex items-center justify-center shadow-sm ${className}`}
       style={{ width: size, height: size, borderRadius: radius, fontSize: Math.round(size * 0.42) }}
     >
-      {label.charAt(0).toUpperCase()}
+      {initialOf(label) || <IconPlane size={Math.round(size * 0.45)} />}
     </div>
   );
 }

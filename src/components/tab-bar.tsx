@@ -6,6 +6,7 @@ import { useCover } from '@/lib/cover-context';
 import { useBooking } from '@/lib/booking-context';
 import { useI18n } from '@/lib/locale-context';
 import { useAgentMessages } from '@/lib/use-agent-messages';
+import { assistantOf } from '@/lib/app-name';
 import { IconHome, IconCalendar, IconDoc, IconChat, IconUser } from './icons';
 
 const TABS = [
@@ -19,7 +20,8 @@ const TABS = [
 export function TabBar() {
   const pathname = usePathname();
   const { coverEnabled, coverDismissed } = useCover();
-  const { onboarding } = useBooking();
+  const { onboarding, booking } = useBooking();
+  const assistant = assistantOf(booking.agency);
   const { t } = useI18n();
   const { unreadCount } = useAgentMessages();
 
@@ -78,7 +80,7 @@ export function TabBar() {
                     </span>
                   )}
                 </span>
-                <span className="text-[10px] font-medium tracking-wide">{t(key)}</span>
+                <span className="text-[10px] font-medium tracking-wide">{t(key, { assistant })}</span>
               </Link>
             </li>
           );

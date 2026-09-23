@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { BookingPicker } from '@/components/booking-picker';
 import { AgencyLogo } from '@/components/agency-logo';
+import { appNameOf, assistantOf } from '@/lib/app-name';
 import { OnboardingHome } from '@/components/onboarding-home';
 import { SectionHeading } from '@/components/section-heading';
 import { GuideLinks } from '@/components/guide-links';
@@ -186,7 +187,7 @@ export default function HomePage() {
   tiles.push({ href: '/itinerary', icon: <IconCalendar size={18} />, label: t('tile.plan') });
   tiles.push({ href: '/map', icon: <IconMap size={18} />, label: t('tile.map') });
   tiles.push({ href: '/documents', icon: <IconDoc size={18} />, label: t('tile.docs') });
-  tiles.push({ href: '/luna', icon: <IconChat size={18} />, label: t('tile.luna') });
+  tiles.push({ href: '/luna', icon: <IconChat size={18} />, label: t('tile.luna', { assistant: assistantOf(booking.agency) }) });
 
   // A guide card that leads to "coming soon" is worse than no card, so the link
   // waits until we know there is something behind it — either a place record or
@@ -239,14 +240,14 @@ export default function HomePage() {
             <AgencyLogo agency={booking.agency} size={36} />
             <div className="text-left">
               <div className="text-sm font-semibold text-ink leading-none">
-                {booking.agency.appName || 'Luna Travel'}
+                {appNameOf(booking.agency)}
               </div>
               {/* The company name only when it adds something. An agency whose
                   app is simply called by its own name printed it twice, one
                   above the other. */}
               {booking.agency.name &&
                 booking.agency.name.trim().toLowerCase() !==
-                  (booking.agency.appName || 'Luna Travel').trim().toLowerCase() && (
+                  appNameOf(booking.agency).toLowerCase() && (
                   <div className="text-[11px] text-ink-3 leading-none mt-1">
                     {booking.agency.name}
                   </div>

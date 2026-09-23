@@ -9,6 +9,7 @@ import { LanguageSetting } from '@/components/language-switcher';
 import { useCover } from '@/lib/cover-context';
 import { PageEnter } from '@/components/page-enter';
 import { AgencyLogo } from '@/components/agency-logo';
+import { appNameOf, assistantOf } from '@/lib/app-name';
 import {
   IconSun,
   IconMoon,
@@ -178,7 +179,7 @@ export default function MePage() {
             href="/help"
             icon={<IconHelp size={18} />}
             title={t('me.help')}
-            sub={t('me.helpSub')}
+            sub={t('me.helpSub', { assistant: assistantOf(booking.agency) })}
           />
         </List>
 
@@ -193,7 +194,9 @@ export default function MePage() {
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
-          {booking.agency.appName || 'Luna Travel'} · v{APP_VERSION} · {booking.agency.name}
+          {[appNameOf(booking.agency), `v${APP_VERSION}`, booking.agency.name !== appNameOf(booking.agency) ? booking.agency.name : '']
+            .filter(Boolean)
+            .join(' · ')}
         </p>
       </main>
     </PageEnter>

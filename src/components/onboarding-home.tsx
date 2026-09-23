@@ -15,15 +15,15 @@ export function OnboardingHome() {
     <PageEnter>
       <main className="min-h-[100dvh] flex flex-col px-6 pt-12 pb-10">
         <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-navy to-teal text-white font-bold text-2xl flex items-center justify-center shadow-lg mb-6">
-            L
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-navy to-teal-dark text-white flex items-center justify-center shadow-lg mb-6">
+            <IconPlane size={28} />
           </div>
 
           <h1 className="font-serif text-[36px] leading-[1.1] text-ink">
             Your trip, <em className="not-italic italic text-teal-dark dark:text-teal-light">in your pocket</em>.
           </h1>
           <p className="text-sm text-ink-2 mt-3 leading-relaxed">
-            Luna Travel keeps everything about your holiday in one place — flights and
+            This app keeps everything about your holiday in one place — flights and
             live status, hotels, documents, a destination guide, and a direct line to
             your travel agent.
           </p>

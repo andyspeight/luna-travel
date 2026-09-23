@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/jwt';
 import { askLuna, isRefusal, lunaAiConfigured } from '@/lib/luna-ai';
+import { getBrandingOverride } from '@/lib/agency-branding';
 import { forbiddenStrings } from '@/lib/luna-context';
 import type { Booking } from '@/types/booking';
 
@@ -104,7 +105,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const reply = await askLuna(question, context);
+  // The name the agency gave its assistant, from our own store rather than the
+  // phone: it goes into the model's instructions.
+  const assistant = claims?.agencyId ? (await getBrandingOverride(claims.agencyId)).assistantName : undefined;
+  const reply = await askLuna(question, context, assistant);
   if (!reply.ok || isRefusal(reply.text)) {
     return NextResponse.json({ ok: false, reason: 'no_answer' });
   }

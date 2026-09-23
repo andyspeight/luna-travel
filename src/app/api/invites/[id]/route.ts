@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { getBrandingOverride } from '@/lib/agency-branding';
+import { getLunaAgency } from '@/lib/agencies';
 
 function notFound() {
   return NextResponse.json({ error: 'not_found' }, { status: 404 });
@@ -43,7 +44,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 
   const { data: invite, error } = await supabase
     .from('invites')
-    .select('id, agency_id, status, expires_at, booking_ref')
+    .select('id, agency_id, agency_name, status, expires_at, booking_ref')
     .eq('id', inviteId)
     .single();
 
@@ -64,11 +65,21 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   // agency id is already in this response, and the branding is what the app
   // shows anyone holding the link. Trip details stay behind the knowledge
   // check — see the prefill note below.
+  //
+  // The agency's name comes with it, for the app's name and the letter on its
+  // badge when the agency has set no app name of its own. It was saved on the
+  // link when it was sent; a Luna-native agency's is in our own store. Without
+  // it the screen said "Luna Travel" to another agency's traveller.
   let branding: Record<string, string | undefined> = {};
   try {
-    const b = await getBrandingOverride(invite.agency_id as string);
+    const agencyId = invite.agency_id as string;
+    const [b, native] = await Promise.all([
+      getBrandingOverride(agencyId),
+      invite.agency_name ? Promise.resolve(null) : getLunaAgency(agencyId),
+    ]);
     branding = {
       appName: b.appName,
+      agencyName: (invite.agency_name as string | null) || native?.trading_name || native?.name || undefined,
       logoUrl: b.logoUrl,
       brandPrimaryColour: b.brandPrimaryColour,
       brandAccentColour: b.brandAccentColour,

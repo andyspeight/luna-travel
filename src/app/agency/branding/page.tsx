@@ -21,6 +21,7 @@ function BrandingForm() {
   const b = me.branding;
 
   const [appName, setAppName] = useState(b.appName ?? '');
+  const [assistant, setAssistant] = useState(b.assistantName ?? '');
   const [primary, setPrimary] = useState(b.brandPrimaryColour ?? DEFAULT_PRIMARY);
   const [accent, setAccent] = useState(b.brandAccentColour ?? DEFAULT_ACCENT);
   const [welcome, setWelcome] = useState(b.welcomeMessage ?? '');
@@ -37,6 +38,7 @@ function BrandingForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           appName: appName.trim() || undefined,
+          assistantName: assistant.trim() || undefined,
           brandPrimaryColour: primary,
           brandAccentColour: accent,
           welcomeMessage: welcome.trim() || undefined,
@@ -69,7 +71,7 @@ function BrandingForm() {
 
       <div style={{ marginTop: 16 }}>
         <Callout title="Make it unmistakably yours">
-          Set your app name, pick two brand colours, add a warm welcome message and upload your logo. Watch
+          Name your app and its assistant, pick two brand colours, add a warm welcome message and upload your logo. Watch
           the phone re-skin as you type — then hit <strong>Save branding</strong>. It goes live for
           every traveller instantly.
         </Callout>
@@ -83,8 +85,12 @@ function BrandingForm() {
 
         {/* Form */}
         <div style={{ flex: '2 1 320px', minWidth: 300, display: 'grid', gap: 18 }}>
-          <Field label="App name" hint="Shown in the app header. Defaults to your agency name.">
+          <Field label="App name" hint="Shown in the app header, and its first letter is your badge when there is no logo. Defaults to your agency name.">
             <input value={appName} onChange={(e) => setAppName(e.target.value)} maxLength={60} placeholder={me.agency.name} style={inputStyle} />
+          </Field>
+
+          <Field label="Assistant name" hint="What travellers call the assistant that answers their questions, as in “Ask Luna”. Leave it empty to keep Luna.">
+            <input value={assistant} onChange={(e) => setAssistant(e.target.value)} maxLength={30} placeholder="Luna" style={inputStyle} />
           </Field>
 
           <div style={{ display: 'flex', gap: 14 }}>
@@ -232,6 +238,8 @@ function ImageUpload({
 function prettyError(code?: string): string {
   switch (code) {
     case 'appName_too_long': return 'App name is too long (max 60 characters).';
+    case 'assistantName_too_long': return 'Assistant name is too long (max 30 characters).';
+    case 'assistantName_invalid': return 'Use letters, numbers and spaces for the assistant name.';
     case 'welcomeMessage_too_long': return 'Welcome message is too long (max 240 characters).';
     case 'invalid_logo_url': return 'That logo could not be used. Please upload it again.';
     case 'agency_inactive': return 'This agency is no longer active — contact Luna Travel.';

@@ -112,7 +112,7 @@ function InstallSheet({ onClose, children }: { onClose: () => void; children: Re
       className="fixed inset-0 z-50 flex items-end justify-center"
       role="dialog"
       aria-modal="true"
-      aria-label="Add Luna Travel to your home screen"
+      aria-label="Add this app to your home screen"
       onClick={onClose}
     >
       <div
@@ -145,8 +145,8 @@ function InstallSheet({ onClose, children }: { onClose: () => void; children: Re
         </div>
 
         <p className="text-[14px] text-navy/65 leading-relaxed mb-5">
-          Add Luna Travel to your home screen and it opens like an app, with
-          your trip, your documents and your agent always to hand.
+          Add it to your home screen and it opens like an app, with your
+          trip, your documents and your agent always to hand.
         </p>
 
         {children}

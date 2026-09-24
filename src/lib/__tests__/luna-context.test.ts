@@ -222,3 +222,13 @@ describe('a thin booking', () => {
     expect(thin).not.toContain('Highlights');
   });
 });
+
+// The traveller's app is the agency's. The model repeats headings back, so a
+// product name in one is a product name in an answer (23 Sep 2026).
+describe('what the model is told its sources are', () => {
+  it('never names Luna Brain', () => {
+    expect(ctx).toContain('VERIFIED COUNTRY FACTS');
+    expect(ctx).toContain('VERIFIED ANSWERS');
+    expect(ctx).not.toMatch(/Luna Brain/i);
+  });
+});

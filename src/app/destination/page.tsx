@@ -845,10 +845,13 @@ function ForYourDates({
       {fyd && fyd.events.length > 0 && <BrainSection title="What's on" answers={fyd.events} />}
       {fyd && fyd.thingsToDo.length > 0 && <BrainSection title="Things to do" answers={fyd.thingsToDo} />}
 
+      {/* No product name here: the app is the agency's, and "Luna Brain"
+          meant nothing to a traveller anyway (23 Sep 2026). What it tells
+          them is the useful part: where it comes from and how fresh it is. */}
       <p className="text-[11px] text-ink-3 italic mt-4">
         Weather and public holidays are drawn live and cross-checked across two
-        independent sources; destination knowledge comes from Luna Brain, refreshed
-        daily.
+        independent sources. Destination knowledge is refreshed daily, with its
+        source and the date it was last checked shown where known.
       </p>
     </>
   );
@@ -954,7 +957,7 @@ function BrainSection({ title, answers }: { title: string; answers: BrainAnswer[
       <h3 className="text-base font-semibold text-ink mb-2 inline-flex items-center gap-2">
         {title}
         <span className="text-[10px] uppercase tracking-wider font-semibold text-teal-dark dark:text-teal-light bg-teal/10 px-1.5 py-0.5 rounded">
-          Luna Brain
+          Verified
         </span>
       </h3>
       <div className="space-y-2">
@@ -1018,7 +1021,7 @@ function Provenance({
 function VerifiedChip({ lastVerified }: { lastVerified?: string }) {
   return (
     <p className="text-[10px] text-ink-3 mt-3">
-      Verified facts from Luna Brain{lastVerified ? ` · updated ${fmtDate(lastVerified)}` : ''}
+      Verified facts{lastVerified ? ` · updated ${fmtDate(lastVerified)}` : ''}
     </p>
   );
 }

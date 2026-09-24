@@ -8,6 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { inviteUsable } from '@/lib/invite-status';
 import { getSupabaseAdmin, checkSupabaseEnv } from '@/lib/supabase';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
@@ -70,6 +71,8 @@ export async function GET(req: NextRequest) {
       firstViewedAt: r.first_viewed_at,
       redeemedAt: r.redeemed_at,
       expiresAt: r.expires_at,
+      // Whether the link still opens the trip, whatever the pill says.
+      usable: inviteUsable(r.status, r.expires_at, now),
       createdAt: r.created_at,
       qrUrl: travellerUrl(`/install?invite=${r.id}`, req.nextUrl.origin),
     };

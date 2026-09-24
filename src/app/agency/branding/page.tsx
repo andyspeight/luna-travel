@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { Check } from 'lucide-react';
-import { upload } from '@vercel/blob/client';
+import { uploadBrandImage, UploadRefused } from '@/lib/brand-upload-client';
 import { brandPath, BRAND_IMAGE_TYPES, BRAND_IMAGE_MAX_BYTES, type BrandImageKind } from '@/lib/brand-upload';
 import { ICON_IMAGE_TYPES, iconSpecFor, iconUrl } from '@/lib/app-icon';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, primaryBtn } from '../portal-chrome';
@@ -190,15 +190,24 @@ function ImageUpload({
     setBusy(true);
     setNote(null);
     try {
-      const blob = await upload(brandPath(kind, agencyId, file.name), file, {
-        access: 'public',
-        contentType: file.type,
-        handleUploadUrl: '/api/agency/upload-image',
-      });
-      onChange(blob.url);
+      const url = await uploadBrandImage(brandPath(kind, agencyId, file.name), file);
+      onChange(url);
       setNote({ ok: true, text: 'Uploaded. Press Save branding to put it live.' });
-    } catch {
-      setNote({ ok: false, text: 'The upload did not go through. Please try again.' });
+    } catch (e) {
+      // Say which kind of failure it was: "try again" is no help when trying
+      // again cannot work.
+      const code = e instanceof UploadRefused ? e.code : '';
+      setNote({
+        ok: false,
+        text:
+          code === 'unauthorised' || code === '401'
+            ? 'Your session has ended. Sign in again, then upload.'
+            : code === 'upload_refused'
+              ? 'That upload was refused. If you are acting for another agency, check the banner still shows their name, then try again.'
+              : code === 'storage_not_configured'
+                ? 'Uploads are not switched on yet. Contact Luna Travel support.'
+                : 'The upload did not go through. Please try again.',
+      });
     } finally {
       setBusy(false);
     }

@@ -191,7 +191,9 @@ function destinationBlock(place: PlaceView | null | undefined, booking: Booking)
 
 function brainBlock(brain: BrainFacts | null | undefined): string {
   if (!brain) return '';
-  let out = '\n## VERIFIED COUNTRY FACTS (Luna Brain)\n';
+  // No product name in the heading: the model quotes headings back, and the
+  // traveller's app is the agency's, not "Luna Brain".
+  let out = '\n## VERIFIED COUNTRY FACTS\n';
   out += line('Currency', brain.currency);
   out += line('Languages', brain.languages);
   out += line('Time zone', brain.timeZone);
@@ -206,12 +208,12 @@ function brainBlock(brain: BrainFacts | null | undefined): string {
   out += line('British embassy', brain.ukEmbassy);
   out += line('Best months', brain.bestMonths);
   out += line('Last verified', brain.lastVerified);
-  return out.trim() === '## VERIFIED COUNTRY FACTS (Luna Brain)' ? '' : out;
+  return out.trim() === '## VERIFIED COUNTRY FACTS' ? '' : out;
 }
 
 function knowledgeBlock(items: KnowledgeItem[] | undefined): string {
   if (!items?.length) return '';
-  let out = '\n## VERIFIED ANSWERS (Luna Brain knowledge base)\n';
+  let out = '\n## VERIFIED ANSWERS (destination knowledge base)\n';
   for (const item of items.slice(0, 6)) {
     out += `\n### ${item.question}\n${trim(item.answer, 900)}\n`;
     if (item.lastVerified) out += `(checked ${item.lastVerified})\n`;

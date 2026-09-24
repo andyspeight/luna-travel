@@ -1,0 +1,202 @@
+{
+  "booking": {
+    "reference": "LIVE-SMOKE1",
+    "travelifyOrderId": "79188",
+    "status": "confirmed",
+    "leadEmail": "nia.okafor@example.com",
+    "destinationLabel": "Mallorca",
+    "primaryCountryCode": "ES",
+    "tripStart": "2026-07-22T06:15:00.000Z",
+    "tripEnd": "2026-08-01T22:40:00.000Z",
+    "tripStartEvent": "flight",
+    "durationLabel": "10 days · 10 nights",
+    "travellers": [
+      {
+        "id": "t1",
+        "title": "Mrs",
+        "firstName": "Nia",
+        "lastName": "Okafor",
+        "type": "adult",
+        "isLead": true,
+        "passportNationality": "GB"
+      },
+      {
+        "id": "t2",
+        "title": "Mr",
+        "firstName": "Tom",
+        "lastName": "Okafor",
+        "type": "adult",
+        "isLead": false,
+        "passportNationality": "GB"
+      },
+      {
+        "id": "t3",
+        "title": "Miss",
+        "firstName": "Ada",
+        "lastName": "Okafor",
+        "type": "child",
+        "age": 8,
+        "isLead": false,
+        "passportNationality": "GB"
+      },
+      {
+        "id": "t4",
+        "title": "Master",
+        "firstName": "Sam",
+        "lastName": "Okafor",
+        "type": "child",
+        "age": 6,
+        "isLead": false,
+        "passportNationality": "GB"
+      }
+    ],
+    "flights": [
+      {
+        "id": "f1",
+        "carrierCode": "LS",
+        "carrierName": "Jet2",
+        "flightNumber": "LS835",
+        "cabin": "Economy",
+        "depAirport": "BHX",
+        "depAirportName": "Birmingham",
+        "depCity": "Birmingham",
+        "depTime": "2026-07-22T06:15:00.000Z",
+        "arrAirport": "PMI",
+        "arrAirportName": "Palma de Mallorca",
+        "arrCity": "Palma",
+        "arrTime": "2026-07-22T10:05:00.000Z",
+        "durationMinutes": 170,
+        "aircraft": "B737-800",
+        "baggageAllowance": "22kg checked + 10kg cabin",
+        "pnr": "LSGH88",
+        "seats": {
+          "t1": "12C",
+          "t2": "12D",
+          "t3": "12E",
+          "t4": "12F"
+        }
+      },
+      {
+        "id": "f2",
+        "carrierCode": "LS",
+        "carrierName": "Jet2",
+        "flightNumber": "LS836",
+        "cabin": "Economy",
+        "depAirport": "PMI",
+        "depAirportName": "Palma de Mallorca",
+        "depCity": "Palma",
+        "depTime": "2026-08-01T19:20:00.000Z",
+        "arrAirport": "BHX",
+        "arrAirportName": "Birmingham",
+        "arrCity": "Birmingham",
+        "arrTime": "2026-08-01T22:40:00.000Z",
+        "durationMinutes": 175,
+        "aircraft": "B737-800",
+        "baggageAllowance": "22kg checked + 10kg cabin",
+        "pnr": "LSGH88"
+      }
+    ],
+    "hotels": [
+      {
+        "id": "h1",
+        "name": "Iberostar Selection Playa de Muro Village",
+        "stars": 4,
+        "resort": "Playa de Muro",
+        "city": "Alcúdia",
+        "region": "North Mallorca",
+        "country": "Spain",
+        "countryCode": "ES",
+        "lat": 39.7868,
+        "lng": 3.11,
+        "checkIn": "2026-07-22T15:00:00.000Z",
+        "checkOut": "2026-08-01T11:00:00.000Z",
+        "nights": 10,
+        "roomName": "Family Junior Suite Garden View",
+        "boardBasis": "AllInclusive",
+        "hotelReference": "IBE-PDM-552901",
+        "specialRequests": "Cot for Theo. Family room close to kids club preferred."
+      }
+    ],
+    "airportExtras": [
+      {
+        "id": "x1",
+        "type": "parking",
+        "name": "BHX Express Parking",
+        "airport": "BHX",
+        "date": "2026-07-22T04:00:00.000Z",
+        "notes": "10 days · Bay 14B"
+      },
+      {
+        "id": "x2",
+        "type": "fast-track",
+        "name": "Security Fast Track",
+        "airport": "BHX",
+        "date": "2026-07-22T04:30:00.000Z",
+        "guests": 4
+      }
+    ],
+    "documents": [
+      {
+        "id": "r1",
+        "name": "Your hotel voucher",
+        "kind": "voucher",
+        "url": "/documents/DEMO74002/hotel-voucher.pdf",
+        "sizeBytes": 305063,
+        "updatedAt": "2026-09-01T09:00:00.000Z"
+      }
+    ],
+    "payment": {
+      "currency": "GBP",
+      "total": 4180,
+      "deposit": 836,
+      "balance": 3344,
+      "balanceDueDate": "2026-06-08"
+    },
+    "agency": {
+      "name": "Smoke Test Travel",
+      "appName": "Smoke Test Travel",
+      "phone": "+44 121 555 8800",
+      "email": "hello@example.com",
+      "emergencyPhone": "+44 7700 900900",
+      "website": "travelgenix.io",
+      "atolNumber": "ATOL 12345",
+      "welcomeMessage": "We're delighted to have you travelling with us. Anything you need before or during your trip, your Smoke Test Travel team is one tap away.",
+      "supportHours": {
+        "timezone": "Europe/London",
+        "days": [
+          {
+            "day": 1,
+            "open": "09:00",
+            "close": "17:30"
+          },
+          {
+            "day": 2,
+            "open": "09:00",
+            "close": "17:30"
+          },
+          {
+            "day": 3,
+            "open": "09:00",
+            "close": "17:30"
+          },
+          {
+            "day": 4,
+            "open": "09:00",
+            "close": "17:30"
+          },
+          {
+            "day": 5,
+            "open": "09:00",
+            "close": "17:30"
+          },
+          {
+            "day": 6,
+            "open": "10:00",
+            "close": "14:00"
+          }
+        ]
+      },
+      "replyWithin": "within one working day"
+    }
+  }
+}

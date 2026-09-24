@@ -20,7 +20,7 @@ const TABS = [
 export function TabBar() {
   const pathname = usePathname();
   const { coverEnabled, coverDismissed } = useCover();
-  const { onboarding, booking } = useBooking();
+  const { onboarding, ready, booking } = useBooking();
   const assistant = assistantOf(booking.agency);
   const { t } = useI18n();
   const { unreadCount } = useAgentMessages();
@@ -43,8 +43,10 @@ export function TabBar() {
     return null;
   }
 
-  // First-run / un-onboarded visitor: no trip yet, so no trip navigation.
-  if (onboarding) return null;
+  // First-run / un-onboarded visitor: no trip yet, so no trip navigation. Nor
+  // while the trip is still loading: until then the booking is the built-in
+  // sample, and its agency's assistant is not this traveller's.
+  if (onboarding || !ready) return null;
 
   return (
     <nav

@@ -21,6 +21,7 @@
  * Lists will be empty (they need the database) so this checks screens render,
  * not that they render data.
  */
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { SignJWT } from 'jose';
 import { audit, describeFailures, measurePage, openReveal } from './accessibility.mjs';
@@ -471,6 +472,63 @@ async function main() {
     /DEMO52188/.test(withLive) && !/LIVE-0001/.test(withLive),
   );
   await lp.close();
+
+  // ── Nobody else's booking, ever ──
+  //
+  // Until the check for the real booking comes back, the provider holds the
+  // built-in sample (the Swan family's Maldives trip). The home screen waited
+  // for that check and nothing else did: on every refresh, for as long as the
+  // Travelify lookup took, Documents listed the sample's tickets and let a
+  // real traveller download them, and every other screen showed its family.
+  //
+  // The real booking is held back here the way a slow lookup holds it, and
+  // each screen is read while it waits and again once it has arrived.
+  const SAMPLE = /Swan|Etihad|Avyanna|DEMO81297/;
+  const liveFixture = readFileSync(new URL('./fixtures/live-booking.json', import.meta.url), 'utf8');
+  async function whileLoading(screen, answer) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await ctx.route('**/api/traveller/booking*', async (route) => {
+      await new Promise((r) => setTimeout(r, 2500));
+      await route.fulfill(answer);
+    });
+    await ctx.route('**/api/traveller/documents*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ documents: [] }) }),
+    );
+    const page = await ctx.newPage();
+    page.on('pageerror', (e) => {
+      // A browser with the service worker still installing reports this from
+      // the PWA registration script, not from anything under test.
+      if (!/reading 'waiting'/.test(e.message)) jsErrors.push(`gate ${screen}: ${e.message}`);
+    });
+    await page.goto(`${BASE}${screen}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    const early = (await page.textContent('body').catch(() => '')) || '';
+    await page.waitForTimeout(3500);
+    const late = (await page.textContent('body').catch(() => '')) || '';
+    const picker = await page.locator('[aria-label="Open demo controls (long press)"]').count();
+    await ctx.close();
+    return { early, late, picker };
+  }
+
+  const live = { status: 200, contentType: 'application/json', body: liveFixture };
+  for (const screen of ['/documents', '/itinerary', '/travellers', '/me', '/help']) {
+    const r = await whileLoading(screen, live);
+    check(`${screen}: nothing of the sample while the real booking loads`, !SAMPLE.test(r.early), (r.early.match(SAMPLE) || [''])[0]);
+    check(`${screen}: then the traveller's own booking, and only theirs`, !SAMPLE.test(r.late) && /Okafor|Your hotel voucher|Smoke Test Travel|LIVE-SMOKE1/.test(r.late));
+  }
+
+  // With no booking at all, a screen other than home used to fall back to the
+  // sample trip. It gets the way in instead, as the home screen always has.
+  const none = await whileLoading('/documents', { status: 204, body: '' });
+  check('no booking: no sample documents', !SAMPLE.test(none.early) && !SAMPLE.test(none.late));
+  check('no booking: the way in instead', /in your pocket/i.test(none.late));
+
+  // The hidden demo picker listed the sample bookings, names and all, and one
+  // tap swapped a real traveller's trip for one of them.
+  const home = await whileLoading('/', live);
+  check('a real traveller has no demo picker', home.picker === 0 && /Smoke Test Travel|Okafor/.test(home.late));
+  const demoHome = await whileLoading('/?demo=DEMO52188', { status: 204, body: '' });
+  check('a demo still has it', demoHome.picker === 1);
 
   // ── Documents, with the network off ──
   //

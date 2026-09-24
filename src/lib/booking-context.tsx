@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, Re
 import type { Booking } from '@/types/booking';
 import { BOOKINGS, getDefaultBooking } from '@/data/mock-bookings';
 import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
+import { bookingReady } from '@/lib/booking-gate';
 
 const STORAGE_KEY = 'luna-travel.activeBookingRef';
 
@@ -35,6 +36,12 @@ interface BookingContextValue {
   onboarding: boolean;
   /** A demo trip was explicitly chosen (deep-link / saved selection / picker). */
   demoSelected: boolean;
+  /**
+   * `booking` may be shown: it is the traveller's own, or a demo somebody asked
+   * for and no real booking has turned up to replace it. Until then `booking`
+   * is the built-in sample and must reach nobody (lib/booking-gate.ts).
+   */
+  ready: boolean;
   /**
    * Re-check /api/traveller/booking for a live booking NOW. Needed after invite
    * redemption: the provider lives in the root layout, so a client-side
@@ -168,21 +175,26 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+  const ready = bookingReady({ source, liveLoading, demoSelected });
+
   // Apply the active agency's white-label brand colours to the document as CSS
   // variables (the `teal`/`navy` Tailwind tokens read these). When the agency
   // has no colours, we clear the overrides so the Luna Travel defaults in
   // globals.css apply — this also handles switching from a branded booking back
-  // to an unbranded one.
+  // to an unbranded one. Not before the booking is ready: until then it is the
+  // sample, and its agency's navy and gold are nobody's brand.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    const vars = brandVars(booking.agency.brandPrimaryColour, booking.agency.brandAccentColour);
+    const vars: Record<string, string> = ready
+      ? brandVars(booking.agency.brandPrimaryColour, booking.agency.brandAccentColour)
+      : {};
     for (const key of BRAND_VAR_KEYS) {
       const v = vars[key];
       if (v) root.style.setProperty(key, v);
       else root.style.removeProperty(key);
     }
-  }, [booking.agency.brandPrimaryColour, booking.agency.brandAccentColour]);
+  }, [ready, booking.agency.brandPrimaryColour, booking.agency.brandAccentColour]);
 
   // Picker - drives MOCK data only, exactly as before. When the user picks a
   // mock booking we also drop back to the mock source.
@@ -212,6 +224,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     liveLoading,
     onboarding,
     demoSelected,
+    ready,
     refreshLive,
   };
 

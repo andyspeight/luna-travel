@@ -141,6 +141,47 @@ async function main() {
   );
   await sp.close();
 
+  // ── An access link's QR code can be shown again ──
+  //
+  // The QR was shown once, when the link was made, and never again; and a
+  // fresh link for the same booking meant typing it all in again (24 Sep
+  // 2026). A link that no longer works must not offer its QR.
+  const ap = await desk.newPage();
+  ap.on('pageerror', (e) => jsErrors.push(`access: ${e.message}`));
+  await ap.route('**/api/agency/invites', (r) =>
+    r.request().method() === 'GET'
+      ? r.fulfill({
+          json: {
+            ok: true,
+            invites: [
+              { id: 'inv-live', bookingRef: 'WCS96420', email: null, departureDate: '2027-02-12', status: 'redeemed', opened: false, usable: true, createdAt: '2026-09-23T15:50:57Z', expiresAt: '2099-10-23T15:50:57Z', qrUrl: 'https://my-booking.co/install?invite=inv-live' },
+              { id: 'inv-old', bookingRef: 'OLD123', email: null, departureDate: '2026-01-10', status: 'redeemed', opened: false, usable: false, createdAt: '2025-11-01T10:00:00Z', expiresAt: '2025-12-01T10:00:00Z', qrUrl: 'https://my-booking.co/install?invite=inv-old' },
+            ],
+          },
+        })
+      : r.continue(),
+  );
+  await ap.goto(`${BASE}/agency/access`, { waitUntil: 'domcontentloaded' });
+  await ap.waitForSelector('text=WCS96420');
+  await ap.keyboard.press('Escape');
+  const qrButtons = await ap.getByRole('button', { name: /QR code/ }).count();
+  check('a working link offers its QR code, and an expired one does not', qrButtons === 1, `${qrButtons} QR button(s)`);
+  await ap.getByRole('button', { name: /QR code/ }).click();
+  await ap.waitForSelector('img[alt="Invite QR code"]');
+  const qrPanel = ((await ap.textContent('main')) || '').replace(/\s+/g, ' ');
+  check(
+    'and shows it again, saying which booking and for how long',
+    /Access link for WCS96420/.test(qrPanel) && /Works for anyone on this booking until/.test(qrPanel),
+  );
+  await ap.getByRole('button', { name: /^Done$/ }).click();
+  await ap.getByRole('button', { name: /Send again/ }).first().click();
+  await ap.waitForTimeout(500);
+  const refNow = await ap.inputValue('input[placeholder="e.g. LT-4837"]');
+  const dateNow = await ap.inputValue('input[type="date"]');
+  const emailNow = await ap.inputValue('input[type="email"]');
+  check('send again fills in the booking and leaves the email for you', refNow === 'WCS96420' && dateNow === '2027-02-12' && emailNow === '', `${refNow} ${dateNow} "${emailNow}"`);
+  await ap.close();
+
   // Every screenshot the guide promises actually resolves.
   const guide = await desk.newPage();
   await guide.goto(`${BASE}/agency/guide`, { waitUntil: 'domcontentloaded' });

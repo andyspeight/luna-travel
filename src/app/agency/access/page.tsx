@@ -6,10 +6,10 @@
  * signed-in agency by the session.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LogoMeta } from '@/lib/logo-look';
 import QRCode from 'qrcode';
-import { Send, Copy, Check, RotateCcw, Ban, Eye, X } from 'lucide-react';
+import { Send, Copy, Check, RotateCcw, Ban, Eye, X, QrCode } from 'lucide-react';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
 import { PhonePreview } from '../phone-preview';
 
@@ -21,6 +21,9 @@ interface Invite {
   opened: boolean;
   createdAt: string;
   expiresAt: string;
+  /** The link still opens the trip (not revoked, not past its date). */
+  usable?: boolean;
+  departureDate?: string | null;
   qrUrl: string;
 }
 
@@ -28,7 +31,12 @@ interface Created {
   inviteId: string;
   qrUrl: string;
   qrDataUrl: string;
+  /** Set when this is an existing link shown again, not one just made. */
+  existing?: { bookingRef: string | null; expiresAt: string };
 }
+
+const qrImage = (url: string) =>
+  QRCode.toDataURL(url, { errorCorrectionLevel: 'M', margin: 1, width: 512, color: { dark: '#0d1836', light: '#ffffff' } });
 
 function AccessPage() {
   const { me } = useAgencyMe();
@@ -86,7 +94,7 @@ function AccessPage() {
         setStatus('error');
         return;
       }
-      const qrDataUrl = await QRCode.toDataURL(data.qrUrl, { errorCorrectionLevel: 'M', margin: 1, width: 512, color: { dark: '#0d1836', light: '#ffffff' } });
+      const qrDataUrl = await qrImage(data.qrUrl);
       setCreated({ inviteId: data.inviteId, qrUrl: data.qrUrl, qrDataUrl });
       setStatus('idle');
       setBookingRef('');
@@ -98,6 +106,35 @@ function AccessPage() {
       setErrorMsg('Something went wrong. Please try again.');
       setStatus('error');
     }
+  };
+
+  // The QR code for a link already sent. It was shown once, when the link was
+  // made, and never again, so an agent who needed it later (to show a client
+  // at the desk, or print) had to make a new one (24 Sep 2026).
+  const showQr = async (inv: Invite) => {
+    try {
+      const qrDataUrl = await qrImage(inv.qrUrl);
+      setCreated({ inviteId: inv.id, qrUrl: inv.qrUrl, qrDataUrl, existing: { bookingRef: inv.bookingRef, expiresAt: inv.expiresAt } });
+      setCopied(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      /* the copy button still works */
+    }
+  };
+
+  // A fresh link for the same booking, for someone else on it or after the old
+  // one has expired: the booking's details are filled in, the email is left
+  // for the agent.
+  const emailRef = useRef<HTMLInputElement>(null);
+  const sendAgain = (inv: Invite) => {
+    setCreated(null);
+    setBookingRef(inv.bookingRef || '');
+    setDepartureDate((inv.departureDate || '').slice(0, 10));
+    setEmail('');
+    setStatus('idle');
+    setErrorMsg('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.setTimeout(() => emailRef.current?.focus(), 350);
   };
 
   const revoke = async (id: string) => {
@@ -158,7 +195,14 @@ function AccessPage() {
       {/* Create OR the just-created QR */}
       {created ? (
         <div style={{ ...card, padding: 22, marginTop: 18, textAlign: 'center' }} className="animate-slide-up">
-          <div style={{ fontWeight: 700, color: P.ink, fontSize: 15 }}>Access link ready</div>
+          <div style={{ fontWeight: 700, color: P.ink, fontSize: 15 }}>
+            {created.existing ? `Access link${created.existing.bookingRef ? ` for ${created.existing.bookingRef}` : ''}` : 'Access link ready'}
+          </div>
+          {created.existing && (
+            <div style={{ fontSize: 12.5, color: P.ink3, marginTop: 4, lineHeight: 1.5 }}>
+              Works for anyone on this booking until {fmtDate(created.existing.expiresAt)}. They confirm the booking details to open it.
+            </div>
+          )}
           <div style={{ display: 'inline-block', padding: 12, borderRadius: 18, background: '#fff', border: `1px solid ${P.line}`, boxShadow: '0 8px 24px -14px rgba(15,23,42,0.25)', marginTop: 12 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={created.qrDataUrl} alt="Invite QR code" style={{ width: 188, height: 188, display: 'block' }} />
@@ -170,7 +214,7 @@ function AccessPage() {
             </button>
           </div>
           <button type="button" onClick={() => setCreated(null)} style={{ ...primaryBtn, display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 16 }}>
-            <Send size={15} /> Send another
+            {created.existing ? 'Done' : <><Send size={15} /> Send another</>}
           </button>
         </div>
       ) : (
@@ -185,7 +229,7 @@ function AccessPage() {
               </Field>
             </div>
             <Field label="Traveller email" hint="Optional.">
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="traveller@example.com" style={inputStyle} />
+              <input ref={emailRef} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="traveller@example.com" style={inputStyle} />
             </Field>
             {status === 'error' && <p style={{ color: '#dc2626', fontSize: 13, margin: 0 }}>{errorMsg}</p>}
             <div>
@@ -223,11 +267,24 @@ function AccessPage() {
                   </div>
                   <div style={{ fontSize: 12, color: P.ink3, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {inv.email ? `${inv.email} · ` : ''}sent {fmtDate(inv.createdAt)}
+                    {/* "Installed" says someone used it, not that it still
+                        works: past its date, nobody else can. */}
+                    {inv.status === 'redeemed' && inv.usable === false ? ` · link expired ${fmtDate(inv.expiresAt)}` : ''}
                   </div>
                 </div>
-                <button type="button" onClick={() => copyLink(inv.qrUrl)} title="Copy link" style={iconBtn}>
-                  <Copy size={15} />
+                {inv.usable && (
+                  <button type="button" onClick={() => void showQr(inv)} title="Show the QR code" style={rowBtn}>
+                    <QrCode size={15} /> QR code
+                  </button>
+                )}
+                <button type="button" onClick={() => sendAgain(inv)} title="Make a new link for this booking" style={rowBtn}>
+                  <RotateCcw size={15} /> Send again
                 </button>
+                {inv.usable && (
+                  <button type="button" onClick={() => copyLink(inv.qrUrl)} title="Copy link" aria-label="Copy link" style={iconBtn}>
+                    <Copy size={15} />
+                  </button>
+                )}
                 {inv.status === 'pending' ? (
                   <button type="button" onClick={() => revoke(inv.id)} disabled={revoking === inv.id} title="Revoke" style={{ ...iconBtn, color: '#dc2626', borderColor: '#fecaca' }}>
                     <Ban size={15} />
@@ -349,6 +406,22 @@ const inputStyle: React.CSSProperties = {
   background: '#fff',
   boxSizing: 'border-box',
   outlineColor: P.teal,
+};
+
+const rowBtn: React.CSSProperties = {
+  height: 32,
+  padding: '0 11px',
+  borderRadius: 9,
+  border: `1px solid ${P.line}`,
+  background: '#fff',
+  color: P.ink,
+  fontSize: 12.5,
+  fontWeight: 600,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
 };
 
 const iconBtn: React.CSSProperties = {

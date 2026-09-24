@@ -92,7 +92,12 @@ const withPWA = withPWAInit({
         //
         // lib/offline-docs.ts fills this deliberately rather than waiting for
         // a tap, because a rule only ever catches what was asked for.
-        urlPattern: /\/api\/traveller\/document/i,
+        //
+        // ONE document, never the list. The pattern used to end at "document",
+        // so it matched /api/traveller/documents too, and the list was answered
+        // from this cache before the network: on a phone that had held another
+        // session, a traveller was shown that booking's documents first.
+        urlPattern: /\/api\/traveller\/document(?:\?|$)/i,
         handler: 'StaleWhileRevalidate',
         options: {
           cacheName: 'traveller-documents',

@@ -12,7 +12,7 @@ import { IconCheck, IconSun, IconMoon } from './icons';
  * what they are looking at without disrupting the production-feel UI.
  */
 export function BookingPicker({ children }: { children: React.ReactNode }) {
-  const { booking, setBookingByRef, allBookings } = useBooking();
+  const { booking, setBookingByRef, allBookings, source } = useBooking();
   const { theme, toggle } = useTheme();
   const { coverEnabled, reset: resetCover } = useCover();
   const [open, setOpen] = useState(false);
@@ -42,6 +42,11 @@ export function BookingPicker({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [open]);
+
+  // Never for a real traveller. A long press on their agency's logo listed the
+  // sample bookings, travellers' names and all, and one tap put somebody
+  // else's trip in front of them. The picker is for demonstrating the app.
+  if (source === 'live') return <>{children}</>;
 
   return (
     <>

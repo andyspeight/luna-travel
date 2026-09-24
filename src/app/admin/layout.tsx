@@ -84,6 +84,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // A client layout cannot export metadata, and the site-wide default is now
+  // the traveller's neutral "Your trip".
+  useEffect(() => {
+    document.title = 'Admin · Luna Travel';
+  }, [pathname]);
+
   useEffect(() => {
     setMounted(true);
     const stored = localStorage.getItem('tg-admin-theme') as 'light' | 'dark' | null;

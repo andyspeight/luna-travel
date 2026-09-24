@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import { GET } from '../route';
-import { iconSpecFor, iconUrl } from '@/lib/app-icon';
+import { iconSpecFor, iconUrl, badgeUrl } from '@/lib/app-icon';
 
 /**
  * The icon is drawn for real here, and the PNG checked for its size: a
@@ -82,6 +82,19 @@ describe('GET /api/app/icon', () => {
     const res = await call(iconUrl(iconSpecFor({ name: 'X', iconUrl: ICON }), 192));
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toMatch(/max-age=300/);
+  });
+
+  it('draws the notification badge small, and never fetches the uploaded picture for it', async () => {
+    saved.add(ICON);
+    const fetched: string[] = [];
+    vi.stubGlobal('fetch', async (u: string) => {
+      fetched.push(String(u));
+      return new Response(PNG, { headers: { 'content-type': 'image/png' } });
+    });
+    const res = await call(badgeUrl(iconSpecFor({ appName: 'Sunseekers', iconUrl: ICON })));
+    expect(res.status).toBe(200);
+    expect(await png(res)).toEqual({ sig: 'PNG', width: 96, height: 96 });
+    expect(fetched).toEqual([]);
   });
 
   it('refuses a request it did not write', async () => {

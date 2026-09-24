@@ -53,7 +53,7 @@ describe('icon and manifest URLs', () => {
 
   it('read back to exactly what was written', () => {
     const q = parseIconQuery(query(iconUrl(spec, 512, true)));
-    expect(q).toEqual({ spec, size: 512, maskable: true, name: '' });
+    expect(q).toEqual({ spec, size: 512, maskable: true, badge: false, name: '' });
     const m = parseIconQuery(query(manifestUrl(spec, 'Sunseekers')));
     expect(m?.size).toBeNull();
     expect(m?.name).toBe('Sunseekers');
@@ -112,5 +112,52 @@ describe('the manifest', () => {
     expect(shortNameOf('Sunseekers')).toBe('Sunseekers');
     expect(shortNameOf('Exclusively Travel')).toBe('Exclusively');
     expect(shortNameOf('Supercalifragilistic Tours')).toBe('Supercalifra');
+  });
+});
+
+import { badgeUrl, identityOf, parseIdentity, identityToSave, DEFAULT_SPEC, DEFAULT_APP_NAME } from '@/lib/app-icon';
+
+describe('before anybody’s trip has loaded', () => {
+  it('the app is “Your trip” with a plane, not ours', () => {
+    const m = buildManifest(DEFAULT_SPEC, DEFAULT_APP_NAME);
+    expect(m.name).toBe('Your trip');
+    expect(m.icons[0].src).not.toMatch(/[?&]l=/);
+    expect(JSON.stringify(m)).not.toMatch(/Luna|LT/);
+  });
+});
+
+describe('the notification badge', () => {
+  it('is the app’s letter, small, and never the uploaded picture', () => {
+    const q = parseIconQuery(query(badgeUrl(iconSpecFor({ appName: 'Sunseekers', iconUrl: ICON }))));
+    expect(q).toMatchObject({ size: 96, badge: true });
+    expect(q?.spec.initial).toBe('S');
+    expect(q?.spec.imageUrl).toBeUndefined();
+  });
+});
+
+describe('the identity saved against a traveller', () => {
+  const agency = { appName: 'Sunseekers', brandPrimaryColour: '#0e7490', brandAccentColour: '#f59e0b', iconUrl: ICON };
+
+  it('reads back to exactly what was saved', () => {
+    const saved = JSON.parse(JSON.stringify(identityOf(agency)));
+    expect(parseIdentity(saved)).toEqual(identityOf(agency));
+  });
+
+  it('refuses anything it would not have saved', () => {
+    expect(parseIdentity(null)).toBeNull();
+    expect(parseIdentity({ name: 'X', spec: { primary: 'red', accent: '#f59e0b' } })).toBeNull();
+    expect(parseIdentity({ name: '', spec: { primary: '#0e7490', accent: '#f59e0b' } })).toBeNull();
+    expect(parseIdentity({ name: 'X', spec: { primary: '#0e7490', accent: '#f59e0b', imageUrl: 'https://evil.example/a.png' } })).toBeNull();
+  });
+
+  it('is written only when it has changed', () => {
+    expect(identityToSave(null, agency)).toEqual(identityOf(agency));
+    const saved = JSON.parse(JSON.stringify(identityOf(agency)));
+    expect(identityToSave(saved, agency)).toBeNull();
+    expect(identityToSave(saved, { ...agency, appName: 'Sunseekers Holidays' })?.name).toBe('Sunseekers Holidays');
+  });
+
+  it('is not written for an app with no name to go by', () => {
+    expect(identityToSave(null, {})).toBeNull();
   });
 });

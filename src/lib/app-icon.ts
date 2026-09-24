@@ -21,13 +21,25 @@
 import { appNameOf, initialOf, type Named } from '@/lib/app-name';
 import { parseHex, toHex } from '@/lib/contrast';
 
-/** 180 is the iPhone home screen; 192 and 512 are what Android installs need. */
-export const ICON_SIZES = [180, 192, 512] as const;
+/**
+ * 180 is the iPhone home screen; 192 and 512 are what Android installs need;
+ * 96 is Android's notification badge.
+ */
+export const ICON_SIZES = [96, 180, 192, 512] as const;
 export type IconSize = (typeof ICON_SIZES)[number];
 
 /** The app's own navy and teal, for an agency that has chosen no colours. */
 export const DEFAULT_PRIMARY = '#1b2b5b';
 export const DEFAULT_ACCENT = '#00b4d8';
+
+/**
+ * Before anybody's trip has loaded (the demo, a first visit, the install
+ * screen) the app is nobody's in particular: "Your trip", with a plane on the
+ * app's own colours. It used to be "Luna Travel" and "LT", which is our name
+ * on another agency's traveller's phone.
+ */
+export const DEFAULT_APP_NAME = 'Your trip';
+export const DEFAULT_SPEC: IconSpec = { initial: '', primary: DEFAULT_PRIMARY, accent: DEFAULT_ACCENT };
 
 /** An uploaded icon lives in our public Blob store, in the icons folder. */
 const BLOB_HOST = /^[a-z0-9]+\.public\.blob\.vercel-storage\.com$/;
@@ -118,6 +130,18 @@ export function iconUrl(spec: IconSpec, size: IconSize, maskable = false): strin
   return `/api/app/icon?${q.toString()}`;
 }
 
+/**
+ * Android's small notification badge. Android draws only its outline, in
+ * white, so it is the app's letter (or the plane) on nothing: the agency's
+ * uploaded picture would come out as a white blob.
+ */
+export function badgeUrl(spec: IconSpec): string {
+  const q = specParams({ ...spec, imageUrl: undefined });
+  q.set('s', '96');
+  q.set('b', '1');
+  return `/api/app/icon?${q.toString()}`;
+}
+
 export function manifestUrl(spec: IconSpec, name: string): string {
   const q = specParams(spec);
   const n = cleanName(name);
@@ -136,7 +160,9 @@ export function cleanName(v: unknown): string {
  * Read an icon or manifest URL back. Null when anything in it is not what
  * iconUrl or manifestUrl would have written.
  */
-export function parseIconQuery(q: URLSearchParams): { spec: IconSpec; size: IconSize | null; maskable: boolean; name: string } | null {
+export function parseIconQuery(
+  q: URLSearchParams,
+): { spec: IconSpec; size: IconSize | null; maskable: boolean; badge: boolean; name: string } | null {
   const l = q.get('l') ?? '';
   if (l && iconInitial(l) !== l) return null;
   const p = q.get('p') ?? '';
@@ -151,8 +177,39 @@ export function parseIconQuery(q: URLSearchParams): { spec: IconSpec; size: Icon
     spec: { initial: l, primary: `#${p}`, accent: `#${a}`, imageUrl: u ?? undefined },
     size,
     maskable: q.get('m') === '1',
+    badge: q.get('b') === '1',
     name: cleanName(q.get('n') ?? ''),
   };
+}
+
+/**
+ * What a traveller's app is called and looks like, as saved against the
+ * traveller each time their booking loads (travellers.app_identity), so the
+ * server can serve the agency's manifest without waiting for the page's
+ * JavaScript.
+ */
+export interface AppIdentity {
+  name: string;
+  spec: IconSpec;
+}
+
+export function identityOf(agency: AgencyLook | null | undefined): AppIdentity {
+  return { name: cleanName(appNameOf(agency)), spec: iconSpecFor(agency) };
+}
+
+/** A saved identity read back, or null if it is not one we would have saved. */
+export function parseIdentity(v: unknown): AppIdentity | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const spec = (o.spec ?? {}) as Record<string, unknown>;
+  const q = new URLSearchParams();
+  if (typeof spec.initial === 'string' && spec.initial) q.set('l', spec.initial);
+  q.set('p', String(spec.primary ?? '').replace(/^#/, ''));
+  q.set('a', String(spec.accent ?? '').replace(/^#/, ''));
+  if (typeof spec.imageUrl === 'string') q.set('u', spec.imageUrl);
+  const parsed = parseIconQuery(q);
+  const name = cleanName(o.name);
+  return parsed && name ? { name, spec: parsed.spec } : null;
 }
 
 /** Under the icon, Android prints the short name; keep it to what fits. */
@@ -187,4 +244,15 @@ export function buildManifest(spec: IconSpec, name: string) {
       { src: iconUrl(spec, 512, true), sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   };
+}
+
+/**
+ * The identity to save for a traveller whose app looks like `agency` now, or
+ * null when there is nothing to write: it has no name to go by, or it is what
+ * is already saved.
+ */
+export function identityToSave(saved: unknown, agency: AgencyLook | null | undefined): AppIdentity | null {
+  const next = identityOf(agency);
+  if (!next.name) return null;
+  return JSON.stringify(parseIdentity(saved)) === JSON.stringify(next) ? null : next;
 }

@@ -1,40 +1,38 @@
 {
-  "name": "Luna Travel",
-  "short_name": "Luna Travel",
-  "description": "Your trip in your pocket — from confirmation to coming home.",
+  "name": "Your trip",
+  "short_name": "Your trip",
+  "description": "Your trip in your pocket, from confirmation to coming home.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1B2B5B",
   "theme_color": "#1B2B5B",
-  "categories": ["travel", "lifestyle"],
+  "categories": [
+    "travel",
+    "lifestyle"
+  ],
   "lang": "en-GB",
   "dir": "ltr",
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/api/app/icon?p=1b2b5b&a=00b4d8&s=192",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/api/app/icon?p=1b2b5b&a=00b4d8&s=512",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-maskable-512.png",
+      "src": "/api/app/icon?p=1b2b5b&a=00b4d8&s=512&m=1",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
-  ]
+  ],
+  "id": "/"
 }

@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { PageEnter } from '@/components/page-enter';
 import { IconShare, IconSparkle, IconPlane } from '@/components/icons';
 import { appNameOf, initialOf } from '@/lib/app-name';
+import { BrandLogo } from '@/components/brand-logo';
+import { parseLogoMeta, isWordmark } from '@/lib/logo-look';
 import { useBooking } from '@/lib/booking-context';
 import { useInstallState, ShareGlyph, IOSInstallSheet, MenuInstallSheet } from '@/components/add-to-home';
 import { cinematicCover } from '@/lib/hero';
@@ -151,6 +153,10 @@ type Branding = {
   /** The agency's own name, for when it has not named its app. */
   agencyName?: string;
   logoUrl?: string;
+  /** The logo's measured tone and size (lib/logo-look), as strings. */
+  logoTone?: string;
+  logoW?: string;
+  logoH?: string;
   brandPrimaryColour?: string;
   brandAccentColour?: string;
 };
@@ -190,11 +196,21 @@ function AgencyMark({ branding, size = 'md' }: { branding?: Branding; size?: 'sm
   const logo = branding?.logoUrl?.trim();
   const box = size === 'sm' ? 'w-8 h-8 rounded-lg text-xs' : 'w-9 h-9 rounded-xl text-sm';
   const label = size === 'sm' ? 'text-sm text-white/90' : 'text-base';
+  const meta = parseLogoMeta({ tone: branding?.logoTone, w: Number(branding?.logoW), h: Number(branding?.logoH) });
+  // Shown whole, on what its tone needs against this dark screen; and a wide
+  // logo already says the name, so it is not printed again beside it.
+  const showName = !!name && !(logo && isWordmark(meta));
   return (
     <>
       {logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt="" className={`${box} object-cover bg-white/10 shadow-md flex-shrink-0`} />
+        <BrandLogo
+          src={logo}
+          meta={meta}
+          primary={branding?.brandPrimaryColour}
+          surface="dark"
+          height={size === 'sm' ? 24 : 30}
+          maxWidth={size === 'sm' ? 160 : 220}
+        />
       ) : (
         <span
           className={`${box} bg-gradient-to-br from-navy to-teal-dark text-white font-bold flex items-center justify-center shadow-md flex-shrink-0`}
@@ -203,7 +219,7 @@ function AgencyMark({ branding, size = 'md' }: { branding?: Branding; size?: 'sm
           {initialOf(name) || <IconPlane size={size === 'sm' ? 14 : 16} />}
         </span>
       )}
-      {name && <span className={`${label} font-semibold tracking-tight`}>{name}</span>}
+      {showName && <span className={`${label} font-semibold tracking-tight`}>{name}</span>}
     </>
   );
 }

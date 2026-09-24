@@ -81,6 +81,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
       appName: b.appName,
       agencyName: (invite.agency_name as string | null) || native?.trading_name || native?.name || undefined,
       logoUrl: b.logoUrl,
+      logoTone: b.logoMeta?.tone,
+      logoW: b.logoMeta?.w ? String(b.logoMeta.w) : undefined,
+      logoH: b.logoMeta?.h ? String(b.logoMeta.h) : undefined,
       brandPrimaryColour: b.brandPrimaryColour,
       brandAccentColour: b.brandAccentColour,
     };

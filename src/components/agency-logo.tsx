@@ -4,22 +4,30 @@ import { useState } from 'react';
 import type { Agency } from '@/types/booking';
 import { appNameOf, initialOf } from '@/lib/app-name';
 import { IconPlane } from '@/components/icons';
+import { BrandLogo } from '@/components/brand-logo';
+import type { Surface } from '@/lib/logo-look';
 
 /**
- * Agency logo chip with a graceful fallback.
+ * The agency's logo, or its monogram when it has none (or it will not load).
  *
- * Renders the agency's white-label logo on a white chip (so any logo colour
- * reads on any surface). If there's no logo, or it fails to load, falls back to
- * a gradient monogram from the agency/app name — so the header never shows a
- * broken image.
+ * The logo is shown whole, at its own shape, on whatever its tone needs on
+ * this surface (components/brand-logo). It used to be forced into a white
+ * square the size of the monogram: a wide logo became a sliver and white
+ * lettering disappeared (24 Sep 2026).
+ *
+ * `size` is the monogram's size and the height the logo is fitted to.
  */
 export function AgencyLogo({
   agency,
   size = 36,
+  surface = 'theme',
+  maxWidth,
   className = '',
 }: {
   agency: Agency;
   size?: number;
+  surface?: Surface | 'theme';
+  maxWidth?: number;
   className?: string;
 }) {
   const [broken, setBroken] = useState(false);
@@ -28,13 +36,16 @@ export function AgencyLogo({
 
   if (agency.logoUrl && !broken) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      <BrandLogo
         src={agency.logoUrl}
+        meta={agency.logoMeta}
+        primary={agency.brandPrimaryColour}
+        surface={surface}
+        height={Math.round(size * 0.72)}
+        maxWidth={maxWidth ?? size * 5}
         alt={label}
-        onError={() => setBroken(true)}
-        className={`object-contain bg-white shadow-sm ${className}`}
-        style={{ width: size, height: size, borderRadius: radius, padding: Math.round(size * 0.12) }}
+        onFail={() => setBroken(true)}
+        className={className}
       />
     );
   }

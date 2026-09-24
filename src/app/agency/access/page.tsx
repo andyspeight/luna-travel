@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import type { LogoMeta } from '@/lib/logo-look';
 import QRCode from 'qrcode';
 import { Send, Copy, Check, RotateCcw, Ban, Eye, X } from 'lucide-react';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, card, primaryBtn, ghostBtn } from '../portal-chrome';
@@ -247,6 +248,7 @@ function AccessPage() {
           accent={previewAccent}
           welcome={previewWelcome}
           logoUrl={previewLogo}
+          logoMeta={b.logoMeta}
           onClose={() => setShowPreview(false)}
         />
       )}
@@ -260,8 +262,8 @@ function AccessPage() {
  * Reuses the same live PhonePreview as the branding screen — one source of truth.
  */
 function PreviewModal({
-  name, primary, accent, welcome, logoUrl, onClose,
-}: { name: string; primary: string; accent: string; welcome: string; logoUrl: string; onClose: () => void }) {
+  name, primary, accent, welcome, logoUrl, logoMeta, onClose,
+}: { name: string; primary: string; accent: string; welcome: string; logoUrl: string; logoMeta?: LogoMeta; onClose: () => void }) {
   return (
     <div
       role="dialog"
@@ -271,7 +273,7 @@ function PreviewModal({
       style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(9,14,32,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, overflowY: 'auto' }}
     >
       <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, maxWidth: '100%', margin: 'auto' }}>
-        <PhonePreview name={name} primary={primary} accent={accent} welcome={welcome} logoUrl={logoUrl} />
+        <PhonePreview name={name} primary={primary} accent={accent} welcome={welcome} logoUrl={logoUrl} logoMeta={logoMeta} />
         <div style={{ textAlign: 'center', color: '#fff', fontSize: 13, maxWidth: 300, lineHeight: 1.5 }}>
           This is how <strong>{name}</strong> opens on your traveller&rsquo;s phone. Change any of it under <strong>App&nbsp;branding</strong>.
         </div>

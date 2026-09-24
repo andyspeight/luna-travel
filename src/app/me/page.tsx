@@ -96,7 +96,7 @@ export default function MePage() {
               }}
             />
             <div className="relative flex items-center gap-3">
-              {booking.agency.logoUrl && <AgencyLogo agency={booking.agency} size={40} />}
+              {booking.agency.logoUrl && <AgencyLogo agency={booking.agency} size={40} surface="dark" maxWidth={170} />}
               <div>
                 <div className="text-base font-semibold">{booking.agency.name}</div>
                 {booking.agency.atolNumber && (

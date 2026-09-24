@@ -11,6 +11,8 @@ import { Check } from 'lucide-react';
 import { uploadBrandImage, UploadRefused } from '@/lib/brand-upload-client';
 import { brandPath, BRAND_IMAGE_TYPES, BRAND_IMAGE_MAX_BYTES, type BrandImageKind } from '@/lib/brand-upload';
 import { ICON_IMAGE_TYPES, iconSpecFor, iconUrl } from '@/lib/app-icon';
+import { BrandLogo } from '@/components/brand-logo';
+import { parseLogoMeta, type LogoMeta } from '@/lib/logo-look';
 import { AgencyShell, useAgencyMe, Callout, P, SERIF, primaryBtn } from '../portal-chrome';
 import { PhonePreview } from '../phone-preview';
 
@@ -27,6 +29,26 @@ function BrandingForm() {
   const [accent, setAccent] = useState(b.brandAccentColour ?? DEFAULT_ACCENT);
   const [welcome, setWelcome] = useState(b.welcomeMessage ?? '');
   const [logoUrl, setLogoUrl] = useState(b.logoUrl ?? '');
+  const [logoMeta, setLogoMeta] = useState<LogoMeta | null>(b.logoMeta ?? null);
+
+  // A new logo is measured straight away, so the previews show it the way
+  // travellers will before Save is pressed. Save measures it again.
+  const changeLogo = async (url: string) => {
+    setLogoUrl(url);
+    setLogoMeta(null);
+    if (!url) return;
+    try {
+      const res = await fetch('/api/agency/logo-meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { meta?: unknown };
+      setLogoMeta(parseLogoMeta(json.meta));
+    } catch {
+      /* the preview shows it unmeasured; Save still measures it */
+    }
+  };
   const [iconUrlValue, setIconUrlValue] = useState(b.iconUrl ?? '');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -83,7 +105,7 @@ function BrandingForm() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, marginTop: 24, alignItems: 'flex-start' }}>
         {/* Live phone preview */}
         <div style={{ flex: '1 1 258px', minWidth: 258, display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
-          <PhonePreview name={shownName} primary={primary} accent={accent} welcome={welcome.trim()} logoUrl={logoUrl.trim()} />
+          <PhonePreview name={shownName} primary={primary} accent={accent} welcome={welcome.trim()} logoUrl={logoUrl.trim()} logoMeta={logoMeta} />
         </div>
 
         {/* Form */}
@@ -111,7 +133,12 @@ function BrandingForm() {
             label="Logo"
             hint="PNG, JPG or WebP, up to 2 MB. A wide logo on a transparent background looks best."
             value={logoUrl}
-            onChange={setLogoUrl}
+            onChange={changeLogo}
+            preview={(url) => (
+              <span style={{ display: 'inline-flex', border: `1px solid ${P.line}`, borderRadius: 10, padding: 6, background: '#fff' }}>
+                <BrandLogo src={url} meta={logoMeta} primary={primary} surface="light" height={36} maxWidth={180} alt="Current logo" />
+              </span>
+            )}
           />
 
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
@@ -163,6 +190,7 @@ function ImageUpload({
   hint,
   value,
   onChange,
+  preview,
 }: {
   kind: BrandImageKind;
   agencyId: string;
@@ -170,6 +198,8 @@ function ImageUpload({
   hint: string;
   value: string;
   onChange: (url: string) => void;
+  /** How to show what is uploaded, when a plain thumbnail would mislead. */
+  preview?: (url: string) => React.ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -217,7 +247,9 @@ function ImageUpload({
     <div>
       <div style={{ fontSize: 13, fontWeight: 600, color: P.ink, marginBottom: 6 }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        {value ? (
+        {value && preview ? (
+          preview(value)
+        ) : value ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={value}

@@ -16,6 +16,7 @@ import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
 import { isAssistantName } from '@/lib/app-name';
 import { isOwnIconUrl } from '@/lib/app-icon';
+import { analyzeLogo } from '@/lib/logo-analyze';
 import {
   getBrandingOverride,
   setBrandingOverride,
@@ -95,6 +96,10 @@ export async function POST(req: NextRequest) {
     brandPrimaryColour: sanitizeHex(body.brandPrimaryColour as string | undefined),
     brandAccentColour: sanitizeHex(body.brandAccentColour as string | undefined),
   };
+
+  // Measure the logo now, so every screen can show it whole and legibly
+  // (lib/logo-look). No logo clears the measurement with it.
+  fields.logoMeta = logoUrl ? await analyzeLogo(logoUrl) : undefined;
 
   try {
     await setBrandingOverride(claims.agencyId, fields);

@@ -184,6 +184,8 @@ export interface Agency {
   assistantName?: string;
   /** The agency's own home-screen icon. Absent means one is drawn. */
   iconUrl?: string;
+  /** The logo's measured shape and tone, so it is shown whole and legibly. */
+  logoMeta?: import('@/lib/logo-look').LogoMeta;
   /**
    * When the agency is open, and what they promise. Set by the agency in the
    * portal, not held on the Control record.

@@ -37,6 +37,7 @@ import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-brandin
 import { isAgencyId, isLunaAgency } from '@/lib/agency-id';
 import type { Agency, Booking } from '@/types/booking';
 import { getAgencySettings, applySupportSettings } from '@/lib/agency-settings';
+import { identityToSave } from '@/lib/app-icon';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -97,7 +98,7 @@ export async function GET(req: NextRequest) {
 
   const { data: traveller, error } = await supabase
     .from('travellers')
-    .select('id, agency_id, booking_ref, email, departure_date')
+    .select('id, agency_id, booking_ref, email, departure_date, app_identity')
     .eq('id', claims.travellerId)
     .single();
 
@@ -138,6 +139,20 @@ export async function GET(req: NextRequest) {
   // its travellers writing to.
   const applySupport = (agency: Agency) => applySupportSettings(agency, support);
 
+  // What this traveller's app is called and looks like, saved so the manifest
+  // route can serve it before the page's JavaScript runs (see
+  // api/app/manifest/current). Only written when it has changed, and never
+  // allowed to hold up the booking.
+  const rememberIdentity = async (agency: Agency) => {
+    const next = identityToSave(traveller.app_identity, agency);
+    if (!next) return;
+    try {
+      await supabase.from('travellers').update({ app_identity: next }).eq('id', traveller.id);
+    } catch (e) {
+      console.warn('[traveller.booking] could not save app identity:', (e as Error).message);
+    }
+  };
+
   // 1b. Off-platform booking? Return the stored payload directly — there is no
   //     Travelify order to fetch. Still kicks off flight auto-subscribe so live
   //     flight tracking works for manually-added bookings too.
@@ -145,6 +160,7 @@ export async function GET(req: NextRequest) {
   if (stored?.payload) {
     applyBrandingOverride(stored.payload.agency, brandingOverride);
     applySupport(stored.payload.agency);
+    await rememberIdentity(stored.payload.agency);
     triggerAutoSubscribe(stored.payload, recordId, orderRef);
     return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
   }
@@ -201,6 +217,7 @@ export async function GET(req: NextRequest) {
   }
   applyBrandingOverride(booking.agency, brandingOverride);
   applySupport(booking.agency);
+  await rememberIdentity(booking.agency);
 
   // 4. Fire-and-forget Flight Hub auto-subscribe (deduped server-side).
   triggerAutoSubscribe(booking, recordId, orderRef);

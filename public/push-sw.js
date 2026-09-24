@@ -32,33 +32,48 @@ self.addEventListener('push', (event) => {
 
   const title = data.title || 'Your trip';
   event.waitUntil(
-    agencyIcon().then((icon) =>
-      self.registration.showNotification(title, notificationOptions(data, icon)),
+    agencyLook().then((look) =>
+      self.registration.showNotification(title, notificationOptions(data, look)),
     ),
   );
 });
 
 /**
- * The agency's own icon, left in Cache Storage by the app
- * (components/app-identity) the last time it was open. The default icon when
- * there is none, or it is not one of ours.
+ * The agency's own icon and badge, left in Cache Storage by the app
+ * (components/app-identity) the last time it was open. The neutral plane when
+ * there is none, or what is there is not one of ours.
+ *
+ * The badge is the small monochrome mark Android shows in the status bar. It
+ * was the full-colour "LT" square, which Android flattens to a plain white
+ * blob; it is now the app's letter, or the plane.
  */
-function agencyIcon() {
-  const fallback = '/icons/icon-192.png';
-  if (!self.caches) return Promise.resolve(fallback);
+const DEFAULT_LOOK = {
+  icon: '/api/app/icon?p=1b2b5b&a=00b4d8&s=192',
+  badge: '/api/app/icon?p=1b2b5b&a=00b4d8&s=96&b=1',
+};
+
+function ours(v) {
+  return typeof v === 'string' && v.indexOf('/api/app/icon?') === 0;
+}
+
+function agencyLook() {
+  if (!self.caches) return Promise.resolve(DEFAULT_LOOK);
   return caches
     .open('app-identity')
     .then((c) => c.match('/__app-identity.json'))
     .then((r) => (r ? r.json() : null))
-    .then((j) => (j && typeof j.icon === 'string' && j.icon.indexOf('/api/app/icon?') === 0 ? j.icon : fallback))
-    .catch(() => fallback);
+    .then((j) => ({
+      icon: j && ours(j.icon) ? j.icon : DEFAULT_LOOK.icon,
+      badge: j && ours(j.badge) ? j.badge : DEFAULT_LOOK.badge,
+    }))
+    .catch(() => DEFAULT_LOOK);
 }
 
-function notificationOptions(data, icon) {
+function notificationOptions(data, look) {
   return {
     body: data.body || '',
-    icon,
-    badge: '/icons/icon-192.png',
+    icon: look.icon,
+    badge: look.badge,
     // Same tag collapses repeats — five gate changes are one row, not five.
     tag: data.tag || 'luna-travel',
     renotify: true,

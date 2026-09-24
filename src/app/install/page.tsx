@@ -62,6 +62,10 @@ const OCEAN_BG =
 // ─────────────────────────────────────────────────────────────────
 
 function TradeShowView() {
+  // Our own stand page, so our own name on the tab.
+  useEffect(() => {
+    document.title = 'Luna Travel';
+  }, []);
   return (
     <main
       className="fixed inset-0 flex flex-col text-white overflow-hidden"
@@ -218,6 +222,15 @@ function RedeemView({ inviteId }: { inviteId: string }) {
   // The booking's other passengers, once the details check has passed. Only
   // ever set for a booking with more than one of them.
   const [party, setParty] = useState<PartyOption[] | null>(null);
+
+  // The tab, and the name iOS offers if the traveller adds the page to their
+  // home screen from here, are the agency's app from the first screen.
+  const inviteAppName = appNameOf({ appName: info?.branding?.appName, name: info?.branding?.agencyName });
+  useEffect(() => {
+    if (!inviteAppName) return;
+    document.title = inviteAppName;
+    document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', inviteAppName);
+  }, [inviteAppName]);
 
   // Fetch invite info on mount to pre-fill any fields the agency set.
   useEffect(() => {

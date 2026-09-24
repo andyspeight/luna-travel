@@ -8,6 +8,9 @@
  *   u  (optional)             the agency's own uploaded icon, in our Blob store
  *   m  1 (optional)           maskable: keep the picture inside Android's
  *                             safe zone, because the launcher crops to a circle
+ *   b  1 (optional)           badge: Android's notification badge, the letter
+ *                             or plane in white on nothing, since Android draws
+ *                             only the shape
  *
  * The uploaded icon is drawn on the brand colours, so a transparent PNG does
  * not end up on the black iOS puts behind transparency. It must be an icon an
@@ -87,7 +90,9 @@ function fillFor(spec: IconSpec): { from: string; to: string; ink: string } {
 export async function GET(req: Request) {
   const q = parseIconQuery(new URL(req.url).searchParams);
   if (!q || !q.size) return new Response('Bad icon request', { status: 400 });
-  const { spec, size, maskable } = q;
+  const { spec, size, maskable, badge } = q;
+
+  if (badge) return badgeImage(spec, size);
 
   const image = spec.imageUrl ? await fetchImage(spec.imageUrl) : null;
   const { from, to, ink } = fillFor(spec);
@@ -134,6 +139,32 @@ export async function GET(req: Request) {
       height: size,
       fonts: [{ name: 'Brand', data: await loadFont(), weight: 700, style: 'normal' }],
       headers: { 'Cache-Control': failed ? BRIEFLY : FOREVER },
+    },
+  );
+}
+
+/** White on transparent: Android keeps only the shape of a badge. */
+async function badgeImage(spec: IconSpec, size: number) {
+  const glyph = spec.initial ? (
+    <div style={{ display: 'flex', fontFamily: 'Brand', fontSize: Math.round(size * 0.8), color: '#ffffff', lineHeight: 1, marginTop: -size * 0.04 }}>
+      {spec.initial}
+    </div>
+  ) : (
+    <svg width={Math.round(size * 0.8)} height={Math.round(size * 0.8)} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
+    </svg>
+  );
+  return new ImageResponse(
+    (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {glyph}
+      </div>
+    ),
+    {
+      width: size,
+      height: size,
+      fonts: [{ name: 'Brand', data: await loadFont(), weight: 700, style: 'normal' }],
+      headers: { 'Cache-Control': FOREVER },
     },
   );
 }

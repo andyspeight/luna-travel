@@ -735,6 +735,39 @@ async function main() {
   }
   await idCtx.close();
 
+  // ── Before anybody's trip has loaded, the app is nobody's in particular ──
+  //
+  // The tab, the iOS name and the manifest said "Luna Travel", with an "LT"
+  // icon, on another agency's traveller's phone until the trip loaded. And the
+  // manifest has to be right before any script runs, because that is when
+  // Android checks an installed app for a new name or icon.
+  const nCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const np0 = await nCtx.newPage();
+  np0.on('pageerror', (e) => jsErrors.push(`neutral: ${e.message}`));
+  const firstByte = await (await fetch(`${BASE}/offline`)).text();
+  const manifestTag = firstByte.match(/<link[^>]+rel="manifest"[^>]*>/)?.[0] || '';
+  check(
+    'the page links its manifest with the traveller’s cookie from the first byte',
+    /href="\/api\/app\/manifest\/current"/.test(manifestTag) && /crossorigin="use-credentials"/i.test(manifestTag),
+    manifestTag,
+  );
+  const neutral = await (await fetch(`${BASE}/api/app/manifest/current`)).json();
+  const titleTag = firstByte.match(/<title>([^<]*)<\/title>/)?.[1] || '';
+  check(
+    'with no trip it is “Your trip”, not Luna Travel',
+    neutral.name === 'Your trip' && titleTag === 'Your trip' && !/Luna/.test(JSON.stringify(neutral)),
+    `${titleTag} | ${neutral.name}`,
+  );
+  const badge = Buffer.from(await (await fetch(`${BASE}/api/app/icon?p=1b2b5b&a=00b4d8&s=96&b=1`)).arrayBuffer());
+  check(
+    'notifications have a proper badge, not the LT square',
+    badge.subarray(1, 4).toString() === 'PNG' && badge.readUInt32BE(16) === 96,
+  );
+  await np0.goto(`${BASE}/agency/login`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  await np0.waitForTimeout(1200);
+  check('the agency portal keeps its own title', /Agency portal/.test(await np0.title()), await np0.title());
+  await nCtx.close();
+
   // ── The storyboard shows the trip, not the country ──
   //
   // Every day of a Rome break was the same photo of the Amalfi coast (23 Sep

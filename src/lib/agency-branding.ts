@@ -15,6 +15,7 @@
 
 import { getSupabaseAdmin } from '@/lib/supabase';
 import type { Agency } from '@/types/booking';
+import { parseLogoMeta, type LogoMeta } from '@/lib/logo-look';
 
 export interface BrandingFields {
   appName?: string;
@@ -26,6 +27,8 @@ export interface BrandingFields {
   assistantName?: string;
   /** Uploaded home-screen icon. Absent means one is drawn from the app name. */
   iconUrl?: string;
+  /** The logo's measured shape and tone (lib/logo-look). */
+  logoMeta?: LogoMeta;
 }
 
 /** Accept only a plain hex colour (#RGB / #RRGGBB); normalise to #rrggbb. */
@@ -50,6 +53,7 @@ type BrandingRow = {
   welcome_message: string | null;
   assistant_name?: string | null;
   icon_url?: string | null;
+  logo_meta?: unknown;
 };
 
 function rowToFields(row: Partial<BrandingRow> | null | undefined): BrandingFields {
@@ -62,6 +66,7 @@ function rowToFields(row: Partial<BrandingRow> | null | undefined): BrandingFiel
     welcomeMessage: clean(row.welcome_message),
     assistantName: clean(row.assistant_name),
     iconUrl: clean(row.icon_url),
+    logoMeta: parseLogoMeta(row.logo_meta) ?? undefined,
   };
 }
 
@@ -106,6 +111,7 @@ export function mergeBranding(base: BrandingFields, override: BrandingFields): B
     welcomeMessage: override.welcomeMessage ?? base.welcomeMessage,
     assistantName: override.assistantName ?? base.assistantName,
     iconUrl: override.iconUrl ?? base.iconUrl,
+    logoMeta: override.logoMeta ?? base.logoMeta,
   };
 }
 
@@ -122,6 +128,8 @@ export function applyBrandingOverride(agency: Agency, override: BrandingFields):
   if (override.welcomeMessage !== undefined) agency.welcomeMessage = override.welcomeMessage;
   if (override.assistantName !== undefined) agency.assistantName = override.assistantName;
   if (override.iconUrl !== undefined) agency.iconUrl = override.iconUrl;
+  // The measurement belongs to the override's logo, so it travels only with it.
+  if (override.logoUrl !== undefined) agency.logoMeta = override.logoMeta;
 }
 
 /**
@@ -145,6 +153,7 @@ export function brandingRow(agencyId: string, fields: BrandingFields, now = new 
   };
   if ('assistantName' in fields) row.assistant_name = clean(fields.assistantName) ?? null;
   if ('iconUrl' in fields) row.icon_url = clean(fields.iconUrl) ?? null;
+  if ('logoMeta' in fields) row.logo_meta = (fields.logoMeta ?? null) as unknown as string | null;
   return row;
 }
 
@@ -162,4 +171,25 @@ export async function clearBrandingOverride(agencyId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from('agency_branding').delete().eq('agency_id', agencyId);
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Measure a stored logo that has not been measured yet, and save the result.
+ *
+ * Logos saved before measuring existed (and any whose measurement was lost)
+ * are caught here the first time they are shown, once: an unmeasurable logo
+ * is saved as "unknown" so it is not fetched again on every page. Returns the
+ * override with the measurement in place.
+ */
+export async function ensureLogoMeta(agencyId: string, override: BrandingFields): Promise<BrandingFields> {
+  if (!agencyId || !override.logoUrl || override.logoMeta) return override;
+  const { analyzeLogo, isStoredLogoUrl } = await import('@/lib/logo-analyze');
+  if (!isStoredLogoUrl(override.logoUrl)) return override;
+  const meta = await analyzeLogo(override.logoUrl);
+  try {
+    await getSupabaseAdmin().from('agency_branding').update({ logo_meta: meta }).eq('agency_id', agencyId);
+  } catch {
+    /* shown unmeasured this time; measured again next time */
+  }
+  return { ...override, logoMeta: meta };
 }

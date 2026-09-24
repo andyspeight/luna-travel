@@ -681,6 +681,54 @@ async function main() {
   );
   await nameCtx.close();
 
+  // ── A logo is shown whole, and legibly ──
+  //
+  // A wide logo with white lettering was squeezed into a small white square:
+  // a speck, and the lettering invisible (24 Sep 2026). On the dark install
+  // screen it now sits bare at its own shape, and the name is not repeated.
+  const { default: sharpLib } = await import('sharp');
+  const wideLogo = await sharpLib(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="90"><rect width="80" height="90" fill="#dc2626"/><rect x="100" y="25" width="420" height="40" fill="#ffffff"/></svg>')).png().toBuffer();
+  const logoCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await logoCtx.route('**/agency-logos/**', (r) => r.fulfill({ contentType: 'image/png', body: wideLogo }));
+  await logoCtx.route('**/api/invites/logo-audit', (r) =>
+    r.fulfill({
+      json: {
+        status: 'pending',
+        prefill: { bookingRef: null },
+        branding: {
+          appName: 'World Choice Sports',
+          logoUrl: 'https://z39fzpm0qetfheg1.public.blob.vercel-storage.com/agency-logos/recA-1-logo.png',
+          logoTone: 'light', logoW: '540', logoH: '90',
+        },
+      },
+    }),
+  );
+  const lp2 = await logoCtx.newPage();
+  lp2.on('pageerror', (e) => jsErrors.push(`logo: ${e.message}`));
+  await lp2.goto(`${BASE}/install?invite=logo-audit`, { waitUntil: 'domcontentloaded' });
+  await lp2.waitForSelector('input[type="email"]');
+  await lp2.waitForTimeout(800);
+  const logoShown = await lp2.evaluate(() => {
+    const img = document.querySelector('header img');
+    const r = img?.getBoundingClientRect();
+    return {
+      ratio: r ? r.width / r.height : 0,
+      plate: img?.parentElement?.getAttribute('data-logo-plate') || '',
+      header: (document.querySelector('header')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    };
+  });
+  check(
+    'a wide logo is shown whole, not squeezed into a square',
+    logoShown.ratio > 5,
+    `ratio ${logoShown.ratio.toFixed(1)}`,
+  );
+  check(
+    'white lettering sits straight on the dark screen, without the name repeated',
+    logoShown.plate === 'none' && !/World Choice Sports/.test(logoShown.header),
+    `${logoShown.plate} | ${logoShown.header.slice(0, 40)}`,
+  );
+  await logoCtx.close();
+
   // ── The home screen gets the agency's app, not ours ──
   //
   // Every agency's travellers installed "Luna Travel" with an "LT" icon (23

@@ -33,7 +33,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
 import { getStoredBooking } from '@/lib/stored-booking';
-import { getBrandingOverride, applyBrandingOverride } from '@/lib/agency-branding';
+import { getBrandingOverride, applyBrandingOverride, ensureLogoMeta } from '@/lib/agency-branding';
 import { isAgencyId, isLunaAgency } from '@/lib/agency-id';
 import type { Agency, Booking } from '@/types/booking';
 import { getAgencySettings, applySupportSettings } from '@/lib/agency-settings';
@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
   // on top of whatever branding the booking already carries (from Control or the
   // stored payload), so the traveller always sees the effective brand:
   // Luna override ?? Control ?? defaults.
-  const brandingOverride = await getBrandingOverride(recordId);
+  const brandingOverride = await ensureLogoMeta(recordId, await getBrandingOverride(recordId));
 
   // The agency's own statement about when it is open and how quickly it
   // replies. Not on the Control record — set by the agency in the portal —

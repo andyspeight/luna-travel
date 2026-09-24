@@ -27,6 +27,7 @@ import {
   type BrandingFields,
 } from '@/lib/agency-branding';
 import { isAgencyId, isControlAgency } from '@/lib/agency-id';
+import { analyzeLogo } from '@/lib/logo-analyze';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -90,6 +91,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     brandAccentColour: str(body.brandAccentColour),
     welcomeMessage: str(body.welcomeMessage),
   };
+
+  // Measure the logo, so every screen can show it whole and legibly.
+  fields.logoMeta = fields.logoUrl ? await analyzeLogo(fields.logoUrl) : undefined;
 
   // 1. Luna override — authoritative for the traveller app. Must succeed.
   try {

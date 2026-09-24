@@ -132,6 +132,7 @@ export interface AgencyMe {
     welcomeMessage?: string;
     assistantName?: string;
     iconUrl?: string;
+    logoMeta?: import('@/lib/logo-look').LogoMeta;
   };
   settings?: {
     /** Where traveller replies are emailed. Absent means "work it out". */

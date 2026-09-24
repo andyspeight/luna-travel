@@ -10,6 +10,8 @@
 import { Plane, Bell, BedDouble, FileText, Home, CalendarDays, MessageCircle, User, Wifi } from 'lucide-react';
 import { SERIF } from './portal-chrome';
 import { initialOf } from '@/lib/app-name';
+import { BrandLogo } from '@/components/brand-logo';
+import { isWordmark, type LogoMeta } from '@/lib/logo-look';
 
 export function PhonePreview({
   name,
@@ -17,12 +19,15 @@ export function PhonePreview({
   accent,
   welcome,
   logoUrl,
+  logoMeta,
 }: {
   name: string;
   primary: string;
   accent: string;
   welcome: string;
   logoUrl: string;
+  /** The logo's measured shape and tone, so the preview shows it as travellers will. */
+  logoMeta?: LogoMeta | null;
 }) {
   const cover = `radial-gradient(85% 65% at 78% 12%, rgba(255,255,255,0.34), transparent 55%), linear-gradient(158deg, ${accent} -12%, ${primary} 72%)`;
 
@@ -60,14 +65,15 @@ export function PhonePreview({
             {/* identity row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 14 }}>
               {logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logoUrl} alt="" style={{ width: 30, height: 30, borderRadius: 9, objectFit: 'cover', background: '#fff', flexShrink: 0 }} />
+                <BrandLogo src={logoUrl} meta={logoMeta} primary={primary} surface="dark" height={22} maxWidth={150} />
               ) : (
                 <div style={{ width: 30, height: 30, borderRadius: 9, background: 'rgba(255,255,255,0.9)', color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
                   {initialOf(name) || <Plane size={14} />}
                 </div>
               )}
-              <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{name}</div>
+              {!(logoUrl && isWordmark(logoMeta)) && (
+                <div style={{ fontWeight: 700, fontSize: 13.5, lineHeight: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{name}</div>
+              )}
               <span style={{ flex: 1 }} />
               <Bell size={15} style={{ opacity: 0.9 }} />
             </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useBooking } from '@/lib/booking-context';
 import { assistantOf } from '@/lib/app-name';
+import { isWordmark } from '@/lib/logo-look';
 import { useCover } from '@/lib/cover-context';
 import { BookingPicker } from '@/components/booking-picker';
 import { AgencyLogo } from '@/components/agency-logo';
@@ -242,11 +243,14 @@ export function CoverSplash() {
         <BookingPicker>
           <div className="px-3 py-2 rounded-xl bg-black/45 backdrop-blur border border-white/25 flex flex-col items-center gap-1.5">
             {booking.agency.logoUrl && (
-              <AgencyLogo agency={booking.agency} size={26} />
+              <AgencyLogo agency={booking.agency} size={40} surface="dark" maxWidth={200} />
             )}
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/95 text-center">
-              {booking.agency.name}
-            </div>
+            {/* Not under a wide logo: it already says it. */}
+            {!(booking.agency.logoUrl && isWordmark(booking.agency.logoMeta)) && (
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/95 text-center">
+                {booking.agency.name}
+              </div>
+            )}
           </div>
         </BookingPicker>
 

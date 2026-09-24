@@ -6,6 +6,7 @@ import { useBooking } from '@/lib/booking-context';
 import { BookingPicker } from '@/components/booking-picker';
 import { AgencyLogo } from '@/components/agency-logo';
 import { appNameOf, assistantOf } from '@/lib/app-name';
+import { isWordmark } from '@/lib/logo-look';
 import { OnboardingHome } from '@/components/onboarding-home';
 import { SectionHeading } from '@/components/section-heading';
 import { GuideLinks } from '@/components/guide-links';
@@ -237,7 +238,10 @@ export default function HomePage() {
       <header className="flex items-center justify-between py-3">
         <BookingPicker>
           <div className="flex items-center gap-2.5">
-            <AgencyLogo agency={booking.agency} size={36} />
+            <AgencyLogo agency={booking.agency} size={36} maxWidth={180} />
+            {/* A wide logo spells the name out already; printing it again
+                beside it said everything twice. */}
+            {!(booking.agency.logoUrl && isWordmark(booking.agency.logoMeta)) && (
             <div className="text-left">
               <div className="text-sm font-semibold text-ink leading-none">
                 {appNameOf(booking.agency)}
@@ -253,6 +257,7 @@ export default function HomePage() {
                   </div>
                 )}
             </div>
+            )}
           </div>
         </BookingPicker>
       </header>

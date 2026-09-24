@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgency } from '@/lib/agency-session';
 import { resolvePortalAgency } from '@/lib/agencies';
-import { getBrandingOverride } from '@/lib/agency-branding';
+import { getBrandingOverride, ensureLogoMeta } from '@/lib/agency-branding';
 import { getAgencySettings } from '@/lib/agency-settings';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   }
 
   const [branding, settings] = await Promise.all([
-    getBrandingOverride(claims.agencyId),
+    getBrandingOverride(claims.agencyId).then((b) => ensureLogoMeta(claims.agencyId, b)),
     getAgencySettings(claims.agencyId),
   ]);
 

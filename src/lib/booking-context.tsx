@@ -5,8 +5,16 @@ import type { Booking } from '@/types/booking';
 import { BOOKINGS, getDefaultBooking } from '@/data/mock-bookings';
 import { brandVars, BRAND_VAR_KEYS } from '@/lib/brand';
 import { bookingReady } from '@/lib/booking-gate';
+import { saveTrip, loadTrip, forgetTrip } from '@/lib/saved-trip';
+import { forgetSavedDocuments } from '@/lib/offline-docs';
+import { pushSubscriptionOnThisPhone } from '@/lib/use-push';
 
 const STORAGE_KEY = 'luna-travel.activeBookingRef';
+
+/** How long the network gets before the trip kept on the phone is shown. */
+const SLOW_MS = 4000;
+/** When to stop waiting altogether. The server gives Travelify 14 seconds. */
+const GIVE_UP_MS = 20000;
 
 /**
  * Source of the active booking:
@@ -49,7 +57,14 @@ interface BookingContextValue {
    * home would render the provider's stale pre-redemption state (the demo trip
    * or onboarding) instead of the just-unlocked real booking.
    */
-  refreshLive: () => Promise<void>;
+  refreshLive: (opts?: { newSession?: boolean }) => Promise<void>;
+  /**
+   * When the trip on screen is the copy kept on this phone because the network
+   * could not answer, the time that copy was saved. Null for a fresh booking.
+   */
+  savedAt: number | null;
+  /** End this phone's session and remove the trip from it. False if offline. */
+  signOut: () => Promise<boolean>;
 }
 
 const BookingContext = createContext<BookingContextValue | null>(null);
@@ -101,51 +116,151 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   // 2. Attempt a live booking for the current session. If one comes back, it
   //    takes over AND permanently clears any saved demo selection on this
   //    device — a real traveller must never fall back to a demo trip again.
-  //    Otherwise we silently remain on mock. Any failure is swallowed - the
-  //    demo must never break because the backend hiccuped.
+  //
+  //    When the network cannot answer (no signal, a connection that never
+  //    replies, an error on our side), the copy of the traveller's own trip
+  //    kept on this phone steps in (lib/saved-trip.ts). When the server says
+  //    there is no booking for this phone, that copy is forgotten and any trip
+  //    on screen comes down.
   //
   //    Exposed as refreshLive so /install can re-run it right after a
   //    successful redemption (the provider persists across client-side
   //    navigation, so without this the home would show stale state).
-  const refreshLive = useCallback(async () => {
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Mirrors source === 'live' for the callbacks below, which must not depend
+  // on render state to decide whether there is a trip to take down.
+  const showingLive = useRef(false);
+  // Only the latest check may change what is on screen: a slow answer to an
+  // earlier one must not overwrite a newer one, or bring back a signed-out trip.
+  const checkId = useRef(0);
+
+  const showLive = useCallback((b: Booking, fromSavedAt: number | null) => {
+    // An explicit /?demo= link wins over the live booking for this view.
+    //
+    // The rule below exists so a real traveller never FALLS BACK to a demo —
+    // not to overrule someone who asked for one by name. Without this guard,
+    // anyone who has ever redeemed a booking finds every demo link silently
+    // showing them their own trip instead, which is every agent who tries the
+    // product before demonstrating it.
+    //
+    // Their own trip is one tap away at / , and a later visit without the
+    // parameter restores it as before.
+    if (deepLinkedDemo.current) return;
+    showingLive.current = true;
+    setBooking(b);
+    setSource('live');
+    setDemoSelected(false);
+    setSavedAt(fromSavedAt);
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  }, []);
+
+  const showSaved = useCallback(() => {
+    const saved = loadTrip();
+    if (saved) showLive(saved.booking, saved.savedAt);
+  }, [showLive]);
+
+  const dropLive = useCallback(() => {
+    forgetTrip();
+    setSavedAt(null);
+    if (showingLive.current) {
+      showingLive.current = false;
+      setBooking(getDefaultBooking());
+      setSource('mock');
+    }
+  }, []);
+
+  const refreshLive = useCallback(async (opts?: { newSession?: boolean }) => {
+    const id = ++checkId.current;
+    const latest = () => id === checkId.current;
+    // A new invite was just opened on this phone. Whatever trip it held before
+    // (on screen, or saved) may be somebody else's: take it down before the
+    // new one loads, so it cannot show in the meantime.
+    if (opts?.newSession) dropLive();
     setLiveLoading(true);
+    // A connection that accepts the request and then says nothing is the
+    // normal condition at an airport. After the same four seconds the service
+    // worker gives a page, the saved trip goes up; a real answer still
+    // replaces it when it comes.
+    const slow = setTimeout(() => {
+      if (latest()) showSaved();
+    }, SLOW_MS);
     try {
       const res = await fetch('/api/traveller/booking', {
         credentials: 'include',
         cache: 'no-store',
+        signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(GIVE_UP_MS) : undefined,
       });
+      if (!latest()) return;
       if (res.status === 200) {
         const data = await res.json();
-        if (data?.booking) {
-          // An explicit /?demo= link wins over the live booking for this view.
-          //
-          // The rule below exists so a real traveller never FALLS BACK to a
-          // demo — not to overrule someone who asked for one by name. Without
-          // this guard, anyone who has ever redeemed a booking finds every
-          // demo link silently showing them their own trip instead, which is
-          // every agent who tries the product before demonstrating it.
-          //
-          // Their own trip is one tap away at / , and a later visit without
-          // the parameter restores it as before.
-          if (deepLinkedDemo.current) return;
-
-          setBooking(data.booking as Booking);
-          setSource('live');
-          setDemoSelected(false);
-          try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+        if (!latest()) return;
+        if (data?.booking && typeof data.booking === 'object') {
+          const b = data.booking as Booking;
+          saveTrip(b, typeof data.sessionEndsAt === 'number' ? data.sessionEndsAt : null);
+          showLive(b, null);
+        } else {
+          dropLive();
         }
+      } else if (res.status === 401 || res.status === 404) {
+        // No session, or nothing for it any more: signed out, expired, or the
+        // agency removed this traveller. Nothing of theirs stays on screen or
+        // on the phone.
+        dropLive();
+      } else {
+        // Our side failed (502 from Travelify, 500). Their own trip is better
+        // than nothing.
+        showSaved();
       }
-      // 204 / 502 / anything else -> stay on mock.
     } catch {
-      /* network error -> stay on mock */
+      // No signal, or no answer in time.
+      if (latest()) showSaved();
     } finally {
-      setLiveLoading(false);
+      clearTimeout(slow);
+      if (latest()) setLiveLoading(false);
     }
-  }, []);
+  }, [showLive, showSaved, dropLive]);
 
   useEffect(() => {
     void refreshLive();
   }, [refreshLive]);
+
+  // Showing the saved copy: fetch the real one as soon as there is signal.
+  useEffect(() => {
+    if (savedAt === null) return;
+    const back = () => void refreshLive();
+    window.addEventListener('online', back);
+    return () => window.removeEventListener('online', back);
+  }, [savedAt, refreshLive]);
+
+  /**
+   * Sign this phone out: end the session, stop its notifications, and remove
+   * the trip and its documents from the phone. False when the server could
+   * not be reached, in which case nothing is removed: the session would still
+   * be live, and the trip would simply come back.
+   */
+  const signOut = useCallback(async (): Promise<boolean> => {
+    // One request ends the session and removes this phone's notifications, so
+    // a sign-out with no signal changes nothing rather than half of it.
+    const push = await pushSubscriptionOnThisPhone();
+    try {
+      const res = await fetch('/api/traveller/signout', {
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(push ? { endpoint: push.endpoint } : {}),
+      });
+      if (!res.ok) return false;
+    } catch {
+      return false;
+    }
+    checkId.current++; // any check still in flight must not bring the trip back
+    dropLive();
+    setLiveLoading(false);
+    await push?.unsubscribe().catch(() => false);
+    await forgetSavedDocuments();
+    return true;
+  }, [dropLive]);
 
   // 3. Engagement ping - record that the traveller opened the app. Fire-and-
   //    forget, gated server-side by the lt_session cookie (no session => 401,
@@ -201,6 +316,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const setBookingByRef = (ref: string) => {
     const found = BOOKINGS.find((b) => b.reference === ref);
     if (!found) return;
+    showingLive.current = false;
     setBooking(found);
     setSource('mock');
     setDemoSelected(true);
@@ -226,6 +342,8 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     demoSelected,
     ready,
     refreshLive,
+    savedAt,
+    signOut,
   };
 
   // hydrated retained for parity with the original gating pattern.

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Instrument_Serif } from 'next/font/google';
 import { BookingProvider } from '@/lib/booking-context';
 import { BookingGate } from '@/components/booking-gate';
+import { SavedTripNotice } from '@/components/saved-trip-notice';
 import { ThemeProvider } from '@/lib/theme-context';
 import { LocaleProvider } from '@/lib/locale-context';
 import { CoverProvider } from '@/lib/cover-context';
@@ -93,6 +94,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     className="lt-app-shell min-h-screen pb-[88px]"
                     style={{ paddingTop: 'var(--safe-top)' }}
                   >
+                    <SavedTripNotice />
                     <BookingGate>{children}</BookingGate>
                   </div>
                   <TabBar />

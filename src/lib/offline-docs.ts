@@ -189,3 +189,15 @@ export function cacheableDocUrl(doc: { id: string; url?: string | null }): strin
   }
   return url.startsWith('/') ? url : null;
 }
+
+/**
+ * Remove every document saved on this phone. For sign-out: a phone handed to
+ * somebody else must not still open the last traveller's tickets.
+ */
+export async function forgetSavedDocuments(): Promise<void> {
+  try {
+    if (cacheSupported()) await caches.delete(DOC_CACHE);
+  } catch {
+    /* nothing more to do */
+  }
+}

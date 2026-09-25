@@ -14,21 +14,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifySession } from '@/lib/jwt';
+import { isValidEndpoint } from '@/lib/push-endpoint';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const SESSION_COOKIE = 'lt_session';
-
-/** Push endpoints are https URLs issued by the browser's push service. */
-function isValidEndpoint(v: unknown): v is string {
-  if (typeof v !== 'string' || v.length < 20 || v.length > 1000) return false;
-  try {
-    return new URL(v).protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 const isKey = (v: unknown, max: number): v is string =>
   typeof v === 'string' && v.length > 0 && v.length <= max;

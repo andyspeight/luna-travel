@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useBooking } from '@/lib/booking-context';
+import { saveTripDocs, loadTripDocs } from '@/lib/saved-trip';
 import { appNameOf } from '@/lib/app-name';
 import { warmCache, summarise, cacheSupported } from '@/lib/offline-docs';
 import { IMAGE_EXTS, extOf } from '@/lib/document-type';
@@ -208,15 +209,22 @@ function bookingToDisplay(d: Document): DisplayDoc {
 }
 
 export default function DocumentsPage() {
-  const { booking } = useBooking();
+  const { booking, source } = useBooking();
   const [agencyDocs, setAgencyDocs] = useState<AgencyDoc[] | null>(null); // null = still loading
   const [active, setActive] = useState<DisplayDoc | null>(null);
 
   // Pull the traveller's agency-uploaded documents. Fail closed: any non-200
-  // (e.g. 401 on the mock/demo path with no session) or network error falls
-  // back to the booking's own documents, so the demo never breaks.
+  // (e.g. 401 on the mock/demo path with no session) falls back to the
+  // booking's own documents, so the demo never breaks.
+  //
+  // With no signal, the list kept on the phone with the trip stands in: it is
+  // tagged with the booking it came from, so it can only ever be this trip's
+  // (lib/saved-trip.ts). A real traveller's list is only kept, never a demo's.
+  const live = source === 'live';
+  const ref = booking.reference;
   useEffect(() => {
     let cancelled = false;
+    const kept = () => (live ? ((loadTripDocs(ref) as AgencyDoc[] | null) ?? []) : []);
     (async () => {
       try {
         const res = await fetch('/api/traveller/documents', {
@@ -226,18 +234,23 @@ export default function DocumentsPage() {
         if (cancelled) return;
         if (res.status === 200) {
           const data = await res.json();
-          setAgencyDocs(Array.isArray(data?.documents) ? (data.documents as AgencyDoc[]) : []);
-        } else {
+          if (cancelled) return;
+          const list = Array.isArray(data?.documents) ? (data.documents as AgencyDoc[]) : [];
+          if (live) saveTripDocs(ref, list);
+          setAgencyDocs(list);
+        } else if (res.status === 401 || res.status === 404) {
           setAgencyDocs([]);
+        } else {
+          setAgencyDocs(kept());
         }
       } catch {
-        if (!cancelled) setAgencyDocs([]);
+        if (!cancelled) setAgencyDocs(kept());
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [live, ref]);
 
   const loading = agencyDocs === null;
   const realDocs = (agencyDocs ?? []).map(agencyToDisplay);

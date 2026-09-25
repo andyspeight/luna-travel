@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useBooking } from '@/lib/booking-context';
 import { useTheme } from '@/lib/theme-context';
 import { useI18n } from '@/lib/locale-context';
@@ -185,12 +186,7 @@ export default function MePage() {
 
         {/* Sign out */}
         <List>
-          <ListLink
-            href="/welcome"
-            icon={<IconLogOut size={18} />}
-            title={t('me.signOut')}
-            destructive
-          />
+          <SignOutRow />
         </List>
 
         <p className="text-center text-[11px] text-ink-3 mt-6">
@@ -200,6 +196,75 @@ export default function MePage() {
         </p>
       </main>
     </PageEnter>
+  );
+}
+
+/**
+ * Sign out of this phone. It used to be a link to /welcome that left the
+ * session in place, so the trip came straight back. It now ends the session and
+ * removes the trip, its saved documents and its notifications from the phone
+ * (a phone gets handed on), so it asks first. With no signal it says so and
+ * removes nothing: the session could not be ended, and the trip would return.
+ */
+function SignOutRow() {
+  const { signOut } = useBooking();
+  const { t } = useI18n();
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  if (!confirming) {
+    return (
+      <ListAction
+        onClick={() => {
+          setFailed(false);
+          setConfirming(true);
+        }}
+        icon={<IconLogOut size={18} />}
+        title={t('me.signOut')}
+        destructive
+      />
+    );
+  }
+
+  const confirm = async () => {
+    setBusy(true);
+    setFailed(false);
+    const ok = await signOut();
+    setBusy(false);
+    if (ok) router.replace('/');
+    else setFailed(true);
+  };
+
+  return (
+    <div className="p-4" role="group" aria-label={t('me.signOut')}>
+      <p className="text-sm text-ink leading-snug">{t('me.signOutConfirm')}</p>
+      {failed && (
+        <p className="text-xs text-danger-ink mt-2 leading-snug" role="alert">
+          {t('me.signOutOffline')}
+        </p>
+      )}
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => void confirm()}
+          disabled={busy}
+          aria-busy={busy}
+          className="flex-1 min-h-[44px] px-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+        >
+          {busy ? t('me.signingOut') : t('me.signOutYes')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+          className="flex-1 min-h-[44px] px-3 rounded-xl border border-line text-sm font-medium text-ink hover:bg-surface-2 transition-colors disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+        >
+          {t('me.signOutCancel')}
+        </button>
+      </div>
+    </div>
   );
 }
 

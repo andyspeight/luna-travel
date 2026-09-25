@@ -521,7 +521,7 @@ async function main() {
   // sample trip. It gets the way in instead, as the home screen always has.
   const none = await whileLoading('/documents', { status: 204, body: '' });
   check('no booking: no sample documents', !SAMPLE.test(none.early) && !SAMPLE.test(none.late));
-  check('no booking: the way in instead', /in your pocket/i.test(none.late));
+  check('no booking: the way in instead', /Add your trip/.test(none.late));
 
   // The hidden demo picker listed the sample bookings, names and all, and one
   // tap swapped a real traveller's trip for one of them.
@@ -529,6 +529,113 @@ async function main() {
   check('a real traveller has no demo picker', home.picker === 0 && /Smoke Test Travel|Okafor/.test(home.late));
   const demoHome = await whileLoading('/?demo=DEMO52188', { status: 204, body: '' });
   check('a demo still has it', demoHome.picker === 1);
+
+  // ── Their own trip, with no signal ──
+  //
+  // The documents were kept on the phone but the booking that lists them was
+  // not, so with no network the traveller got the way in instead of their
+  // holiday. The phone now keeps their own trip, uses it only when the network
+  // cannot answer, and forgets it the moment the server says there is no
+  // booking for this phone.
+  const TRIP_KEY = 'luna-travel.savedTrip.v1';
+  const OWN = /Okafor|Your hotel voucher|Smoke Test Travel|LIVE-SMOKE1/;
+  const withSession = JSON.stringify({ ...JSON.parse(liveFixture), sessionEndsAt: Date.now() + 10 * 24 * 60 * 60 * 1000 });
+  const tripCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  async function answerBooking(how) {
+    await tripCtx.unroute('**/api/traveller/booking*').catch(() => {});
+    await tripCtx.route('**/api/traveller/booking*', how);
+  }
+  await tripCtx.route('**/api/traveller/documents*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ documents: [] }) }),
+  );
+  await answerBooking((route) => route.fulfill({ status: 200, contentType: 'application/json', body: withSession }));
+  const tp = await tripCtx.newPage();
+  tp.on('pageerror', (e) => {
+    if (!/reading 'waiting'/.test(e.message)) jsErrors.push(`saved trip: ${e.message}`);
+  });
+  await tp.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await tp.waitForTimeout(3000);
+  await tp.goto(`${BASE}/documents`, { waitUntil: 'domcontentloaded' });
+  // The service worker has to install and take the page before it can serve
+  // it with no network.
+  await tp.waitForTimeout(8000);
+  check('the trip is kept on the phone', await tp.evaluate((k) => !!localStorage.getItem(k), TRIP_KEY));
+
+  // No network at all, and nothing answering even if it tried.
+  await answerBooking((route) => route.abort('internetdisconnected'));
+  await tripCtx.setOffline(true);
+  await tp.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+  await tp.waitForTimeout(4000);
+  const offDocs = (await tp.textContent('body').catch(() => '')) || '';
+  check('offline, Documents shows their own trip', OWN.test(offDocs) && !SAMPLE.test(offDocs));
+  check('and says it is the copy on the phone', /No connection/.test(offDocs));
+  await tp.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+  await tp.waitForTimeout(4000);
+  const offHome = (await tp.textContent('body').catch(() => '')) || '';
+  check('offline, the home screen is their trip, not the way in', OWN.test(offHome) && !/Add your trip/.test(offHome), offHome.replace(/\s+/g, ' ').slice(0, 140));
+  await tripCtx.setOffline(false);
+
+  // Airport wifi: connected, and nothing comes back.
+  await answerBooking(async (route) => {
+    await new Promise((r) => setTimeout(r, 15000));
+    await route.abort('timedout').catch(() => {});
+  });
+  // Coming back online reloads the app; let that settle first.
+  await tp.waitForTimeout(3000);
+  await tp.goto(`${BASE}/itinerary`, { waitUntil: 'domcontentloaded' });
+  await tp.waitForTimeout(8000);
+  const stalled = (await tp.textContent('body').catch(() => '')) || '';
+  check(
+    'a connection that never answers still gets their trip',
+    OWN.test(stalled) && /No connection/.test(stalled),
+    stalled.replace(/\s+/g, ' ').slice(0, 140),
+  );
+
+  // Signing out with no signal changes nothing: the session could not end.
+  await answerBooking((route) => route.fulfill({ status: 200, contentType: 'application/json', body: withSession }));
+  await tp.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+  await tp.waitForTimeout(3500);
+  await tripCtx.setOffline(true);
+  await tp.getByRole('button', { name: /^Sign out$/ }).click();
+  await tp.getByRole('button', { name: /Sign out of this phone/ }).click();
+  await tp.waitForTimeout(1500);
+  const offSignOut = (await tp.textContent('body').catch(() => '')) || '';
+  check('signing out with no signal says so', /needs a connection/.test(offSignOut));
+  check('and keeps the trip', await tp.evaluate((k) => !!localStorage.getItem(k), TRIP_KEY));
+  await tripCtx.setOffline(false);
+
+  // A real sign-out takes the trip and its documents off the phone. Coming
+  // back online reloads the app, so the confirmation is opened again.
+  await tp.waitForTimeout(3000);
+  await tp.goto(`${BASE}/me`, { waitUntil: 'domcontentloaded' });
+  await tp.waitForTimeout(3500);
+  await tp.getByRole('button', { name: /^Sign out$/ }).click();
+  await tp.getByRole('button', { name: /Sign out of this phone/ }).click();
+  await tp.waitForTimeout(2500);
+  const signedOut = (await tp.textContent('body').catch(() => '')) || '';
+  check('signing out leaves the way in', /Add your trip/.test(signedOut) && !OWN.test(signedOut));
+  check('with no trip left on the phone', !(await tp.evaluate((k) => localStorage.getItem(k), TRIP_KEY)));
+  check(
+    'and no saved documents',
+    !(await tp.evaluate(async () => (await caches.keys()).includes('traveller-documents'))),
+  );
+
+  // The server saying there is no booking for this phone forgets any copy.
+  await tp.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await tp.waitForTimeout(3000);
+  check('a fresh load keeps it again', await tp.evaluate((k) => !!localStorage.getItem(k), TRIP_KEY));
+  await answerBooking((route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"unauthorised"}' }));
+  await tp.reload({ waitUntil: 'domcontentloaded' });
+  await tp.waitForTimeout(3000);
+  check('no session: the copy is forgotten', !(await tp.evaluate((k) => localStorage.getItem(k), TRIP_KEY)));
+  await answerBooking((route) => route.abort('internetdisconnected'));
+  await tripCtx.setOffline(true);
+  await tp.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+  await tp.waitForTimeout(4000);
+  const afterForget = (await tp.textContent('body').catch(() => '')) || '';
+  check('and does not come back offline', !OWN.test(afterForget) && !SAMPLE.test(afterForget));
+  await tripCtx.setOffline(false);
+  await tripCtx.close();
 
   // ── Documents, with the network off ──
   //

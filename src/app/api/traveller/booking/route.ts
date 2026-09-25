@@ -30,6 +30,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { decodeJwt } from 'jose';
 import { verifySession } from '@/lib/jwt';
 import { orderToBooking, type TrimmedOrder, type ControlAgency } from '@/lib/order-to-booking';
 import { getStoredBooking } from '@/lib/stored-booking';
@@ -74,6 +75,16 @@ function triggerAutoSubscribe(booking: Booking, agencyId: string, bookingRef: st
   });
 }
 
+/** The session's expiry in ms since the epoch, or null if it carries none. */
+function sessionEnd(token: string): number | null {
+  try {
+    const { exp } = decodeJwt(token);
+    return typeof exp === 'number' ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!token) {
@@ -84,6 +95,9 @@ export async function GET(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
+  // When this session ends, so the copy of the trip the phone keeps for no
+  // signal never outlives it (lib/saved-trip.ts). Already verified above.
+  const sessionEndsAt = sessionEnd(token);
 
   const internalKey = process.env.TG_INTERNAL_KEY;
 
@@ -162,7 +176,7 @@ export async function GET(req: NextRequest) {
     applySupport(stored.payload.agency);
     await rememberIdentity(stored.payload.agency);
     triggerAutoSubscribe(stored.payload, recordId, orderRef);
-    return NextResponse.json({ booking: stored.payload, source: 'stored' }, { status: 200 });
+    return NextResponse.json({ booking: stored.payload, source: 'stored', sessionEndsAt }, { status: 200 });
   }
 
   // Luna-native agencies are off-platform only — there is no Travelify order to
@@ -222,5 +236,5 @@ export async function GET(req: NextRequest) {
   // 4. Fire-and-forget Flight Hub auto-subscribe (deduped server-side).
   triggerAutoSubscribe(booking, recordId, orderRef);
 
-  return NextResponse.json({ booking, source: 'live' }, { status: 200 });
+  return NextResponse.json({ booking, source: 'live', sessionEndsAt }, { status: 200 });
 }

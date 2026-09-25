@@ -306,7 +306,7 @@ function RedeemView({ inviteId }: { inviteId: string }) {
       // is a client-side navigation, so the provider never remounts — without
       // this it would still hold its pre-redemption state (demo trip or
       // onboarding) and the home would show the wrong holiday.
-      void refreshLive();
+      void refreshLive({ newSession: true });
       const teaser: Partial<Trip> = (data && data.trip) || {};
       setTrip({
         destination: teaser.destination ?? null,

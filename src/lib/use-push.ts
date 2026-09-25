@@ -146,3 +146,19 @@ export function usePush(): PushState {
 
   return { permission, subscribed, needsInstallFirst, busy, enable, disable };
 }
+
+/**
+ * This phone's push subscription, if it has one, without waiting for a service
+ * worker that may never arrive (navigator.serviceWorker.ready never settles
+ * when none is registered). For sign-out, which must stop notifications here:
+ * the next person to use the phone must not get the last traveller's alerts.
+ */
+export async function pushSubscriptionOnThisPhone(): Promise<PushSubscription | null> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+    const reg = await navigator.serviceWorker.getRegistration();
+    return (await reg?.pushManager?.getSubscription()) ?? null;
+  } catch {
+    return null;
+  }
+}
